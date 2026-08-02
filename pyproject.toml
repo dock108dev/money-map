@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "paycheck-map"
+version = "1.0.2"
+description = "Local-first paycheck allocation and financial forecasting"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "alembic>=1.14,<2",
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "keyring>=25.6,<26",
+  "openpyxl>=3.1,<4",
+  "pdfplumber>=0.11,<1",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "python-multipart>=0.0.20,<1",
+  "sqlalchemy>=2.0.36,<3",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.14,<2",
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<7",
+  "reportlab>=4.2,<5",
+  "ruff>=0.9,<1",
+  "types-openpyxl>=3.1.5,<4",
+  "types-reportlab>=4.4,<5",
+]
+
+[project.scripts]
+paycheck-map = "paycheck_map.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paycheck_map"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"alembic" = "paycheck_map/_alembic"
+"web/dist" = "paycheck_map/web_dist"
+
+[tool.hatch.build.targets.sdist.force-include]
+"web/dist" = "web/dist"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/paycheck_map/api.py" = ["B008"]
+"src/paycheck_map/reporting.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+packages = ["paycheck_map"]
+
+[[tool.mypy.overrides]]
+module = ["pdfplumber", "pdfplumber.*"]
+ignore_missing_imports = true

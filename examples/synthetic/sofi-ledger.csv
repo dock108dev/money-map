@@ -1,0 +1,10 @@
+institution,account,date,record_type,role,amount,balance,description
+Axos,Primary checking,2026-01-01,balance,opening,1000.00,,
+Axos,Primary checking,2026-01-02,transaction,payroll_deposit,2000.00,3000.00,Synthetic payroll
+Axos,Primary checking,2026-01-08,transaction,external_outflow,-700.00,2300.00,Synthetic aggregate outflow
+Axos,Primary checking,2026-01-10,transaction,internal_transfer,-300.00,2000.00,Synthetic transfer
+Axos,Primary checking,2026-01-31,balance,closing,2000.00,,
+Provident,Reserve savings,2026-01-01,balance,opening,500.00,,
+Provident,Reserve savings,2026-01-10,transaction,internal_transfer,300.00,800.00,Synthetic transfer
+Provident,Reserve savings,2026-01-31,transaction,interest,2.00,802.00,Synthetic interest
+Provident,Reserve savings,2026-01-31,balance,closing,802.00,,

@@ -1,0 +1,29 @@
+# Private financial data and local application state
+.local/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Frontend
+web/node_modules/
+web/dist/
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+coverage/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/

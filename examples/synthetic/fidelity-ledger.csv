@@ -1,0 +1,8 @@
+institution,account,date,record_type,role,amount,balance,description
+Fidelity,Synthetic retirement,2026-01-01,balance,opening,10000.00,,
+Fidelity,Synthetic retirement,2026-01-15,transaction,employee_contribution,500.00,,Synthetic employee contribution
+Fidelity,Synthetic retirement,2026-01-15,transaction,employer_contribution,250.00,,Synthetic employer contribution
+Fidelity,Synthetic retirement,2026-01-20,transaction,stock_plan_contribution,100.00,,Synthetic stock plan
+Fidelity,Synthetic retirement,2026-01-25,transaction,dividend,20.00,,Synthetic dividend
+Fidelity,Synthetic retirement,2026-01-25,transaction,reinvestment,-20.00,,Synthetic reinvestment
+Fidelity,Synthetic retirement,2026-01-31,balance,closing,11000.00,,

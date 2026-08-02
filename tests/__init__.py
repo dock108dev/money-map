@@ -1,0 +1,1 @@
+"""Paycheck Map test suite."""
