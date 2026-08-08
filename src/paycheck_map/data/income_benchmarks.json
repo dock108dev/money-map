@@ -1,0 +1,1297 @@
+{
+  "definition": "AGI floors for selected descending cumulative percentiles of positive-AGI individual income tax returns; these are not household spending budgets.",
+  "normalized_dollar_basis": "June 2026",
+  "retrieved_at": "2026-08-04T01:58:42.223052+00:00",
+  "source_year": 2022,
+  "sources": {
+    "base_cpi": "292.655",
+    "base_cpi_period": "2022 annual average",
+    "bls_api": "https://api.bls.gov/publicAPI/v2/timeseries/data/CUUR0000SA0?startyear=2022&endyear=2026",
+    "bls_cpi_u": "https://data.bls.gov/timeseries/CUUR0000SA0",
+    "bls_sha256": "483af4942cfc76810331d139b0af79c654760a503549fd801ad92c8147de7bc1",
+    "current_cpi": "333.952",
+    "current_cpi_period": "June 2026",
+    "irs": "https://www.irs.gov/statistics/soi-tax-stats-adjusted-gross-income-agi-percentile-data-by-state",
+    "irs_csv": "https://www.irs.gov/pub/irs-soi/22instateshares.csv",
+    "irs_sha256": "d4637f17d2a42b2833aeb08b6bd733a75ed7c80a2fcff37a908480220c12e1f9",
+    "normalization_factor": "1.141112"
+  },
+  "states": {
+    "AK": {
+      "name": "Alaska",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "617787",
+          "source_amount": "541390.74"
+        },
+        "top_10": {
+          "normalized_amount": "208304",
+          "source_amount": "182544.60"
+        },
+        "top_25": {
+          "normalized_amount": "128033",
+          "source_amount": "112200.00"
+        },
+        "top_5": {
+          "normalized_amount": "280773",
+          "source_amount": "246051.80"
+        },
+        "top_50": {
+          "normalized_amount": "69288",
+          "source_amount": "60720.00"
+        }
+      }
+    },
+    "AL": {
+      "name": "Alabama",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "561127",
+          "source_amount": "491737.32"
+        },
+        "top_10": {
+          "normalized_amount": "172496",
+          "source_amount": "151165.00"
+        },
+        "top_25": {
+          "normalized_amount": "100980",
+          "source_amount": "88493.00"
+        },
+        "top_5": {
+          "normalized_amount": "238773",
+          "source_amount": "209246.00"
+        },
+        "top_50": {
+          "normalized_amount": "51008",
+          "source_amount": "44700.00"
+        }
+      }
+    },
+    "AR": {
+      "name": "Arkansas",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "545492",
+          "source_amount": "478035.92"
+        },
+        "top_10": {
+          "normalized_amount": "162150",
+          "source_amount": "142098.60"
+        },
+        "top_25": {
+          "normalized_amount": "94966",
+          "source_amount": "83222.00"
+        },
+        "top_5": {
+          "normalized_amount": "228714",
+          "source_amount": "200431.20"
+        },
+        "top_50": {
+          "normalized_amount": "48922",
+          "source_amount": "42872.00"
+        }
+      }
+    },
+    "AZ": {
+      "name": "Arizona",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "675609",
+          "source_amount": "592062.36"
+        },
+        "top_10": {
+          "normalized_amount": "191051",
+          "source_amount": "167425.00"
+        },
+        "top_25": {
+          "normalized_amount": "109528",
+          "source_amount": "95984.00"
+        },
+        "top_5": {
+          "normalized_amount": "275361",
+          "source_amount": "241309.00"
+        },
+        "top_50": {
+          "normalized_amount": "56994",
+          "source_amount": "49946.00"
+        }
+      }
+    },
+    "CA": {
+      "name": "California",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "953890",
+          "source_amount": "835930.08"
+        },
+        "top_10": {
+          "normalized_amount": "242903",
+          "source_amount": "212865.00"
+        },
+        "top_25": {
+          "normalized_amount": "128274",
+          "source_amount": "112411.00"
+        },
+        "top_5": {
+          "normalized_amount": "371984",
+          "source_amount": "325984.00"
+        },
+        "top_50": {
+          "normalized_amount": "63518",
+          "source_amount": "55663.00"
+        }
+      }
+    },
+    "CO": {
+      "name": "Colorado",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "814391",
+          "source_amount": "713681.76"
+        },
+        "top_10": {
+          "normalized_amount": "230530",
+          "source_amount": "202022.00"
+        },
+        "top_25": {
+          "normalized_amount": "130731",
+          "source_amount": "114565.00"
+        },
+        "top_5": {
+          "normalized_amount": "335726",
+          "source_amount": "294209.90"
+        },
+        "top_50": {
+          "normalized_amount": "68243",
+          "source_amount": "59804.00"
+        }
+      }
+    },
+    "CT": {
+      "name": "Connecticut",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "1113610",
+          "source_amount": "975899.22"
+        },
+        "top_10": {
+          "normalized_amount": "249626",
+          "source_amount": "218757.00"
+        },
+        "top_25": {
+          "normalized_amount": "137531",
+          "source_amount": "120524.00"
+        },
+        "top_5": {
+          "normalized_amount": "381667",
+          "source_amount": "334469.05"
+        },
+        "top_50": {
+          "normalized_amount": "70014",
+          "source_amount": "61356.00"
+        }
+      }
+    },
+    "DC": {
+      "name": "District of Columbia",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "1131629",
+          "source_amount": "991690.10"
+        },
+        "top_10": {
+          "normalized_amount": "288127",
+          "source_amount": "252496.50"
+        },
+        "top_25": {
+          "normalized_amount": "146351",
+          "source_amount": "128252.75"
+        },
+        "top_5": {
+          "normalized_amount": "434702",
+          "source_amount": "380945.75"
+        },
+        "top_50": {
+          "normalized_amount": "76514",
+          "source_amount": "67052.00"
+        }
+      }
+    },
+    "DE": {
+      "name": "Delaware",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "609569",
+          "source_amount": "534188.60"
+        },
+        "top_10": {
+          "normalized_amount": "199677",
+          "source_amount": "174985.00"
+        },
+        "top_25": {
+          "normalized_amount": "119040",
+          "source_amount": "104319.00"
+        },
+        "top_5": {
+          "normalized_amount": "274755",
+          "source_amount": "240778.00"
+        },
+        "top_50": {
+          "normalized_amount": "61884",
+          "source_amount": "54231.00"
+        }
+      }
+    },
+    "FL": {
+      "name": "Florida",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "905411",
+          "source_amount": "793446.08"
+        },
+        "top_10": {
+          "normalized_amount": "194597",
+          "source_amount": "170533.00"
+        },
+        "top_25": {
+          "normalized_amount": "104923",
+          "source_amount": "91948.00"
+        },
+        "top_5": {
+          "normalized_amount": "296905",
+          "source_amount": "260188.90"
+        },
+        "top_50": {
+          "normalized_amount": "52095",
+          "source_amount": "45653.00"
+        }
+      }
+    },
+    "GA": {
+      "name": "Georgia",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "698323",
+          "source_amount": "611967.12"
+        },
+        "top_10": {
+          "normalized_amount": "192059",
+          "source_amount": "168308.90"
+        },
+        "top_25": {
+          "normalized_amount": "105424",
+          "source_amount": "92387.00"
+        },
+        "top_5": {
+          "normalized_amount": "282310",
+          "source_amount": "247399.00"
+        },
+        "top_50": {
+          "normalized_amount": "52038",
+          "source_amount": "45603.00"
+        }
+      }
+    },
+    "HI": {
+      "name": "Hawaii",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "591202",
+          "source_amount": "518093.09"
+        },
+        "top_10": {
+          "normalized_amount": "192197",
+          "source_amount": "168430.00"
+        },
+        "top_25": {
+          "normalized_amount": "116347",
+          "source_amount": "101959.00"
+        },
+        "top_5": {
+          "normalized_amount": "263231",
+          "source_amount": "230679.70"
+        },
+        "top_50": {
+          "normalized_amount": "62293",
+          "source_amount": "54590.00"
+        }
+      }
+    },
+    "IA": {
+      "name": "Iowa",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "583721",
+          "source_amount": "511536.64"
+        },
+        "top_10": {
+          "normalized_amount": "185583",
+          "source_amount": "162633.60"
+        },
+        "top_25": {
+          "normalized_amount": "116776",
+          "source_amount": "102335.00"
+        },
+        "top_5": {
+          "normalized_amount": "254531",
+          "source_amount": "223055.30"
+        },
+        "top_50": {
+          "normalized_amount": "63950",
+          "source_amount": "56042.00"
+        }
+      }
+    },
+    "ID": {
+      "name": "Idaho",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "661467",
+          "source_amount": "579668.52"
+        },
+        "top_10": {
+          "normalized_amount": "184360",
+          "source_amount": "161561.40"
+        },
+        "top_25": {
+          "normalized_amount": "111568",
+          "source_amount": "97771.00"
+        },
+        "top_5": {
+          "normalized_amount": "262812",
+          "source_amount": "230312.20"
+        },
+        "top_50": {
+          "normalized_amount": "59846",
+          "source_amount": "52445.00"
+        }
+      }
+    },
+    "IL": {
+      "name": "Illinois",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "770365",
+          "source_amount": "675100.63"
+        },
+        "top_10": {
+          "normalized_amount": "213219",
+          "source_amount": "186852.00"
+        },
+        "top_25": {
+          "normalized_amount": "122449",
+          "source_amount": "107307.00"
+        },
+        "top_5": {
+          "normalized_amount": "308408",
+          "source_amount": "270270.05"
+        },
+        "top_50": {
+          "normalized_amount": "63591",
+          "source_amount": "55727.00"
+        }
+      }
+    },
+    "IN": {
+      "name": "Indiana",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "559790",
+          "source_amount": "490565.64"
+        },
+        "top_10": {
+          "normalized_amount": "174437",
+          "source_amount": "152866.00"
+        },
+        "top_25": {
+          "normalized_amount": "106385",
+          "source_amount": "93229.00"
+        },
+        "top_5": {
+          "normalized_amount": "239261",
+          "source_amount": "209673.60"
+        },
+        "top_50": {
+          "normalized_amount": "56658",
+          "source_amount": "49652.00"
+        }
+      }
+    },
+    "KS": {
+      "name": "Kansas",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "642614",
+          "source_amount": "563147.52"
+        },
+        "top_10": {
+          "normalized_amount": "189879",
+          "source_amount": "166398.00"
+        },
+        "top_25": {
+          "normalized_amount": "113416",
+          "source_amount": "99391.00"
+        },
+        "top_5": {
+          "normalized_amount": "267430",
+          "source_amount": "234359.00"
+        },
+        "top_50": {
+          "normalized_amount": "59878",
+          "source_amount": "52473.00"
+        }
+      }
+    },
+    "KY": {
+      "name": "Kentucky",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "522862",
+          "source_amount": "458203.63"
+        },
+        "top_10": {
+          "normalized_amount": "164868",
+          "source_amount": "144480.00"
+        },
+        "top_25": {
+          "normalized_amount": "99642",
+          "source_amount": "87320.00"
+        },
+        "top_5": {
+          "normalized_amount": "226722",
+          "source_amount": "198684.90"
+        },
+        "top_50": {
+          "normalized_amount": "52691",
+          "source_amount": "46175.50"
+        }
+      }
+    },
+    "LA": {
+      "name": "Louisiana",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "580644",
+          "source_amount": "508840.45"
+        },
+        "top_10": {
+          "normalized_amount": "170637",
+          "source_amount": "149536.00"
+        },
+        "top_25": {
+          "normalized_amount": "96290",
+          "source_amount": "84383.00"
+        },
+        "top_5": {
+          "normalized_amount": "237761",
+          "source_amount": "208358.90"
+        },
+        "top_50": {
+          "normalized_amount": "47140",
+          "source_amount": "41311.00"
+        }
+      }
+    },
+    "MA": {
+      "name": "Massachusetts",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "1016865",
+          "source_amount": "891117.68"
+        },
+        "top_10": {
+          "normalized_amount": "265830",
+          "source_amount": "232957.00"
+        },
+        "top_25": {
+          "normalized_amount": "145145",
+          "source_amount": "127196.00"
+        },
+        "top_5": {
+          "normalized_amount": "398703",
+          "source_amount": "349398.70"
+        },
+        "top_50": {
+          "normalized_amount": "74491",
+          "source_amount": "65279.00"
+        }
+      }
+    },
+    "MD": {
+      "name": "Maryland",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "713832",
+          "source_amount": "625558.69"
+        },
+        "top_10": {
+          "normalized_amount": "231276",
+          "source_amount": "202676.00"
+        },
+        "top_25": {
+          "normalized_amount": "134124",
+          "source_amount": "117538.00"
+        },
+        "top_5": {
+          "normalized_amount": "320547",
+          "source_amount": "280907.35"
+        },
+        "top_50": {
+          "normalized_amount": "68260",
+          "source_amount": "59819.00"
+        }
+      }
+    },
+    "ME": {
+      "name": "Maine",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "580445",
+          "source_amount": "508665.85"
+        },
+        "top_10": {
+          "normalized_amount": "178223",
+          "source_amount": "156183.70"
+        },
+        "top_25": {
+          "normalized_amount": "107575",
+          "source_amount": "94272.00"
+        },
+        "top_5": {
+          "normalized_amount": "248997",
+          "source_amount": "218205.35"
+        },
+        "top_50": {
+          "normalized_amount": "58497",
+          "source_amount": "51263.50"
+        }
+      }
+    },
+    "MI": {
+      "name": "Michigan",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "591660",
+          "source_amount": "518494.72"
+        },
+        "top_10": {
+          "normalized_amount": "182733",
+          "source_amount": "160136.00"
+        },
+        "top_25": {
+          "normalized_amount": "108439",
+          "source_amount": "95029.50"
+        },
+        "top_5": {
+          "normalized_amount": "254333",
+          "source_amount": "222882.00"
+        },
+        "top_50": {
+          "normalized_amount": "55377",
+          "source_amount": "48529.00"
+        }
+      }
+    },
+    "MN": {
+      "name": "Minnesota",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "707370",
+          "source_amount": "619895.06"
+        },
+        "top_10": {
+          "normalized_amount": "212192",
+          "source_amount": "185951.70"
+        },
+        "top_25": {
+          "normalized_amount": "127555",
+          "source_amount": "111781.00"
+        },
+        "top_5": {
+          "normalized_amount": "300904",
+          "source_amount": "263694.00"
+        },
+        "top_50": {
+          "normalized_amount": "68770",
+          "source_amount": "60266.00"
+        }
+      }
+    },
+    "MO": {
+      "name": "Missouri",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "588986",
+          "source_amount": "516150.55"
+        },
+        "top_10": {
+          "normalized_amount": "178809",
+          "source_amount": "156697.00"
+        },
+        "top_25": {
+          "normalized_amount": "106510",
+          "source_amount": "93339.00"
+        },
+        "top_5": {
+          "normalized_amount": "250180",
+          "source_amount": "219242.00"
+        },
+        "top_50": {
+          "normalized_amount": "55952",
+          "source_amount": "49033.00"
+        }
+      }
+    },
+    "MS": {
+      "name": "Mississippi",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "463017",
+          "source_amount": "405759.95"
+        },
+        "top_10": {
+          "normalized_amount": "150312",
+          "source_amount": "131723.90"
+        },
+        "top_25": {
+          "normalized_amount": "86953",
+          "source_amount": "76200.00"
+        },
+        "top_5": {
+          "normalized_amount": "205625",
+          "source_amount": "180197.00"
+        },
+        "top_50": {
+          "normalized_amount": "44091",
+          "source_amount": "38638.50"
+        }
+      }
+    },
+    "MT": {
+      "name": "Montana",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "692010",
+          "source_amount": "606435.04"
+        },
+        "top_10": {
+          "normalized_amount": "183903",
+          "source_amount": "161161.00"
+        },
+        "top_25": {
+          "normalized_amount": "110396",
+          "source_amount": "96744.00"
+        },
+        "top_5": {
+          "normalized_amount": "265259",
+          "source_amount": "232456.80"
+        },
+        "top_50": {
+          "normalized_amount": "57693",
+          "source_amount": "50559.00"
+        }
+      }
+    },
+    "NC": {
+      "name": "North Carolina",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "675103",
+          "source_amount": "591618.78"
+        },
+        "top_10": {
+          "normalized_amount": "194153",
+          "source_amount": "170144.00"
+        },
+        "top_25": {
+          "normalized_amount": "109766",
+          "source_amount": "96192.00"
+        },
+        "top_5": {
+          "normalized_amount": "283123",
+          "source_amount": "248111.90"
+        },
+        "top_50": {
+          "normalized_amount": "55900",
+          "source_amount": "48987.00"
+        }
+      }
+    },
+    "ND": {
+      "name": "North Dakota",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "733024",
+          "source_amount": "642376.65"
+        },
+        "top_10": {
+          "normalized_amount": "202570",
+          "source_amount": "177520.00"
+        },
+        "top_25": {
+          "normalized_amount": "125956",
+          "source_amount": "110380.25"
+        },
+        "top_5": {
+          "normalized_amount": "287363",
+          "source_amount": "251827.50"
+        },
+        "top_50": {
+          "normalized_amount": "67464",
+          "source_amount": "59121.00"
+        }
+      }
+    },
+    "NE": {
+      "name": "Nebraska",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "636244",
+          "source_amount": "557564.84"
+        },
+        "top_10": {
+          "normalized_amount": "190029",
+          "source_amount": "166530.00"
+        },
+        "top_25": {
+          "normalized_amount": "116814",
+          "source_amount": "102369.00"
+        },
+        "top_5": {
+          "normalized_amount": "264590",
+          "source_amount": "231870.60"
+        },
+        "top_50": {
+          "normalized_amount": "62693",
+          "source_amount": "54940.00"
+        }
+      }
+    },
+    "NH": {
+      "name": "New Hampshire",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "774761",
+          "source_amount": "678952.69"
+        },
+        "top_10": {
+          "normalized_amount": "230548",
+          "source_amount": "202037.70"
+        },
+        "top_25": {
+          "normalized_amount": "137948",
+          "source_amount": "120889.00"
+        },
+        "top_5": {
+          "normalized_amount": "327810",
+          "source_amount": "287272.70"
+        },
+        "top_50": {
+          "normalized_amount": "74299",
+          "source_amount": "65111.00"
+        }
+      }
+    },
+    "NJ": {
+      "name": "New Jersey",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "949344",
+          "source_amount": "831946.84"
+        },
+        "top_10": {
+          "normalized_amount": "259076",
+          "source_amount": "227038.00"
+        },
+        "top_25": {
+          "normalized_amount": "140884",
+          "source_amount": "123462.00"
+        },
+        "top_5": {
+          "normalized_amount": "386771",
+          "source_amount": "338941.80"
+        },
+        "top_50": {
+          "normalized_amount": "70150",
+          "source_amount": "61475.00"
+        }
+      }
+    },
+    "NM": {
+      "name": "New Mexico",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "475829",
+          "source_amount": "416987.00"
+        },
+        "top_10": {
+          "normalized_amount": "160973",
+          "source_amount": "141067.00"
+        },
+        "top_25": {
+          "normalized_amount": "93010",
+          "source_amount": "81508.00"
+        },
+        "top_5": {
+          "normalized_amount": "222407",
+          "source_amount": "194904.00"
+        },
+        "top_50": {
+          "normalized_amount": "47321",
+          "source_amount": "41469.00"
+        }
+      }
+    },
+    "NV": {
+      "name": "Nevada",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "741404",
+          "source_amount": "649720.98"
+        },
+        "top_10": {
+          "normalized_amount": "181709",
+          "source_amount": "159238.40"
+        },
+        "top_25": {
+          "normalized_amount": "104602",
+          "source_amount": "91667.00"
+        },
+        "top_5": {
+          "normalized_amount": "262062",
+          "source_amount": "229654.70"
+        },
+        "top_50": {
+          "normalized_amount": "54835",
+          "source_amount": "48054.00"
+        }
+      }
+    },
+    "NY": {
+      "name": "New York",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "939398",
+          "source_amount": "823230.46"
+        },
+        "top_10": {
+          "normalized_amount": "216098",
+          "source_amount": "189375.30"
+        },
+        "top_25": {
+          "normalized_amount": "118934",
+          "source_amount": "104226.00"
+        },
+        "top_5": {
+          "normalized_amount": "324236",
+          "source_amount": "284140.65"
+        },
+        "top_50": {
+          "normalized_amount": "60560",
+          "source_amount": "53071.00"
+        }
+      }
+    },
+    "OH": {
+      "name": "Ohio",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "580221",
+          "source_amount": "508469.81"
+        },
+        "top_10": {
+          "normalized_amount": "173878",
+          "source_amount": "152376.00"
+        },
+        "top_25": {
+          "normalized_amount": "104526",
+          "source_amount": "91600.00"
+        },
+        "top_5": {
+          "normalized_amount": "244633",
+          "source_amount": "214381.35"
+        },
+        "top_50": {
+          "normalized_amount": "57170",
+          "source_amount": "50100.00"
+        }
+      }
+    },
+    "OK": {
+      "name": "Oklahoma",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "573852",
+          "source_amount": "502888.57"
+        },
+        "top_10": {
+          "normalized_amount": "168917",
+          "source_amount": "148028.00"
+        },
+        "top_25": {
+          "normalized_amount": "99468",
+          "source_amount": "87167.75"
+        },
+        "top_5": {
+          "normalized_amount": "236075",
+          "source_amount": "206881.55"
+        },
+        "top_50": {
+          "normalized_amount": "51320",
+          "source_amount": "44974.00"
+        }
+      }
+    },
+    "OR": {
+      "name": "Oregon",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "635303",
+          "source_amount": "556740.76"
+        },
+        "top_10": {
+          "normalized_amount": "201826",
+          "source_amount": "176867.80"
+        },
+        "top_25": {
+          "normalized_amount": "119100",
+          "source_amount": "104372.00"
+        },
+        "top_5": {
+          "normalized_amount": "285386",
+          "source_amount": "250094.40"
+        },
+        "top_50": {
+          "normalized_amount": "62774",
+          "source_amount": "55011.00"
+        }
+      }
+    },
+    "PA": {
+      "name": "Pennsylvania",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "690753",
+          "source_amount": "605333.19"
+        },
+        "top_10": {
+          "normalized_amount": "199794",
+          "source_amount": "175087.00"
+        },
+        "top_25": {
+          "normalized_amount": "116918",
+          "source_amount": "102460.00"
+        },
+        "top_5": {
+          "normalized_amount": "286717",
+          "source_amount": "251260.65"
+        },
+        "top_50": {
+          "normalized_amount": "61495",
+          "source_amount": "53890.00"
+        }
+      }
+    },
+    "RI": {
+      "name": "Rhode Island",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "635468",
+          "source_amount": "556884.68"
+        },
+        "top_10": {
+          "normalized_amount": "195707",
+          "source_amount": "171505.80"
+        },
+        "top_25": {
+          "normalized_amount": "115576",
+          "source_amount": "101283.50"
+        },
+        "top_5": {
+          "normalized_amount": "272110",
+          "source_amount": "238460.30"
+        },
+        "top_50": {
+          "normalized_amount": "62302",
+          "source_amount": "54598.00"
+        }
+      }
+    },
+    "SC": {
+      "name": "South Carolina",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "611698",
+          "source_amount": "536054.02"
+        },
+        "top_10": {
+          "normalized_amount": "178923",
+          "source_amount": "156797.00"
+        },
+        "top_25": {
+          "normalized_amount": "103255",
+          "source_amount": "90486.00"
+        },
+        "top_5": {
+          "normalized_amount": "254468",
+          "source_amount": "223000.00"
+        },
+        "top_50": {
+          "normalized_amount": "52748",
+          "source_amount": "46225.00"
+        }
+      }
+    },
+    "SD": {
+      "name": "South Dakota",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "723997",
+          "source_amount": "634466.12"
+        },
+        "top_10": {
+          "normalized_amount": "187528",
+          "source_amount": "164337.60"
+        },
+        "top_25": {
+          "normalized_amount": "116199",
+          "source_amount": "101829.50"
+        },
+        "top_5": {
+          "normalized_amount": "269554",
+          "source_amount": "236220.80"
+        },
+        "top_50": {
+          "normalized_amount": "62593",
+          "source_amount": "54853.00"
+        }
+      }
+    },
+    "TN": {
+      "name": "Tennessee",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "672486",
+          "source_amount": "589325.65"
+        },
+        "top_10": {
+          "normalized_amount": "180417",
+          "source_amount": "158106.50"
+        },
+        "top_25": {
+          "normalized_amount": "104277",
+          "source_amount": "91382.00"
+        },
+        "top_5": {
+          "normalized_amount": "261035",
+          "source_amount": "228754.75"
+        },
+        "top_50": {
+          "normalized_amount": "54387",
+          "source_amount": "47661.00"
+        }
+      }
+    },
+    "TX": {
+      "name": "Texas",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "783802",
+          "source_amount": "686875.65"
+        },
+        "top_10": {
+          "normalized_amount": "202012",
+          "source_amount": "177031.00"
+        },
+        "top_25": {
+          "normalized_amount": "110108",
+          "source_amount": "96492.00"
+        },
+        "top_5": {
+          "normalized_amount": "299908",
+          "source_amount": "262821.00"
+        },
+        "top_50": {
+          "normalized_amount": "54711",
+          "source_amount": "47945.00"
+        }
+      }
+    },
+    "UT": {
+      "name": "Utah",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "727535",
+          "source_amount": "637566.45"
+        },
+        "top_10": {
+          "normalized_amount": "200156",
+          "source_amount": "175404.30"
+        },
+        "top_25": {
+          "normalized_amount": "121652",
+          "source_amount": "106608.00"
+        },
+        "top_5": {
+          "normalized_amount": "285141",
+          "source_amount": "249880.15"
+        },
+        "top_50": {
+          "normalized_amount": "65431",
+          "source_amount": "57340.00"
+        }
+      }
+    },
+    "VA": {
+      "name": "Virginia",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "739381",
+          "source_amount": "647948.10"
+        },
+        "top_10": {
+          "normalized_amount": "234958",
+          "source_amount": "205903.00"
+        },
+        "top_25": {
+          "normalized_amount": "133467",
+          "source_amount": "116962.00"
+        },
+        "top_5": {
+          "normalized_amount": "331548",
+          "source_amount": "290548.55"
+        },
+        "top_50": {
+          "normalized_amount": "66839",
+          "source_amount": "58574.00"
+        }
+      }
+    },
+    "VT": {
+      "name": "Vermont",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "614815",
+          "source_amount": "538786.28"
+        },
+        "top_10": {
+          "normalized_amount": "187607",
+          "source_amount": "164406.80"
+        },
+        "top_25": {
+          "normalized_amount": "113057",
+          "source_amount": "99076.00"
+        },
+        "top_5": {
+          "normalized_amount": "263317",
+          "source_amount": "230755.00"
+        },
+        "top_50": {
+          "normalized_amount": "60662",
+          "source_amount": "53160.00"
+        }
+      }
+    },
+    "WA": {
+      "name": "Washington",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "862972",
+          "source_amount": "756255.50"
+        },
+        "top_10": {
+          "normalized_amount": "252344",
+          "source_amount": "221138.50"
+        },
+        "top_25": {
+          "normalized_amount": "142141",
+          "source_amount": "124564.00"
+        },
+        "top_5": {
+          "normalized_amount": "374822",
+          "source_amount": "328470.75"
+        },
+        "top_50": {
+          "normalized_amount": "74261",
+          "source_amount": "65078.00"
+        }
+      }
+    },
+    "WI": {
+      "name": "Wisconsin",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "597065",
+          "source_amount": "523230.80"
+        },
+        "top_10": {
+          "normalized_amount": "185382",
+          "source_amount": "162457.00"
+        },
+        "top_25": {
+          "normalized_amount": "115794",
+          "source_amount": "101475.00"
+        },
+        "top_5": {
+          "normalized_amount": "255032",
+          "source_amount": "223494.00"
+        },
+        "top_50": {
+          "normalized_amount": "63232",
+          "source_amount": "55413.00"
+        }
+      }
+    },
+    "WV": {
+      "name": "West Virginia",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "438608",
+          "source_amount": "384368.72"
+        },
+        "top_10": {
+          "normalized_amount": "156082",
+          "source_amount": "136780.30"
+        },
+        "top_25": {
+          "normalized_amount": "97252",
+          "source_amount": "85226.00"
+        },
+        "top_5": {
+          "normalized_amount": "206851",
+          "source_amount": "181271.45"
+        },
+        "top_50": {
+          "normalized_amount": "50637",
+          "source_amount": "44375.00"
+        }
+      }
+    },
+    "WY": {
+      "name": "Wyoming",
+      "thresholds": {
+        "top_1": {
+          "normalized_amount": "812684",
+          "source_amount": "712185.69"
+        },
+        "top_10": {
+          "normalized_amount": "190795",
+          "source_amount": "167201.30"
+        },
+        "top_25": {
+          "normalized_amount": "119681",
+          "source_amount": "104880.75"
+        },
+        "top_5": {
+          "normalized_amount": "268995",
+          "source_amount": "235730.50"
+        },
+        "top_50": {
+          "normalized_amount": "64767",
+          "source_amount": "56758.00"
+        }
+      }
+    }
+  },
+  "version": "irs-state-agi-2022-cpi-u-2026-06-v1"
+}

@@ -47,6 +47,7 @@ from .payroll import (
     checkpoint_artifact_hash,
     schedule_validation,
 )
+from .reconciliation import INVESTMENT_CASH_FLOW_ROLES, investment_performance_available
 
 
 def amount(value: Decimal | None) -> str | None:
@@ -69,6 +70,20 @@ DEBT_ACCOUNT_TYPES = {
     "student",
 }
 
+LOCKED_INVESTMENT_TYPES = {
+    "401k",
+    "403b",
+    "457b",
+    "529",
+    "hsa",
+    "ira",
+    "pension",
+    "retirement",
+    "roth",
+    "roth ira",
+}
+RESTRICTED_HOLDING_MARKERS = {"restricted", "rsu", "unvested", "unexercised"}
+
 
 def _account_category(account: Account, institution: Institution) -> str:
     account_type = account.account_type.strip().lower().replace("_", " ")
@@ -82,6 +97,482 @@ def _account_category(account: Account, institution: Institution) -> str:
     if institution.kind == "bank":
         return "cash"
     return "other"
+
+
+def _latest_balance(session: Session, account_id: int) -> BalanceSnapshot | None:
+    return session.scalar(
+        select(BalanceSnapshot)
+        .where(BalanceSnapshot.account_id == account_id)
+        .order_by(BalanceSnapshot.snapshot_date.desc(), BalanceSnapshot.id.desc())
+        .limit(1)
+    )
+
+
+def _is_restricted_holding(holding: InvestmentHolding) -> bool:
+    label = f"{holding.security_name} {holding.ticker_symbol or ''}".lower()
+    return any(marker in label for marker in RESTRICTED_HOLDING_MARKERS)
+
+
+def _investment_access(
+    account: Account,
+    current_value: Decimal,
+    holdings: list[InvestmentHolding],
+) -> tuple[Decimal, Decimal, str, str]:
+    account_type = account.account_type.strip().lower().replace("_", " ")
+    if account_type in LOCKED_INVESTMENT_TYPES:
+        return ZERO, current_value, "retirement", "Retirement or tax-advantaged"
+    if account_type == "stock plan" and holdings:
+        restricted = money(
+            sum(
+                (
+                    holding.institution_value
+                    for holding in holdings
+                    if _is_restricted_holding(holding)
+                ),
+                ZERO,
+            )
+        )
+        sellable = money(
+            sum(
+                (
+                    holding.institution_value
+                    for holding in holdings
+                    if not _is_restricted_holding(holding)
+                ),
+                ZERO,
+            )
+        )
+        unallocated = max(ZERO, money(current_value - restricted - sellable))
+        sellable = money(sellable + unallocated)
+        if restricted and sellable:
+            return sellable, restricted, "mixed", "Sellable shares and restricted equity"
+        if restricted:
+            return ZERO, current_value, "restricted", "Restricted equity"
+        return current_value, ZERO, "accessible", "Sellable stock-plan shares"
+    if account_type in {"brokerage", "investment", "stock plan"}:
+        return current_value, ZERO, "accessible", "Sellable investment"
+    return ZERO, current_value, "review", "Accessibility not confirmed"
+
+
+def _snapshot_values(session: Session, account_id: int) -> dict[date, Decimal]:
+    observations: dict[date, Decimal] = {}
+    for snapshot in session.scalars(
+        select(BalanceSnapshot)
+        .where(
+            BalanceSnapshot.account_id == account_id,
+            BalanceSnapshot.kind.in_(["opening", "closing", "current", "manual"]),
+        )
+        .order_by(BalanceSnapshot.snapshot_date, BalanceSnapshot.id)
+    ):
+        observations[snapshot.snapshot_date] = snapshot.amount
+    return observations
+
+
+def _performance_window(
+    *,
+    session: Session,
+    account_ids: list[int],
+    opening_date: date,
+    closing_date: date,
+    opening_value: Decimal,
+    closing_value: Decimal,
+    required_days: int,
+    label: str,
+    key: str,
+) -> dict[str, Any]:
+    observation_days = (closing_date - opening_date).days
+    transactions = list(
+        session.scalars(
+            select(AccountTransaction).where(
+                AccountTransaction.account_id.in_(account_ids),
+                AccountTransaction.posted_date > opening_date,
+                AccountTransaction.posted_date <= closing_date,
+            )
+        )
+    )
+    deposits = money(
+        sum(
+            (
+                max(ZERO, transaction.amount)
+                for transaction in transactions
+                if transaction.role
+                in {
+                    "employee_contribution",
+                    "employer_contribution",
+                    "stock_plan_contribution",
+                    "external_deposit",
+                }
+            ),
+            ZERO,
+        )
+    )
+    withdrawals = money(
+        sum(
+            (
+                abs(transaction.amount)
+                for transaction in transactions
+                if transaction.role == "external_withdrawal" and transaction.amount < ZERO
+            ),
+            ZERO,
+        )
+    )
+    result = money(closing_value - opening_value - deposits + withdrawals)
+    signed_flows = [
+        (transaction.posted_date, transaction.amount)
+        for transaction in transactions
+        if transaction.role
+        in {
+            "employee_contribution",
+            "employer_contribution",
+            "stock_plan_contribution",
+            "external_deposit",
+            "external_withdrawal",
+        }
+    ]
+    weighted_flows = ZERO
+    if observation_days > 0:
+        for flow_date, flow in signed_flows:
+            remaining = Decimal((closing_date - flow_date).days) / Decimal(observation_days)
+            weighted_flows += flow * remaining
+    denominator = money(opening_value + weighted_flows)
+    return_pct = (
+        money(result / denominator * Decimal("100"))
+        if observation_days >= required_days and denominator != ZERO
+        else None
+    )
+    available = observation_days >= required_days and return_pct is not None
+    return {
+        "key": key,
+        "label": label,
+        "status": "available" if available else "tracking",
+        "period_start": opening_date,
+        "period_end": closing_date,
+        "observation_days": observation_days,
+        "required_days": required_days,
+        "opening_value": amount(opening_value),
+        "deposits": amount(deposits),
+        "withdrawals": amount(withdrawals),
+        "investment_result": amount(result) if available else None,
+        "return_pct": amount(return_pct),
+        "closing_value": amount(closing_value),
+        "message": (
+            "Contributions and withdrawals are removed from the investment result."
+            if available
+            else f"Collecting {max(0, required_days - observation_days)} more clean day"
+            f"{'s' if max(0, required_days - observation_days) != 1 else ''}."
+        ),
+    }
+
+
+def wealth_dashboard(session: Session) -> dict[str, Any]:
+    """Accessible wealth plus contribution-adjusted Fidelity performance evidence."""
+
+    account_pairs = list(
+        session.execute(
+            select(Account, Institution)
+            .join(Institution)
+            .order_by(Institution.canonical_name, Account.id)
+        )
+    )
+    cash = ZERO
+    accessible_accounts: list[dict[str, Any]] = []
+    fidelity_accounts: list[Account] = []
+    fidelity_holdings: dict[int, list[InvestmentHolding]] = {}
+    current_by_account: dict[int, Decimal] = {}
+
+    for account, institution in account_pairs:
+        latest = _latest_balance(session, account.id)
+        current = latest.amount if latest else ZERO
+        account_type = account.account_type.strip().lower().replace("_", " ")
+        if institution.kind == "bank" and account_type in {"checking", "savings"}:
+            cash += current
+            if current:
+                accessible_accounts.append(
+                    {
+                        "id": account.id,
+                        "name": account.display_name,
+                        "type": account.account_type,
+                        "value": amount(current),
+                        "access_status": "accessible",
+                        "access_reason": "Spendable cash",
+                    }
+                )
+        if "fidelity" not in institution.canonical_name.lower():
+            continue
+        fidelity_accounts.append(account)
+        holdings = list(
+            session.scalars(
+                select(InvestmentHolding)
+                .where(InvestmentHolding.account_id == account.id)
+                .order_by(InvestmentHolding.institution_value.desc())
+            )
+        )
+        fidelity_holdings[account.id] = holdings
+        current_by_account[account.id] = current
+
+    sellable_investments = ZERO
+    excluded_investments = ZERO
+    account_access: dict[int, tuple[Decimal, Decimal, str, str]] = {}
+    for account in fidelity_accounts:
+        access = _investment_access(
+            account,
+            current_by_account[account.id],
+            fidelity_holdings[account.id],
+        )
+        account_access[account.id] = access
+        accessible_value, excluded_value, status, reason = access
+        sellable_investments += accessible_value
+        excluded_investments += excluded_value
+        if accessible_value:
+            accessible_accounts.append(
+                {
+                    "id": account.id,
+                    "name": account.display_name,
+                    "type": account.account_type,
+                    "value": amount(accessible_value),
+                    "access_status": status,
+                    "access_reason": reason,
+                }
+            )
+
+    values_by_account = {
+        account.id: _snapshot_values(session, account.id) for account in fidelity_accounts
+    }
+    dated_sets = [set(values) for values in values_by_account.values() if values]
+    common_dates = sorted(set.intersection(*dated_sets)) if dated_sets else []
+    history = [
+        {
+            "date": observation_date,
+            "value": amount(
+                sum(
+                    (
+                        values_by_account[account.id][observation_date]
+                        for account in fidelity_accounts
+                    ),
+                    ZERO,
+                )
+            ),
+        }
+        for observation_date in common_dates
+    ]
+    fidelity_ids = [account.id for account in fidelity_accounts]
+    fidelity_transactions = (
+        list(
+            session.scalars(
+                select(AccountTransaction).where(AccountTransaction.account_id.in_(fidelity_ids))
+            )
+        )
+        if fidelity_ids
+        else []
+    )
+    ambiguous_dates = {
+        transaction.posted_date
+        for transaction in fidelity_transactions
+        if transaction.role in INVESTMENT_CASH_FLOW_ROLES or transaction.role == "unresolved"
+    }
+    clean_dates = [
+        observation_date
+        for observation_date in common_dates
+        if observation_date not in ambiguous_dates
+    ]
+    closing_date = clean_dates[-1] if clean_dates else (common_dates[-1] if common_dates else None)
+    clean_anchor = clean_dates[0] if clean_dates else closing_date
+
+    performance_periods: list[dict[str, Any]] = []
+    if closing_date is not None and clean_anchor is not None:
+        period_specs = [
+            ("observed", "Observed", 7, clean_anchor),
+            ("one_month", "1 month", 30, closing_date - timedelta(days=30)),
+            ("three_months", "3 months", 90, closing_date - timedelta(days=90)),
+            (
+                "year_to_date",
+                "YTD",
+                max(7, (closing_date - date(closing_date.year, 1, 1)).days),
+                date(closing_date.year, 1, 1),
+            ),
+            ("one_year", "1 year", 365, closing_date - timedelta(days=365)),
+        ]
+        for key, label, required_days, target in period_specs:
+            candidates = [
+                observation_date
+                for observation_date in clean_dates
+                if clean_anchor <= observation_date <= target
+            ]
+            opening_date = candidates[-1] if candidates else clean_anchor
+            opening_value = sum(
+                (values_by_account[account.id][opening_date] for account in fidelity_accounts),
+                ZERO,
+            )
+            closing_value = sum(
+                (values_by_account[account.id][closing_date] for account in fidelity_accounts),
+                ZERO,
+            )
+            performance_periods.append(
+                _performance_window(
+                    session=session,
+                    account_ids=fidelity_ids,
+                    opening_date=opening_date,
+                    closing_date=closing_date,
+                    opening_value=money(opening_value),
+                    closing_value=money(closing_value),
+                    required_days=required_days,
+                    label=label,
+                    key=key,
+                )
+            )
+
+    recent_observation: dict[str, Any] | None = None
+    recent_start: date | None = None
+    recent_end: date | None = None
+    if len(common_dates) >= 2:
+        recent_start, recent_end = common_dates[-2], common_dates[-1]
+        recent_opening = money(
+            sum(
+                (values_by_account[account.id][recent_start] for account in fidelity_accounts),
+                ZERO,
+            )
+        )
+        recent_closing = money(
+            sum(
+                (values_by_account[account.id][recent_end] for account in fidelity_accounts),
+                ZERO,
+            )
+        )
+        recent_change = money(recent_closing - recent_opening)
+        recent_observation = {
+            "period_start": recent_start,
+            "period_end": recent_end,
+            "opening_value": amount(recent_opening),
+            "closing_value": amount(recent_closing),
+            "change": amount(recent_change),
+            "change_pct": amount(
+                recent_change / recent_opening * Decimal("100") if recent_opening else ZERO
+            ),
+            "message": "Observed balance movement; not yet a contribution-adjusted return.",
+        }
+
+    account_rows: list[dict[str, Any]] = []
+    observed_period = next(
+        (period for period in performance_periods if period["key"] == "observed"),
+        None,
+    )
+    for account in fidelity_accounts:
+        accessible_value, excluded_value, access_status, access_reason = account_access[account.id]
+        account_recent_change: Decimal | None = None
+        if recent_start is not None and recent_end is not None:
+            account_recent_change = money(
+                values_by_account[account.id][recent_end]
+                - values_by_account[account.id][recent_start]
+            )
+        account_performance: dict[str, Any] | None = None
+        if observed_period is not None:
+            account_opening_date = observed_period["period_start"]
+            account_closing_date = observed_period["period_end"]
+            if (
+                account_opening_date in values_by_account[account.id]
+                and account_closing_date in values_by_account[account.id]
+            ):
+                account_performance = _performance_window(
+                    session=session,
+                    account_ids=[account.id],
+                    opening_date=account_opening_date,
+                    closing_date=account_closing_date,
+                    opening_value=values_by_account[account.id][account_opening_date],
+                    closing_value=values_by_account[account.id][account_closing_date],
+                    required_days=observed_period["required_days"],
+                    label="Observed",
+                    key="observed",
+                )
+        account_rows.append(
+            {
+                "id": account.id,
+                "name": account.display_name,
+                "type": account.account_type,
+                "current_value": amount(current_by_account[account.id]),
+                "accessible_value": amount(accessible_value),
+                "excluded_value": amount(excluded_value),
+                "access_status": access_status,
+                "access_reason": access_reason,
+                "recent_change": amount(account_recent_change),
+                "performance_status": (
+                    account_performance["status"] if account_performance else "tracking"
+                ),
+                "investment_result": (
+                    account_performance["investment_result"] if account_performance else None
+                ),
+                "return_pct": account_performance["return_pct"] if account_performance else None,
+                "performance_message": (
+                    account_performance["message"]
+                    if account_performance
+                    else "More balance history is needed."
+                ),
+            }
+        )
+
+    latest_paycheck = session.scalar(
+        select(PayrollScheduleEntry)
+        .order_by(PayrollScheduleEntry.observed_deposit_date.desc())
+        .limit(1)
+    )
+    paycheck: dict[str, Any] | None = None
+    if latest_paycheck is not None:
+        allocations = list(
+            session.scalars(
+                select(PayrollAllocation).where(
+                    PayrollAllocation.schedule_entry_id == latest_paycheck.id
+                )
+            )
+        )
+
+        def allocated(category: str) -> Decimal:
+            return money(sum((row.amount for row in allocations if row.category == category), ZERO))
+
+        stock = allocated("after_tax.employee_stock_purchase")
+        locked = money(
+            allocated("pretax.employee_retirement")
+            + allocated("pretax.employee_hsa")
+            + allocated("employer_benefit.employer_retirement")
+            + allocated("employer_benefit.employer_hsa")
+        )
+        paycheck = {
+            "spendable_cash": amount(latest_paycheck.net_payment),
+            "accessible_stock_funding": amount(stock),
+            "accessible_value_before_spending": amount(latest_paycheck.net_payment + stock),
+            "locked_account_funding": amount(locked),
+            "total_paycheck_value": amount(latest_paycheck.net_payment + stock + locked),
+        }
+
+    fidelity_current = money(sum(current_by_account.values(), ZERO))
+    funding_end = closing_date or date.today()
+    funding = period_investments(session, funding_end - timedelta(days=365), funding_end)
+    return {
+        "as_of": closing_date,
+        "accessible": {
+            "total": amount(money(cash + sellable_investments)),
+            "cash": amount(money(cash)),
+            "sellable_investments": amount(money(sellable_investments)),
+            "accounts": accessible_accounts,
+        },
+        "excluded": {
+            "total": amount(money(excluded_investments)),
+            "message": "Tracked for performance, excluded from accessible wealth.",
+        },
+        "fidelity": {
+            "current_value": amount(fidelity_current),
+            "accounts": account_rows,
+            "history": history,
+            "recent_observation": recent_observation,
+            "performance_periods": performance_periods,
+            "funding": {
+                "period_start": funding_end - timedelta(days=365),
+                "period_end": funding_end,
+                "you_contributed": funding["employee_fidelity_contributions"],
+                "employer_contributed": funding["employer_contributions"],
+                "total_payroll_funding": funding["total_payroll_fidelity_contributions"],
+            },
+        },
+        "paycheck": paycheck,
+    }
 
 
 def accounts_dashboard(session: Session) -> dict[str, Any]:
@@ -224,6 +715,7 @@ def accounts_dashboard(session: Session) -> dict[str, Any]:
             connections.get(account.plaid_connection_id) if account.plaid_connection_id else None
         )
         bridge = bridges.get(account.id)
+        performance_available = bool(bridge and investment_performance_available(bridge))
         account_rows.append(
             {
                 "id": account.id,
@@ -244,8 +736,10 @@ def accounts_dashboard(session: Session) -> dict[str, Any]:
                 "outflows": amount(account_out),
                 "contributions": amount(contributions),
                 "withdrawals": amount(withdrawals),
-                "investment_result": amount(bridge.investment_result) if bridge else None,
-                "performance_status": "available" if bridge else "tracking",
+                "investment_result": (
+                    amount(bridge.investment_result) if performance_available and bridge else None
+                ),
+                "performance_status": "available" if performance_available else "tracking",
                 "cost_basis": amount(holding_cost_basis) if holding_cost_basis else None,
                 "unrealized_gain": (
                     amount(holding_value_with_basis - holding_cost_basis)
@@ -458,10 +952,9 @@ def overview(
             ZERO,
         )
     )
-    employer_contributions = detailed_total(
-        "employer_benefit.employer_hsa",
-        "employer_benefit.employer_retirement",
-    )
+    employer_hsa = detailed_total("employer_benefit.employer_hsa")
+    employer_retirement = detailed_total("employer_benefit.employer_retirement")
+    employer_contributions = money(employer_hsa + employer_retirement)
     employee_directed = money(employee_retirement + employee_hsa + employee_stock_purchase)
     allocation = payroll_allocation_summary(session, period_start, period_end)
     allocation_destinations = allocation["destinations"]
@@ -482,6 +975,8 @@ def overview(
     allocated_employee_retirement = allocation_total("pretax.employee_retirement")
     allocated_employee_hsa = allocation_total("pretax.employee_hsa")
     allocated_employee_stock = allocation_total("after_tax.employee_stock_purchase")
+    allocated_employer_hsa = allocation_total("employer_benefit.employer_hsa")
+    allocated_employer_retirement = allocation_total("employer_benefit.employer_retirement")
     allocated_health = allocation_total("pretax.medical", "pretax.dental", "pretax.vision")
     allocated_stock_offset = allocation_total("after_tax.stock_offset")
     allocated_other_pretax = allocation_total("pretax.other")
@@ -502,6 +997,8 @@ def overview(
         employee_stock_purchase = allocated_employee_stock
         health_premiums = allocated_health
         stock_offset = allocated_stock_offset
+        employer_hsa = allocated_employer_hsa
+        employer_retirement = allocated_employer_retirement
         employer_contributions = allocated_employer
         employee_directed = money(employee_retirement + employee_hsa + employee_stock_purchase)
     detail_complete = sum(1 for statement in statements if statement.detail_complete)
@@ -538,6 +1035,16 @@ def overview(
         next_deposit = deposit_anchor
         while next_deposit <= date.today():
             next_deposit += timedelta(days=14)
+        recurring_employee_retirement = newest_line_total("pretax.employee_retirement")
+        recurring_employee_hsa = newest_line_total("pretax.employee_hsa")
+        recurring_employee_stock = newest_line_total("after_tax.employee_stock_purchase")
+        recurring_employer_retirement = newest_line_total("employer_benefit.employer_retirement")
+        recurring_employer_hsa = newest_line_total("employer_benefit.employer_hsa")
+        recurring_employee_fidelity = money(
+            recurring_employee_retirement + recurring_employee_stock
+        )
+        recurring_employee_accounts = money(recurring_employee_fidelity + recurring_employee_hsa)
+        recurring_employer_accounts = money(recurring_employer_retirement + recurring_employer_hsa)
         recurring_paycheck = {
             "cadence": "Every other Wednesday",
             "effective_from": deposit_anchor,
@@ -545,12 +1052,16 @@ def overview(
             "annual_salary": amount(newest.base_salary),
             "gross_earnings": amount(newest.gross_earnings),
             "net_payment": amount(newest.net_payment),
-            "employee_retirement": amount(newest_line_total("pretax.employee_retirement")),
-            "employer_retirement": amount(
-                newest_line_total("employer_benefit.employer_retirement")
-            ),
-            "employee_stock_purchase": amount(
-                newest_line_total("after_tax.employee_stock_purchase")
+            "employee_retirement": amount(recurring_employee_retirement),
+            "employee_hsa": amount(recurring_employee_hsa),
+            "employee_stock_purchase": amount(recurring_employee_stock),
+            "employee_fidelity_funding": amount(recurring_employee_fidelity),
+            "employee_account_funding": amount(recurring_employee_accounts),
+            "employer_retirement": amount(recurring_employer_retirement),
+            "employer_hsa": amount(recurring_employer_hsa),
+            "employer_account_funding": amount(recurring_employer_accounts),
+            "all_account_value": amount(
+                newest.net_payment + recurring_employee_accounts + recurring_employer_accounts
             ),
             "deposit_splits": [
                 {"label": line.original_label, "amount": amount(line.amount)}
@@ -635,6 +1146,7 @@ def overview(
         "totals": {
             "gross_compensation": amount(gross),
             "employee_directed_saving": amount(employee_directed),
+            "employee_fidelity_funding": amount(employee_retirement + employee_stock_purchase),
             "employee_retirement": amount(employee_retirement),
             "employee_hsa": amount(employee_hsa),
             "employee_stock_purchase": amount(employee_stock_purchase),
@@ -655,6 +1167,9 @@ def overview(
                 else stock_offset + max(ZERO, aftertax - known_after_tax)
             ),
             "employer_contributions": amount(employer_contributions),
+            "employer_retirement": amount(employer_retirement),
+            "employer_hsa": amount(employer_hsa),
+            "all_account_value": amount(net + employee_directed + employer_contributions),
             "taxes": amount(taxes),
             "benefits_and_other_pretax": amount(pretax),
             "after_tax_deductions": amount(aftertax),
@@ -735,6 +1250,37 @@ def payroll_history(
             }
         )
 
+    def account_values(row: PayrollScheduleEntry) -> dict[str, Decimal]:
+        allocations = allocations_by_entry.get(row.id, [])
+
+        def total(category: str) -> Decimal:
+            return money(
+                sum((item.amount for item in allocations if item.category == category), ZERO)
+            )
+
+        retirement = total("pretax.employee_retirement")
+        hsa = total("pretax.employee_hsa")
+        stock = total("after_tax.employee_stock_purchase")
+        employer_retirement = total("employer_benefit.employer_retirement")
+        employer_hsa = total("employer_benefit.employer_hsa")
+        employee_funding = money(retirement + hsa + stock)
+        employer_funding = money(employer_retirement + employer_hsa)
+        accessible_value = money(row.net_payment + stock)
+        locked_funding = money(retirement + hsa + employer_funding)
+        return {
+            "employee_retirement": retirement,
+            "employee_hsa": hsa,
+            "employee_stock_purchase": stock,
+            "employee_account_funding": employee_funding,
+            "employer_retirement": employer_retirement,
+            "employer_hsa": employer_hsa,
+            "employer_account_funding": employer_funding,
+            "employee_owned_value": money(row.net_payment + employee_funding),
+            "accessible_value_before_spending": accessible_value,
+            "locked_account_funding": locked_funding,
+            "total_paycheck_value": money(row.net_payment + employee_funding + employer_funding),
+        }
+
     def row_payload(row: PayrollScheduleEntry) -> dict[str, Any]:
         adjustments = {
             "variable_compensation": amount(row.gross_adjustment),
@@ -746,6 +1292,7 @@ def payroll_history(
             "net_payment": amount(row.net_adjustment),
         }
         linked = matches_by_entry.get(row.id, [])
+        values = account_values(row)
         return {
             "id": row.id,
             "payment_date": row.payment_date,
@@ -766,6 +1313,7 @@ def payroll_history(
             "after_tax_deductions": amount(row.after_tax_deductions),
             "federal_taxable_gross": amount(row.federal_taxable_gross),
             "net_payment": amount(row.net_payment),
+            **{key: amount(value) for key, value in values.items()},
             "adjustments": adjustments,
             "has_adjustments": any(
                 Decimal(str(value or "0")) != ZERO for value in adjustments.values()
@@ -801,6 +1349,20 @@ def payroll_history(
         "federal_taxable_gross": amount(sum((row.federal_taxable_gross for row in rows), ZERO)),
         "net_payments": amount(sum((row.net_payment for row in rows), ZERO)),
     }
+    for key in (
+        "employee_retirement",
+        "employee_hsa",
+        "employee_stock_purchase",
+        "employee_account_funding",
+        "employer_retirement",
+        "employer_hsa",
+        "employer_account_funding",
+        "employee_owned_value",
+        "accessible_value_before_spending",
+        "locked_account_funding",
+        "total_paycheck_value",
+    ):
+        totals[key] = amount(sum((account_values(row)[key] for row in rows), ZERO))
     return {
         "period": {"start": start_date, "end": end_date},
         "count": len(rows),
@@ -1051,6 +1613,7 @@ def fidelity_summary(session: Session) -> dict[str, Any]:
                 ZERO,
             )
         )
+        performance_available = bool(bridge and investment_performance_available(bridge))
         by_account.append(
             {
                 "account": account.display_name,
@@ -1071,12 +1634,14 @@ def fidelity_summary(session: Session) -> dict[str, Any]:
                 ),
                 "other_deposits": amount(bridge.other_deposits) if bridge else None,
                 "withdrawals": amount(bridge.withdrawals) if bridge else None,
-                "investment_result": amount(bridge.investment_result) if bridge else None,
+                "investment_result": (
+                    amount(bridge.investment_result) if performance_available and bridge else None
+                ),
                 "closing_value": amount(bridge.closing_value) if bridge else None,
                 "reported_return_pct": (amount(bridge.reported_return_pct) if bridge else None),
                 "calculated_return_pct": (amount(bridge.calculated_return_pct) if bridge else None),
                 "return_method": bridge.return_method if bridge else "awaiting_second_value",
-                "performance_status": "available" if bridge else "tracking",
+                "performance_status": "available" if performance_available else "tracking",
                 "cost_basis": amount(cost_basis) if cost_basis else None,
                 "unrealized_gain": (amount(market_with_basis - cost_basis) if cost_basis else None),
                 "holdings": [
@@ -1094,8 +1659,10 @@ def fidelity_summary(session: Session) -> dict[str, Any]:
             }
         )
 
+    available_bridges = [bridge for bridge in bridges if investment_performance_available(bridge)]
+
     def total(field: str) -> Decimal:
-        return money(sum((getattr(item, field) for item in bridges), ZERO))
+        return money(sum((getattr(item, field) for item in available_bridges), ZERO))
 
     return {
         "accounts": by_account,
@@ -1113,10 +1680,17 @@ def fidelity_summary(session: Session) -> dict[str, Any]:
                     "closing_value",
                 )
             }
-            if bridges
+            if available_bridges
             else {}
         ),
-        "warnings": [],
+        "warnings": (
+            []
+            if available_bridges or not bridges
+            else [
+                "Investment performance is tracking until at least seven days of values produce "
+                "an interval without cash activity on either observation date."
+            ]
+        ),
     }
 
 

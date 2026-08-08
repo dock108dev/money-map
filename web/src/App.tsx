@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   configurePlaid,
   createReport,
-  createScenario,
   createPlaidLinkToken,
   createPlaidUpdateToken,
   disconnectPlaidConnection,
@@ -20,20 +19,23 @@ import {
   ConnectionsView,
   IncomeView,
   OverviewView,
-  ForecastView,
   ReviewView,
+  WealthView,
 } from "./components";
 import { openPlaidLink } from "./plaid-link";
 import type { DashboardData } from "./types";
 
-type View = "overview" | "accounts" | "income" | "activity" | "plan" | "connections" | "review";
+const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
+
+type View = "overview" | "accounts" | "income" | "activity" | "wealth" | "plan" | "connections" | "review";
 
 const nav: Array<{ id: View; label: string; glyph: string }> = [
   { id: "overview", label: "Overview", glyph: "⌂" },
   { id: "accounts", label: "Accounts", glyph: "▤" },
   { id: "income", label: "Income", glyph: "$" },
   { id: "activity", label: "Activity", glyph: "↕" },
-  { id: "plan", label: "Plan", glyph: "◇" },
+  { id: "wealth", label: "Wealth", glyph: "◇" },
+  { id: "plan", label: "Plan", glyph: "◎" },
   { id: "connections", label: "Add account", glyph: "+" },
   { id: "review", label: "Review", glyph: "!" },
 ];
@@ -204,21 +206,6 @@ export default function App() {
     }
   };
 
-  const runScenario = async (payload: Record<string, string | number | null>) => {
-    setBusy(true);
-    setMessage("");
-    try {
-      await createScenario(payload);
-      setMessage("Comparison saved.");
-      await refresh();
-      setView("plan");
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Comparison could not be built.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const runImport = async () => {
     setBusy(true);
     try {
@@ -348,8 +335,11 @@ export default function App() {
           {view === "accounts" && <AccountsView data={data.accounts} />}
           {view === "income" && <IncomeView data={data.payroll} />}
           {view === "activity" && <ActivityView data={data.accounts} />}
+          {view === "wealth" && <WealthView data={data.wealth} />}
           {view === "plan" && (
-            <ForecastView scenarios={data.scenarios} onSubmit={(payload) => void runScenario(payload)} busy={busy} />
+            <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Life Lab…</p></div>}>
+              <LifeLabView />
+            </Suspense>
           )}
           {view === "connections" && (
             <ConnectionsView
@@ -367,7 +357,14 @@ export default function App() {
               onAutoRefreshChange={(enabled) => void runAutoRefreshPreference(enabled)}
             />
           )}
-          {view === "review" && <ReviewView issues={data.issues} />}
+          {view === "review" && (
+            <ReviewView
+              issues={data.issues}
+              busy={busy || updating}
+              onUpdateData={() => void runGlobalRefresh(false)}
+              onOpenAccounts={() => setView("accounts")}
+            />
+          )}
         </div>
       </main>
     </div>

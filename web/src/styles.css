@@ -723,7 +723,7 @@ tbody tr[tabindex]:hover {
 }
 
 .review-card {
-  min-height: 140px;
+  min-height: 220px;
   padding: 20px;
   display: grid;
   grid-template-columns: 52px 1fr;
@@ -753,11 +753,78 @@ tbody tr[tabindex]:hover {
 }
 
 .review-card p {
-  min-height: 36px;
   margin: 0 0 12px;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.review-body {
+  min-width: 0;
+}
+
+.review-evidence,
+.forecast-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.review-evidence div,
+.forecast-evidence div {
+  padding: 9px 10px;
+  background: var(--cream);
+  border-radius: 7px;
+}
+
+.review-evidence dt,
+.forecast-evidence dt {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.review-evidence dd,
+.forecast-evidence dd {
+  margin: 3px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-cause {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.review-cause small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.review-steps {
+  margin: 13px 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.review-steps li + li {
+  margin-top: 5px;
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .empty-state {
@@ -1175,6 +1242,18 @@ tbody tr[tabindex]:hover {
   background: linear-gradient(#5ca184, #246d54);
 }
 
+.forecast-column span.negative {
+  background: linear-gradient(#d88f79, #a54835);
+}
+
+.forecast-evidence {
+  margin-bottom: 0;
+}
+
+.forecast-evidence dd {
+  line-height: 1.4;
+}
+
 .forecast-column small {
   color: var(--muted);
   font-size: 8px;
@@ -1442,6 +1521,13 @@ tbody tr[tabindex]:hover {
 .payroll-detail-lines small,
 .table-subline {
   color: var(--muted);
+}
+
+.payroll-detail-lines span > small {
+  display: block;
+  margin-top: 3px;
+  font-size: 8px;
+  line-height: 1.2;
 }
 
 .table-subline {
@@ -1757,6 +1843,123 @@ tbody tr[tabindex]:hover {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
+
+.paycheck-value-panel {
+  overflow: hidden;
+  border-color: #b9ccc1;
+  background: linear-gradient(135deg, #f4f8f2, #fbfaf5 72%);
+}
+
+.paycheck-value-hero {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(360px, 1.4fr);
+  gap: 30px;
+  align-items: end;
+}
+
+.paycheck-value-hero > div:first-child > strong {
+  display: block;
+  margin-top: 7px;
+  font-family: Georgia, serif;
+  font-size: clamp(34px, 5vw, 48px);
+  font-weight: 500;
+  letter-spacing: -1.4px;
+}
+
+.paycheck-value-hero p {
+  max-width: 520px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.paycheck-value-equation {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+
+.paycheck-value-equation span {
+  padding: 8px 10px;
+  border: 1px solid rgba(35, 89, 68, 0.16);
+  border-radius: 999px;
+  color: var(--deep-green);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.paycheck-value-equation b {
+  color: #87a095;
+  font-size: 12px;
+}
+
+.paycheck-value-breakdown {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-top: 1px solid #d7e1da;
+}
+
+.account-value-row {
+  min-height: 82px;
+  padding: 15px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  border-right: 1px solid #d7e1da;
+}
+
+.account-value-row:last-child { border-right: 0; }
+
+.account-value-row > span,
+.account-value-row small { display: block; }
+.account-value-row > span { color: var(--muted); font-size: 10px; }
+.account-value-row small { margin-top: 3px; color: #95a49d; font-size: 8px; }
+.account-value-row strong { font-family: Georgia, serif; font-size: 19px; font-weight: 500; }
+
+.fidelity-period-panel { overflow: hidden; }
+
+.fidelity-period-metrics {
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fidelity-period-metrics .metric-card { box-shadow: none; }
+
+.fidelity-period-note {
+  padding: 14px 20px 17px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.fidelity-period-note p {
+  max-width: 650px;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.fidelity-period-note > div {
+  display: grid;
+  gap: 6px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-size: 10px;
+}
+
+.fidelity-period-note span,
+.fidelity-period-note strong { display: block; }
+.fidelity-period-note strong { margin-top: 2px; color: var(--ink); }
 
 .compact-panel {
   overflow: hidden;
@@ -2388,6 +2591,13 @@ tbody tr[tabindex]:hover {
   .period-dates { width: 100%; flex-wrap: wrap; }
   .bridge-summary { grid-template-columns: 1fr 1fr; }
   .inline-value-form { grid-template-columns: 1fr; }
+  .paycheck-value-hero { grid-template-columns: 1fr; }
+  .paycheck-value-equation { justify-content: flex-start; }
+  .paycheck-value-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .account-value-row { border-bottom: 1px solid #d7e1da; }
+  .fidelity-period-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fidelity-period-note { display: grid; }
+  .fidelity-period-note > div { text-align: left; }
 }
 
 .filter-bar {
@@ -2640,6 +2850,14 @@ tbody tr[tabindex]:hover {
   color: var(--green);
 }
 
+.payroll-net em {
+  display: none;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+  font-style: normal;
+}
+
 .payroll-drawer > .payroll-source {
   margin-bottom: 12px;
 }
@@ -2739,6 +2957,379 @@ tbody tr[tabindex]:hover {
   accent-color: var(--green);
 }
 
+.wealth-heading {
+  min-height: 102px;
+}
+
+.wealth-access-hero {
+  min-height: 270px;
+  padding: 30px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(400px, 1fr);
+  gap: 28px;
+  align-items: center;
+  border-radius: 18px;
+  color: white;
+  background:
+    radial-gradient(circle at 82% 12%, rgba(130, 181, 151, 0.22), transparent 34%),
+    linear-gradient(135deg, #153b30, #1e4d3d);
+  box-shadow: 0 18px 45px rgba(26, 58, 47, 0.16);
+}
+
+.wealth-access-total > span,
+.wealth-access-total > strong,
+.wealth-access-total > p {
+  display: block;
+}
+
+.wealth-access-total > span {
+  color: #b5cdc2;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.wealth-access-total > strong {
+  margin-top: 8px;
+  font-family: Georgia, serif;
+  font-size: clamp(44px, 7vw, 68px);
+  font-weight: 500;
+  letter-spacing: -2px;
+}
+
+.wealth-access-total > p {
+  max-width: 440px;
+  margin: 10px 0 0;
+  color: #bfd0c8;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.wealth-access-breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.wealth-access-breakdown .metric-card {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.wealth-access-breakdown .metric-card .eyebrow,
+.wealth-access-breakdown .metric-card small {
+  color: #b5cdc2;
+}
+
+.wealth-paycheck-panel,
+.fidelity-performance-panel {
+  overflow: hidden;
+}
+
+.wealth-paycheck-grid {
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wealth-paycheck-grid .metric-card {
+  box-shadow: none;
+}
+
+.fidelity-performance-heading {
+  padding: 25px 26px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fidelity-performance-heading h2 {
+  margin: 7px 0 0;
+  font-family: Georgia, serif;
+  font-size: clamp(36px, 5vw, 52px);
+  font-weight: 500;
+  letter-spacing: -1.4px;
+}
+
+.fidelity-performance-heading p {
+  max-width: 560px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.performance-funding-summary {
+  min-width: 220px;
+  padding: 15px 17px;
+  border: 1px solid #d9ddd5;
+  border-radius: 13px;
+  background: #f7f6f1;
+  text-align: right;
+}
+
+.performance-funding-summary span,
+.performance-funding-summary strong,
+.performance-funding-summary small {
+  display: block;
+}
+
+.performance-funding-summary span,
+.performance-funding-summary small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.performance-funding-summary strong {
+  margin: 5px 0 3px;
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.performance-period-tabs {
+  padding: 14px 24px 0;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+}
+
+.performance-period-tabs button {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #f9f8f3;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.performance-period-tabs button.active {
+  border-color: var(--deep-green);
+  color: white;
+  background: var(--deep-green);
+}
+
+.performance-result {
+  margin: 14px 24px 24px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.65fr) minmax(480px, 1.8fr);
+  gap: 24px;
+  align-items: center;
+  border: 1px solid #d6dfd8;
+  border-radius: 15px;
+  background: #f2f6f1;
+}
+
+.performance-result.performance-tracking {
+  border-color: #e2d8b9;
+  background: #fbf7e9;
+}
+
+.performance-result-primary span,
+.performance-result-primary strong,
+.performance-result-primary small {
+  display: block;
+}
+
+.performance-result-primary span,
+.performance-result-primary small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.performance-result-primary strong {
+  margin: 5px 0;
+  font-family: Georgia, serif;
+  font-size: 31px;
+  font-weight: 500;
+}
+
+.performance-equation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.performance-equation div {
+  min-width: 78px;
+  text-align: center;
+}
+
+.performance-equation span,
+.performance-equation strong {
+  display: block;
+}
+
+.performance-equation span {
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.performance-equation strong {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.performance-equation b {
+  color: #9ba7a1;
+  font-size: 11px;
+}
+
+.fidelity-observation-grid {
+  padding: 0 24px 24px;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.75fr) minmax(340px, 1.25fr);
+  gap: 14px;
+}
+
+.recent-observation-card,
+.fidelity-history-card {
+  min-height: 188px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fbfaf6;
+}
+
+.recent-observation-card > strong,
+.recent-observation-card > small {
+  display: block;
+}
+
+.recent-observation-card > strong {
+  margin-top: 11px;
+  font-family: Georgia, serif;
+  font-size: 32px;
+  font-weight: 500;
+}
+
+.recent-observation-card > small,
+.recent-observation-card p,
+.fidelity-history-card p {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.recent-observation-card p,
+.fidelity-history-card p {
+  margin: 10px 0 0;
+}
+
+.wealth-history-chart {
+  height: 108px;
+  margin-top: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.wealth-history-chart > div {
+  height: 100%;
+  min-width: 34px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+}
+
+.wealth-history-chart i {
+  width: min(55px, 100%);
+  min-height: 4px;
+  border-radius: 7px 7px 2px 2px;
+  background: linear-gradient(#5b927c, #265b48);
+}
+
+.wealth-history-chart small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.wealth-account-list {
+  display: grid;
+}
+
+.wealth-account-row {
+  min-height: 70px;
+  padding: 12px 20px;
+  display: grid;
+  grid-template-columns: 9px minmax(190px, 1fr) 95px 110px 115px;
+  gap: 13px;
+  align-items: center;
+  border-bottom: 1px solid #e7e8e1;
+}
+
+.wealth-account-row:last-child {
+  border-bottom: 0;
+}
+
+.wealth-access-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #87928d;
+}
+
+.wealth-access-dot.access-accessible { background: #2b8a67; }
+.wealth-access-dot.access-retirement { background: #8570a1; }
+.wealth-access-dot.access-restricted { background: #c67b58; }
+
+.wealth-account-name strong,
+.wealth-account-name small,
+.wealth-account-movement small,
+.wealth-account-movement strong,
+.wealth-account-movement em {
+  display: block;
+}
+
+.wealth-account-name strong { font-size: 11px; }
+.wealth-account-name small,
+.wealth-account-movement small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.wealth-account-movement { text-align: right; }
+.wealth-account-movement strong { margin-top: 3px; font-size: 11px; }
+.wealth-account-movement em { margin-top: 2px; color: var(--muted); font-size: 8px; font-style: normal; }
+
+.wealth-access-badge {
+  width: fit-content;
+  padding: 5px 7px;
+  border-radius: 999px;
+  color: #5e6a64;
+  background: #eaede9;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.wealth-access-badge.access-accessible { color: #24684d; background: #e0efe5; }
+.wealth-access-badge.access-retirement { color: #65567f; background: #ebe6f1; }
+.wealth-access-badge.access-restricted { color: #8a5138; background: #f6e7de; }
+
+.wealth-account-value {
+  text-align: right;
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.wealth-method-note {
+  padding: 4px 5px 18px;
+}
+
+.wealth-method-note strong,
+.wealth-method-note p { display: block; }
+.wealth-method-note strong { font-size: 11px; }
+.wealth-method-note p { max-width: 760px; margin: 5px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+
 @media (max-width: 980px) {
   .net-worth-hero,
   .account-groups {
@@ -2753,12 +3344,30 @@ tbody tr[tabindex]:hover {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .wealth-access-hero,
+  .performance-result {
+    grid-template-columns: 1fr;
+  }
+
+  .wealth-paycheck-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .performance-equation {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
   .payroll-row {
     grid-template-columns: 70px 80px minmax(150px, 1fr) 90px 12px;
   }
 
   .payroll-gross {
     display: none;
+  }
+
+  .payroll-net em {
+    display: block;
   }
 }
 
@@ -2828,6 +3437,29 @@ tbody tr[tabindex]:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .wealth-access-hero,
+  .fidelity-performance-heading,
+  .fidelity-observation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fidelity-performance-heading {
+    display: grid;
+  }
+
+  .performance-funding-summary {
+    text-align: left;
+  }
+
+  .wealth-account-row {
+    grid-template-columns: 9px minmax(0, 1fr) auto;
+  }
+
+  .wealth-account-movement,
+  .wealth-access-badge {
+    display: none;
+  }
+
   .payroll-row {
     grid-template-columns: 70px minmax(0, 1fr) 88px 12px;
   }
@@ -2851,6 +3483,26 @@ tbody tr[tabindex]:hover {
 
   .simple-page-heading > strong {
     display: none;
+  }
+
+  .wealth-access-hero {
+    padding: 24px 20px;
+  }
+
+  .wealth-access-total > strong {
+    font-size: 42px;
+  }
+
+  .wealth-paycheck-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .performance-result {
+    margin-inline: 14px;
+  }
+
+  .fidelity-observation-grid {
+    padding-inline: 14px;
   }
 
   .paycheck-strip {

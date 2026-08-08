@@ -114,3 +114,39 @@ uses actual biweekly pay-date cadence.
 - Contribution limits are year-specific configuration, never hard-coded into formulas.
 - An optional cash-floor rule can redirect projected consolidated cash above the floor
   into investments; it is off by default and never moves real money.
+
+## Life Lab projections
+
+Life Lab is separate from the 12-month allocation forecast. It uses monthly `Decimal`
+calculations in today’s dollars and stores two-place values for reproducibility.
+
+- Cash and confirmed sellable investments fund spending first, while preserving the
+  user-entered cash floor.
+- Pretax retirement funds ordinary withdrawals only at age 59½ or later and receives the
+  visible user-entered tax haircut. Early-withdrawal exceptions and 401(k) loans are not
+  silently invented.
+- HSA and restricted assets grow in the displayed paths but do not fund ordinary spending.
+- After work stops, required lifestyle is funded first, then required dated goals,
+  flexible lifestyle, and flexible goals. A required shortfall before retirement access
+  is classified as an accessible-bridge failure when retirement money remains.
+- The middle and rough paths use fixed 4% and 2% annual real returns. The early-crash
+  path applies a 35% loss at work stop, two flat years, and then a fixed 3% real return.
+  Cash earns 0% real in all paths.
+- Results are deterministic statuses—works, essentials only, shortfall, or bridge
+  failure—not probabilities. Social Security, healthcare/Medicare, pensions, RMDs,
+  Roth conversions, home equity, debt schedules, and early-withdrawal strategies remain
+  visible omissions in v0.2.
+- Each age and path is also solved backward, without a presentational cap, for (a) the
+  minimum extra after-tax monthly income received while working that repairs the complete
+  path and (b) the minimum additional accessible lump sum needed at work stop to fund the
+  retirement period. The retirement-capital solver evaluates success from work stop
+  onward; an earlier shortfall is returned separately as a prerequisite. Solvers use the
+  same monthly engine, path, goals, ordering, rounding, and end-of-plan requirements.
+- The compound-sprint and business-exit cards are standalone arithmetic translations of
+  that retirement-capital target and work-stop deadline. Target, deadline, seed, return,
+  ownership, tax haircut, and revenue multiple remain editable. Changing the calculated
+  target or deadline enters custom math mode and does not rewrite the core projection.
+- The 401(k)-loan card shows a conservative normal federal-rule ceiling from the entered
+  eligible vested balance and recent loan balances. It does not infer plan permission,
+  eligibility, vesting, tax treatment, job continuity, or repayment ability from the
+  aggregate retirement balance, and it does not silently add loan proceeds to the plan.

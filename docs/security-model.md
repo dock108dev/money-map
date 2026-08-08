@@ -42,6 +42,14 @@
   default cascade-deletes that connection’s normalized local records.
 - Remote Plaid and CDN calls occur only after explicit connector actions. Manual
   import, reconciliation, forecasting, reporting, backup, and restore remain local.
+- Life Lab projection requests, profiles, goals, and saved scenarios remain in the local
+  SQLite database. Its runtime has no public-network dependency and returns no provider
+  identifiers or raw transaction descriptions.
+- The checked-in state-income artifact contains public aggregate IRS/BLS data only.
+  Regeneration is an explicit developer action; the runtime does not fetch benchmarks.
+- Drive Calculator arithmetic runs entirely in the browser. Its IRS reference is an
+  ordinary external link opened only when the user chooses it; the app does not transmit
+  plan values, balances, or calculator inputs to the IRS or another service.
 - No telemetry, screen scraping, trading, or money movement exists.
 
 ## Operator responsibility

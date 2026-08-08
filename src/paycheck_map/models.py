@@ -544,6 +544,119 @@ class ForecastPeriod(Base):
     scenario: Mapped[ForecastScenario] = relationship(back_populates="periods")
 
 
+class LifePlanProfile(Base):
+    """Local assumptions for the active Life Lab plan."""
+
+    __tablename__ = "life_plan_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    birth_date: Mapped[date] = mapped_column(Date)
+    state: Mapped[str] = mapped_column(String(2))
+    end_age: Mapped[int] = mapped_column(Integer, default=95)
+    current_monthly_outflow: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    essential_monthly_spend: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    flexible_monthly_spend: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    cash_floor: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    retirement_tax_rate_pct: Mapped[Decimal] = mapped_column(
+        Numeric(7, 4, asdecimal=True), default=ZERO
+    )
+    target_ages: Mapped[list[int]] = mapped_column(JSON, default=list)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    goals: Mapped[list[LifeGoal]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan"
+    )
+    scenarios: Mapped[list[LifeScenario]] = relationship(
+        back_populates="profile", cascade="all, delete-orphan"
+    )
+
+
+class LifeGoal(Base):
+    """A generic dated cash goal with an optional continuing real cost."""
+
+    __tablename__ = "life_goals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("life_plan_profiles.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    target_date: Mapped[date] = mapped_column(Date, index=True)
+    target_amount: Mapped[Decimal] = mapped_column(Money)
+    reserved_amount: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    annual_cost: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    priority: Mapped[str] = mapped_column(String(16), default="required")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    profile: Mapped[LifePlanProfile] = relationship(back_populates="goals")
+
+
+class LifeScenario(Base):
+    """A reproducible saved Life Lab projection."""
+
+    __tablename__ = "life_scenarios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("life_plan_profiles.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    target_age: Mapped[int] = mapped_column(Integer)
+    path_key: Mapped[str] = mapped_column(String(32))
+    input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    engine_version: Mapped[str] = mapped_column(String(32))
+    assumption_version: Mapped[str] = mapped_column(String(32))
+    benchmark_version: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(40))
+    warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    profile: Mapped[LifePlanProfile] = relationship(back_populates="scenarios")
+    periods: Mapped[list[LifeProjectionPeriod]] = relationship(
+        back_populates="scenario", cascade="all, delete-orphan"
+    )
+
+
+class LifeProjectionPeriod(Base):
+    """One monthly point in a saved Life Lab path."""
+
+    __tablename__ = "life_projection_periods"
+    __table_args__ = (UniqueConstraint("scenario_id", "month", name="uq_life_scenario_month"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scenario_id: Mapped[int] = mapped_column(
+        ForeignKey("life_scenarios.id", ondelete="CASCADE"), index=True
+    )
+    month: Mapped[date] = mapped_column(Date, index=True)
+    age_months: Mapped[int] = mapped_column(Integer)
+    working: Mapped[bool] = mapped_column(Boolean)
+    gross_income: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    net_income: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    employee_retirement: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    employer_retirement: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    stock_plan: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    essential_spend: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    flexible_spend: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    goal_spend: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    cash: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    accessible_investments: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    pretax_retirement: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    hsa: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    restricted_assets: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    debt: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    investment_result: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    total_spendable: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    scenario: Mapped[LifeScenario] = relationship(back_populates="periods")
+
+
 class ManualCorrection(Base):
     __tablename__ = "manual_corrections"
 

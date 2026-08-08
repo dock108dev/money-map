@@ -17,6 +17,7 @@ import type {
   Scenario,
   SofiSummary,
   TimelineRow,
+  WealthDashboard,
 } from "./types";
 
 export const currency = (value: string | null | undefined) => {
@@ -36,6 +37,12 @@ export const currencyExact = (value: string | null | undefined) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value));
+};
+
+export const signedCurrencyExact = (value: string | null | undefined) => {
+  if (value == null) return "—";
+  const numeric = Number(value);
+  return `${numeric > 0 ? "+" : ""}${currencyExact(value)}`;
 };
 
 export const monthLabel = (value: string) =>
@@ -205,11 +212,15 @@ export function OverviewView({
         <div className="income-snapshot-metrics">
           <MetricCard label="Gross" value={currency(overview.totals.gross_compensation)} />
           <MetricCard label="Taxes" value={currency(overview.totals.taxes)} tone="warm" />
-          <MetricCard label="Saved" value={currency(overview.totals.employee_directed_saving)} />
+          <MetricCard label="Your account funding" value={currency(overview.totals.employee_directed_saving)} />
           <MetricCard label="Employer" value={currency(overview.totals.employer_contributions)} />
-          <MetricCard label="Net pay" value={currency(overview.totals.net_payments)} tone="green" />
+          <MetricCard label="Spendable net" value={currency(overview.totals.net_payments)} tone="green" />
         </div>
       </section>
+
+      {baseline && <PaycheckAccountValue paycheck={baseline} />}
+
+      <FidelityPeriodSnapshot overview={overview} accounts={accounts} />
 
       <PaycheckFlow overview={overview} />
 
@@ -264,12 +275,126 @@ export function OverviewView({
 
       {baseline && (
         <section className="paycheck-strip">
-          <span>Paycheck</span>
-          <strong>{currencyExact(baseline.net_payment)}</strong>
-          <small>Every two weeks · next {shortDate(baseline.next_expected_deposit)}</small>
+          <span>Every paycheck</span>
+          <strong>{currencyExact(baseline.all_account_value)} to your accounts</strong>
+          <small>{currencyExact(baseline.net_payment)} spendable cash · next {shortDate(baseline.next_expected_deposit)}</small>
         </section>
       )}
     </div>
+  );
+}
+
+function PaycheckAccountValue({
+  paycheck,
+}: {
+  paycheck: NonNullable<Overview["recurring_paycheck"]>;
+}) {
+  const destinations = [
+    { label: "Spendable cash", note: "SoFi net pay", value: paycheck.net_payment },
+    {
+      label: "Fidelity funded by you",
+      note: "Retirement + stock plan",
+      value: paycheck.employee_fidelity_funding,
+    },
+    { label: "HSA funded by you", note: "Pretax contribution", value: paycheck.employee_hsa },
+    {
+      label: "Employer Fidelity",
+      note: "Retirement contribution",
+      value: paycheck.employer_retirement,
+    },
+    { label: "Employer HSA", note: "Employer contribution", value: paycheck.employer_hsa },
+  ];
+  return (
+    <section className="panel paycheck-value-panel">
+      <div className="paycheck-value-hero">
+        <div>
+          <span className="eyebrow">Paycheck across your accounts</span>
+          <strong>{currencyExact(paycheck.all_account_value)}</strong>
+          <p>
+            Net pay stays spendable cash. This total adds money deposited into accounts you own,
+            plus employer contributions.
+          </p>
+        </div>
+        <div className="paycheck-value-equation">
+          <span>{currencyExact(paycheck.net_payment)} cash</span>
+          <b>+</b>
+          <span>{currencyExact(paycheck.employee_account_funding)} from you</span>
+          <b>+</b>
+          <span>{currencyExact(paycheck.employer_account_funding)} employer</span>
+        </div>
+      </div>
+      <div className="paycheck-value-breakdown">
+        {destinations.map((destination) => (
+          <div className="account-value-row" key={destination.label}>
+            <span>{destination.label}<small>{destination.note}</small></span>
+            <strong>{currencyExact(destination.value)}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FidelityPeriodSnapshot({
+  overview,
+  accounts,
+}: {
+  overview: Overview;
+  accounts: AccountsDashboard;
+}) {
+  const fidelityValueInCents = accounts.accounts
+    .filter(
+      (account) =>
+        account.category === "investment" && account.institution.toLowerCase().includes("fidelity"),
+    )
+    .reduce((total, account) => total + Math.round(Number(account.current_balance ?? 0) * 100), 0);
+  const fidelityValue = (fidelityValueInCents / 100).toFixed(2);
+  const performanceAvailable =
+    overview.investments.bridge_count > 0 && overview.investments.investment_result != null;
+  return (
+    <section className="panel fidelity-period-panel">
+      <header className="compact-heading">
+        <div>
+          <h2>Fidelity over this period</h2>
+          <span>{shortDate(overview.period.start)}–{shortDate(overview.period.end)}</span>
+        </div>
+        <strong>{currencyExact(fidelityValue)} now</strong>
+      </header>
+      <div className="fidelity-period-metrics">
+        <MetricCard
+          label="You contributed"
+          value={currencyExact(overview.investments.employee_fidelity_contributions)}
+          note="Retirement + stock plan"
+        />
+        <MetricCard
+          label="Employer added"
+          value={currencyExact(overview.investments.employer_contributions)}
+          note="Retirement contribution"
+        />
+        <MetricCard
+          label="Payroll funding"
+          value={currencyExact(overview.investments.total_payroll_fidelity_contributions)}
+          note="You + employer"
+        />
+        <MetricCard
+          label="Investment result"
+          value={performanceAvailable ? currencyExact(overview.investments.investment_result) : "Tracking"}
+          note={performanceAvailable ? "For the selected period" : "Waiting for a clean comparison interval"}
+          tone={performanceAvailable ? "green" : ""}
+        />
+      </div>
+      <div className="fidelity-period-note">
+        <p>
+          Current value and payroll contributions are known. Performance stays in tracking until
+          there is a longer, unambiguous opening-to-closing value interval; opening value matters,
+          so current value minus contributions would not be a valid return.
+        </p>
+        <div>
+          <span>Other investment deposits <strong>{currencyExact(overview.investments.other_contributions)}</strong></span>
+          <span>External withdrawals <strong>{currencyExact(overview.investments.withdrawals)}</strong></span>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -541,7 +666,14 @@ function AccountDetailPanel({
           <>
             <MetricCard label="Deposits" value={currency(account.contributions)} />
             <MetricCard label="Unrealized gain" value={currency(detail.unrealized_gain)} />
-            <MetricCard label="Investment result" value={currency(account.investment_result)} />
+            <MetricCard
+              label="Performance"
+              value={
+                account.performance_status === "available"
+                  ? currency(account.investment_result)
+                  : "Tracking"
+              }
+            />
           </>
         )}
         {account.change != null && <MetricCard label="Balance change" value={currency(account.change)} />}
@@ -577,9 +709,19 @@ function AccountDetailPanel({
                 Number(bridge.other_deposits ?? 0)
               ))}</strong></div>
               <div><span>Withdrawals</span><strong>{currency(bridge.withdrawals as string | null)}</strong></div>
-              <div><span>Investment result</span><strong>{currency(bridge.investment_result as string | null)}</strong></div>
+              <div>
+                <span>Investment result</span>
+                <strong>
+                  {bridge.performance_status === "available"
+                    ? currency(bridge.investment_result as string | null)
+                    : "Tracking"}
+                </strong>
+              </div>
               <div><span>Closing</span><strong>{currency(bridge.closing_value as string | null)}</strong></div>
-              <small>{String(bridge.return_method).replaceAll("_", " ")}{bridge.calculated_return_pct ? ` · ${bridge.calculated_return_pct}%` : ""}</small>
+              <small>
+                {String(bridge.performance_message ?? bridge.return_method)}
+                {bridge.calculated_return_pct ? ` · ${bridge.calculated_return_pct}%` : ""}
+              </small>
             </div>
           ))}
         </div>
@@ -697,6 +839,9 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
     | "tax_withholdings"
     | "after_tax_deductions"
     | "net_payment"
+    | "employee_account_funding"
+    | "employer_account_funding"
+    | "total_paycheck_value"
   >) => fromCents(rows.reduce((total, row) => total + toCents(row[field]), 0));
 
   return (
@@ -734,10 +879,10 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
       </div>
       <section className="overview-metrics income-metrics">
         <MetricCard label="Gross" value={currencyExact(sum("gross_earnings"))} />
-        <MetricCard label="Pretax" value={currencyExact(sum("pretax_deductions"))} />
-        <MetricCard label="Taxes" value={currencyExact(sum("tax_withholdings"))} tone="warm" />
-        <MetricCard label="After-tax" value={currencyExact(sum("after_tax_deductions"))} />
-        <MetricCard label="Net pay" value={currencyExact(sum("net_payment"))} tone="green" />
+        <MetricCard label="Spendable cash" value={currencyExact(sum("net_payment"))} tone="green" />
+        <MetricCard label="Your account funding" value={currencyExact(sum("employee_account_funding"))} />
+        <MetricCard label="Employer additions" value={currencyExact(sum("employer_account_funding"))} />
+        <MetricCard label="Total paycheck value" value={currencyExact(sum("total_paycheck_value"))} tone="ink" />
       </section>
       <section className="panel compact-panel">
         <div className="payroll-list">
@@ -755,12 +900,13 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
                 <small>{currency(row.base_salary)} salary</small>
               </span>
               <span className="payroll-gross">
-                <small>Gross</small>
-                <strong>{currencyExact(row.gross_earnings)}</strong>
+                <small>Spendable</small>
+                <strong>{currencyExact(row.net_payment)}</strong>
               </span>
               <span className="payroll-net">
-                <small>Net</small>
-                <strong>{currencyExact(row.net_payment)}</strong>
+                <small>Total value</small>
+                <strong>{currencyExact(row.total_paycheck_value)}</strong>
+                <em>{currencyExact(row.net_payment)} spendable</em>
               </span>
               <span className="row-chevron">›</span>
             </button>
@@ -775,10 +921,11 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
 function PayrollDetail({ entry, onClose }: { entry: PayrollEntry; onClose: () => void }) {
   const values = [
     ["Gross", entry.gross_earnings],
-    ["Pretax", entry.pretax_deductions],
     ["Taxes", entry.tax_withholdings],
-    ["After-tax", entry.after_tax_deductions],
-    ["Net pay", entry.net_payment],
+    ["Spendable cash", entry.net_payment],
+    ["Your account funding", entry.employee_account_funding],
+    ["Employer additions", entry.employer_account_funding],
+    ["Total paycheck value", entry.total_paycheck_value],
   ];
   const adjustments = Object.entries(entry.adjustments).filter(([, value]) => toCents(value) !== 0);
   return (
@@ -928,37 +1075,84 @@ export function EvidenceDrawer({
   );
 }
 
-export function ReviewView({ issues }: { issues: ReviewIssue[] }) {
+export function ReviewView({
+  issues,
+  busy = false,
+  onUpdateData,
+  onOpenAccounts,
+}: {
+  issues: ReviewIssue[];
+  busy?: boolean;
+  onUpdateData?: () => void;
+  onOpenAccounts?: () => void;
+}) {
   if (!issues.length)
     return (
       <EmptyState title="Nothing needs attention">
-        Expected setup gaps are not treated as exceptions. Real connected-money discrepancies
-        will appear here.
+        Observed balances and posted activity agree. Timing-only differences and expected setup
+        gaps are not treated as exceptions.
       </EmptyState>
     );
-  const grouped = issues.reduce<Record<string, ReviewIssue[]>>((acc, issue) => {
-    const key = issue.rule.replaceAll("_", " ");
-    acc[key] = [...(acc[key] ?? []), issue];
-    return acc;
-  }, {});
   return (
     <div className="view-stack">
       <section className="page-heading">
         <span className="eyebrow">Needs attention</span>
         <h1>Review</h1>
-        <p>Only confirmed data conflicts appear here.</p>
+        <p>
+          Unexplained differences between observed balances and posted activity appear here.
+          Each item stays open until new data or source evidence resolves it.
+        </p>
       </section>
       <div className="review-grid">
-        {Object.entries(grouped).map(([rule, rows]) => (
-          <section className="review-card" key={rule}>
-            <div className="review-count">{rows.length}</div>
-            <div>
-              <h3>{rule}</h3>
-              <p>{String(rows[0]?.details.message ?? "Evidence or reconciliation needs review.")}</p>
-              <StatusPill status={rows.some((row) => row.status === "unreconciled") ? "unreconciled" : "unresolved"} />
-            </div>
-          </section>
-        ))}
+        {issues.map((issue) => {
+          const steps = Array.isArray(issue.details.next_steps)
+            ? issue.details.next_steps.filter((step): step is string => typeof step === "string")
+            : [];
+          const evidence = [
+            ["Opening", issue.details.opening_balance],
+            ["Posted activity", issue.details.accounted_activity],
+            ["Expected close", issue.details.expected_closing_balance],
+            ["Observed close", issue.details.closing_balance],
+          ].filter((row): row is [string, string] => typeof row[1] === "string");
+          return (
+            <section className="review-card" key={issue.id}>
+              <div className="review-count">!</div>
+              <div className="review-body">
+                <span className="eyebrow">{String(issue.details.account_name ?? issue.entity_type)}</span>
+                <h3>{issue.rule.replaceAll("_", " ")}</h3>
+                <p>{String(issue.details.message ?? "Evidence or reconciliation needs review.")}</p>
+                {evidence.length > 0 && (
+                  <dl className="review-evidence">
+                    {evidence.map(([label, value]) => (
+                      <div key={label}><dt>{label}</dt><dd>{currencyExact(value)}</dd></div>
+                    ))}
+                  </dl>
+                )}
+                <div className="review-cause">
+                  <span>Unexplained difference</span>
+                  <strong>{currencyExact(issue.residual)}</strong>
+                  <small>{String(issue.details.likely_cause ?? "needs source evidence").replaceAll("_", " ")}</small>
+                </div>
+                {steps.length > 0 && (
+                  <ol className="review-steps">
+                    {steps.map((step) => <li key={step}>{step}</li>)}
+                  </ol>
+                )}
+                <div className="review-actions">
+                  {onUpdateData && (
+                    <button type="button" className="secondary-button" disabled={busy} onClick={onUpdateData}>
+                      {busy ? "Updating…" : "Update data"}
+                    </button>
+                  )}
+                  {onOpenAccounts && (
+                    <button type="button" className="secondary-button" onClick={onOpenAccounts}>Open accounts</button>
+                  )}
+                  <StatusPill status={issue.status} />
+                </div>
+              </div>
+            </section>
+          );
+        })}
       </div>
     </div>
   );
@@ -1291,13 +1485,214 @@ export function ConnectionsView({
   );
 }
 
+export function WealthView({ data }: { data: WealthDashboard }) {
+  const [periodKey, setPeriodKey] = useState("observed");
+  const selectedPeriod =
+    data.fidelity.performance_periods.find((period) => period.key === periodKey) ??
+    data.fidelity.performance_periods[0];
+  const historyValues = data.fidelity.history.map((point) => Number(point.value ?? 0));
+  const historyMin = historyValues.length ? Math.min(...historyValues) : 0;
+  const historyMax = historyValues.length ? Math.max(...historyValues) : 1;
+  const historyRange = Math.max(historyMax - historyMin, 1);
+  const visibleFidelityAccounts = data.fidelity.accounts.filter(
+    (account) => Number(account.current_value ?? 0) !== 0,
+  );
+  const observation = data.fidelity.recent_observation;
+
+  return (
+    <div className="view-stack account-first-view wealth-view">
+      <section className="simple-page-heading wealth-heading">
+        <div>
+          <span className="eyebrow">Money you can use and investments you can measure</span>
+          <h1>Wealth</h1>
+        </div>
+        {data.as_of && <strong>As of {shortDate(data.as_of)}</strong>}
+      </section>
+
+      <section className="wealth-access-hero">
+        <div className="wealth-access-total">
+          <span>Accessible wealth</span>
+          <strong>{currencyExact(data.accessible.total)}</strong>
+          <p>Cash and investments you confirmed are currently available to use or sell.</p>
+        </div>
+        <div className="wealth-access-breakdown">
+          <MetricCard label="Cash" value={currencyExact(data.accessible.cash)} tone="green" />
+          <MetricCard
+            label="Sellable investments"
+            value={currencyExact(data.accessible.sellable_investments)}
+            tone="ink"
+          />
+          <MetricCard
+            label="Tracked, not accessible"
+            value={currencyExact(data.excluded.total)}
+            note="Retirement + restricted equity"
+          />
+        </div>
+      </section>
+
+      {data.paycheck && (
+        <section className="panel wealth-paycheck-panel">
+          <header className="compact-heading">
+            <div>
+              <h2>What one paycheck can build</h2>
+              <span>Before ordinary spending</span>
+            </div>
+            <strong>{currencyExact(data.paycheck.accessible_value_before_spending)} accessible</strong>
+          </header>
+          <div className="wealth-paycheck-grid">
+            <MetricCard label="Spendable cash" value={currencyExact(data.paycheck.spendable_cash)} />
+            <MetricCard label="Sellable stock funding" value={currencyExact(data.paycheck.accessible_stock_funding)} />
+            <MetricCard label="Locked funding" value={currencyExact(data.paycheck.locked_account_funding)} note="401(k), HSA + employer" />
+            <MetricCard label="Total paycheck value" value={currencyExact(data.paycheck.total_paycheck_value)} tone="green" />
+          </div>
+        </section>
+      )}
+
+      <section className="panel fidelity-performance-panel">
+        <header className="fidelity-performance-heading">
+          <div>
+            <span className="eyebrow">All Fidelity accounts</span>
+            <h2>{currencyExact(data.fidelity.current_value)}</h2>
+            <p>Performance includes every Fidelity account; accessibility only affects the wealth headline.</p>
+          </div>
+          <div className="performance-funding-summary">
+            <span>Last 12 months payroll funding</span>
+            <strong>{currencyExact(data.fidelity.funding.total_payroll_funding)}</strong>
+            <small>
+              {currencyExact(data.fidelity.funding.you_contributed)} you · {currencyExact(data.fidelity.funding.employer_contributed)} employer
+            </small>
+          </div>
+        </header>
+
+        <div className="performance-period-tabs" role="group" aria-label="Fidelity performance period">
+          {data.fidelity.performance_periods.map((period) => (
+            <button
+              className={period.key === selectedPeriod?.key ? "active" : ""}
+              key={period.key}
+              onClick={() => setPeriodKey(period.key)}
+            >
+              {period.label}
+            </button>
+          ))}
+        </div>
+
+        {selectedPeriod && (
+          <div className={`performance-result performance-${selectedPeriod.status}`}>
+            <div className="performance-result-primary">
+              <span>{selectedPeriod.status === "available" ? "Investment result" : "Performance status"}</span>
+              <strong>
+                {selectedPeriod.status === "available"
+                  ? signedCurrencyExact(selectedPeriod.investment_result)
+                  : "Tracking"}
+              </strong>
+              <small>
+                {selectedPeriod.status === "available" && selectedPeriod.return_pct
+                  ? `${Number(selectedPeriod.return_pct).toFixed(2)}% after contributions`
+                  : selectedPeriod.message}
+              </small>
+            </div>
+            <div className="performance-equation">
+              <div><span>Opening</span><strong>{currencyExact(selectedPeriod.opening_value)}</strong></div>
+              <b>+</b>
+              <div><span>Deposits</span><strong>{currencyExact(selectedPeriod.deposits)}</strong></div>
+              <b>−</b>
+              <div><span>Withdrawals</span><strong>{currencyExact(selectedPeriod.withdrawals)}</strong></div>
+              <b>+</b>
+              <div><span>Market result</span><strong>{selectedPeriod.investment_result ? signedCurrencyExact(selectedPeriod.investment_result) : "Tracking"}</strong></div>
+              <b>=</b>
+              <div><span>Current</span><strong>{currencyExact(selectedPeriod.closing_value)}</strong></div>
+            </div>
+          </div>
+        )}
+
+        <div className="fidelity-observation-grid">
+          <div className="recent-observation-card">
+            <span className="eyebrow">Latest observed movement</span>
+            {observation ? (
+              <>
+                <strong>{signedCurrencyExact(observation.change)}</strong>
+                <small>
+                  {Number(observation.change_pct ?? 0).toFixed(2)}% · {shortDate(observation.period_start)}–{shortDate(observation.period_end)}
+                </small>
+                <p>{observation.message}</p>
+              </>
+            ) : (
+              <p>A second synchronized value is needed.</p>
+            )}
+          </div>
+          <div className="fidelity-history-card">
+            <span className="eyebrow">Observed Fidelity value</span>
+            <div className="wealth-history-chart" aria-label="Observed Fidelity value history">
+              {data.fidelity.history.map((point) => {
+                const height = 22 + ((Number(point.value ?? 0) - historyMin) / historyRange) * 78;
+                return (
+                  <div key={point.date}>
+                    <i style={{ height: `${height}%` }} />
+                    <small>{shortDate(point.date)}</small>
+                  </div>
+                );
+              })}
+            </div>
+            <p>Balance movement is shown immediately. Contribution-adjusted performance unlocks only after a clean interval.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel compact-panel">
+        <header className="compact-heading">
+          <div>
+            <h2>Fidelity accounts</h2>
+            <span>Accessible, retirement and restricted accounts stay distinct</span>
+          </div>
+          <strong>{visibleFidelityAccounts.length} funded</strong>
+        </header>
+        <div className="wealth-account-list">
+          {visibleFidelityAccounts.map((account) => (
+            <div className="wealth-account-row" key={account.id}>
+              <span className={`wealth-access-dot access-${account.access_status}`} />
+              <span className="wealth-account-name">
+                <strong>{account.name}</strong>
+                <small>{roleLabel(account.type)} · {account.access_reason}</small>
+              </span>
+              <span className={`wealth-access-badge access-${account.access_status}`}>
+                {account.access_status === "accessible" ? "Accessible" : account.access_status === "restricted" ? "Restricted" : account.access_status === "retirement" ? "Retirement" : roleLabel(account.access_status)}
+              </span>
+              <span className="wealth-account-movement">
+                <small>After contributions</small>
+                <strong>
+                  {account.performance_status === "available"
+                    ? signedCurrencyExact(account.investment_result)
+                    : "Tracking"}
+                </strong>
+                <em>Recent {signedCurrencyExact(account.recent_change)}</em>
+              </span>
+              <strong className="wealth-account-value">{currencyExact(account.current_value)}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="wealth-method-note">
+        <strong>No performance score yet—and no home value.</strong>
+        <p>
+          Money Map removes deposits and withdrawals before calculating investment gain or loss.
+          Short observations stay factual rather than being annualized into a misleading rate.
+        </p>
+      </section>
+    </div>
+  );
+}
+
 export function ForecastChart({ periods }: { periods: ForecastPeriod[] }) {
-  const max = Math.max(...periods.map((period) => Number(period.ending_cash ?? 0)), 1);
+  const max = Math.max(...periods.map((period) => Math.abs(Number(period.ending_cash ?? 0))), 1);
   return (
     <div className="forecast-chart" aria-label="Projected ending cash by month">
       {periods.map((period) => (
         <div className="forecast-column" key={period.month}>
-          <span style={{ height: `${Math.max(2, (Number(period.ending_cash ?? 0) / max) * 100)}%` }} />
+          <span
+            className={Number(period.ending_cash ?? 0) < 0 ? "negative" : undefined}
+            style={{ height: `${Math.max(2, (Math.abs(Number(period.ending_cash ?? 0)) / max) * 100)}%` }}
+          />
           <small>{monthLabel(period.month).split(" ")[0]}</small>
         </div>
       ))}
@@ -1320,6 +1715,8 @@ export function ForecastView({
         (warning): warning is string => typeof warning === "string",
       )
     : [];
+  const observedOutflow = String(baseline?.inputs.monthly_outflow_effective ?? "0");
+  const checkingSplit = Number(baseline?.inputs.checking_split_pct_effective ?? 100);
   return (
     <div className="view-stack account-first-view">
       <section className="simple-page-heading">
@@ -1329,9 +1726,13 @@ export function ForecastView({
       {baseline && (
         <section className="panel forecast-summary">
           <div>
-            <span className="eyebrow">Current setup</span>
+            <span className="eyebrow">Current observed setup</span>
             <h2>{currency(baseline.periods.at(-1)?.ending_cash)} projected cash</h2>
             <p>{currency(baseline.periods.reduce((sum, row) => sum + Number(row.employee_retirement ?? 0), 0).toString())} employee retirement contributions</p>
+            <dl className="forecast-evidence">
+              <div><dt>Monthly outflow</dt><dd>{currency(observedOutflow)}</dd></div>
+              <div><dt>Net deposit split</dt><dd>{checkingSplit.toFixed(2)}% checking · {(100 - checkingSplit).toFixed(2)}% savings</dd></div>
+            </dl>
           </div>
           <ForecastChart periods={baseline.periods} />
         </section>
@@ -1357,9 +1758,9 @@ export function ForecastView({
             <label>Additional stock plan %<input name="stock_plan_pct" type="number" min="0" max="100" step="0.1" defaultValue="0" /></label>
           </div>
           <label>HSA each paycheck<input name="hsa_per_paycheck" type="number" min="0" step="0.01" placeholder="Use current" /></label>
-          <label>Checking share of net SoFi deposit %<input name="checking_split_pct" type="number" min="0" max="100" step="1" defaultValue="100" /></label>
+          <label>Checking share of net SoFi deposit %<input name="checking_split_pct" type="number" min="0" max="100" step="0.01" placeholder={`Use observed ${checkingSplit.toFixed(2)}%`} /></label>
           <div className="field-row">
-            <label>Monthly aggregate outflow<input name="monthly_outflow" type="number" min="0" step="0.01" placeholder="Use history" /></label>
+            <label>Monthly aggregate outflow<input name="monthly_outflow" type="number" min="0" step="0.01" placeholder={`Use observed ${currency(observedOutflow)}`} /></label>
             <label>Minimum cash floor<input name="cash_floor" type="number" min="0" step="0.01" defaultValue="0" /></label>
           </div>
           <label className="check-label"><input name="redirect_cash_above_floor" type="checkbox" value="true" /> Redirect projected cash above the floor to investments</label>

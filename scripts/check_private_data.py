@@ -24,7 +24,9 @@ TEXT_EXTENSIONS = {
     ".yaml",
 }
 SUSPICIOUS_PATTERNS = {
-    "nine-digit identifier": re.compile(r"(?<!\d)\d{9}(?!\d)"),
+    # Require non-alphanumeric boundaries so digits embedded in a public SHA-256
+    # provenance hash are not mistaken for a standalone identifier.
+    "nine-digit identifier": re.compile(r"(?<![A-Za-z0-9])\d{9}(?![A-Za-z0-9])"),
     "unmasked account label": re.compile(
         r"(?i)\b(?:account|person|payroll relationship)\s*(?:number|#|no\.?)?\s*[:=-]?\s*\d{6,}"
     ),

@@ -135,7 +135,7 @@ th:first-child,td:first-child{{text-align:left}}
 <h2>12-month plan</h2>
 {forecast_table(baseline)}
 {forecast_table(alternative)}
-<p class="source">Statement values remain immutable. Calculated payroll allocations and reconstructed balances use versioned deterministic arithmetic. Investment result appears only for a period with two dated value observations. Assumed forecast returns are separate from contributions.</p>
+<p class="source">Statement values remain immutable. Calculated payroll allocations and reconstructed balances use versioned deterministic arithmetic. Investment result appears only for a sufficiently long period with unambiguous boundary activity. Assumed forecast returns are separate from contributions.</p>
 </body></html>"""
     runtime_settings.reports_dir.mkdir(parents=True, exist_ok=True)
     output = runtime_settings.reports_dir / "trailing-12-month-money-map.html"
