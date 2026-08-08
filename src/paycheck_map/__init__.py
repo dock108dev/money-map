@@ -1,3 +1,3 @@
 """Paycheck Map local application."""
 
-__version__ = "1.0.2"
+__version__ = "1.2.1"

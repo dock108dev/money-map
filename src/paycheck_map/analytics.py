@@ -23,6 +23,7 @@ from .models import (
     TransferMatch,
 )
 from .money import ZERO, money
+from .reconciliation import investment_performance_available
 
 REPORTING_NET_DESTINATIONS = {
     "1206": ("net.1206", "SoFi Checking"),
@@ -257,6 +258,7 @@ def period_investments(session: Session, start_date: date, end_date: date) -> di
             )
         )
     )
+    available_bridges = [bridge for bridge in bridges if investment_performance_available(bridge)]
     payroll_destinations = {
         category: money(total)
         for category, total in session.execute(
@@ -296,14 +298,16 @@ def period_investments(session: Session, start_date: date, end_date: date) -> di
         "employee_contributions": serialized(employee),
         "employer_contributions": serialized(employer),
         "stock_plan_contributions": serialized(stock),
+        "employee_fidelity_contributions": serialized(employee + stock),
+        "total_payroll_fidelity_contributions": serialized(employee + employer + stock),
         "other_contributions": serialized(other),
         "withdrawals": serialized(withdrawals),
         "investment_result": (
-            serialized(sum((bridge.investment_result for bridge in bridges), ZERO))
-            if bridges
+            serialized(sum((bridge.investment_result for bridge in available_bridges), ZERO))
+            if available_bridges
             else None
         ),
-        "bridge_count": len(bridges),
+        "bridge_count": len(available_bridges),
     }
 
 
@@ -457,14 +461,33 @@ def account_detail(
                 "stock_plan_contributions": serialized(bridge.stock_plan_contributions),
                 "other_deposits": serialized(bridge.other_deposits),
                 "withdrawals": serialized(bridge.withdrawals),
-                "investment_result": serialized(bridge.investment_result),
+                "investment_result": (
+                    serialized(bridge.investment_result)
+                    if investment_performance_available(bridge)
+                    else None
+                ),
                 "closing_value": serialized(bridge.closing_value),
                 "calculated_return_pct": serialized(bridge.calculated_return_pct),
                 "return_method": bridge.return_method,
+                "performance_status": (
+                    "available" if investment_performance_available(bridge) else "tracking"
+                ),
+                "performance_message": (
+                    "This interval is long enough and has unambiguous boundary activity."
+                    if investment_performance_available(bridge)
+                    else (
+                        "Performance is tracking until a longer interval without "
+                        "boundary-day cash activity is available."
+                    )
+                ),
             }
             for bridge in bridges
         ],
-        "performance_status": "available" if bridges else "tracking",
+        "performance_status": (
+            "available"
+            if any(investment_performance_available(bridge) for bridge in bridges)
+            else "tracking"
+        ),
     }
 
 
@@ -537,8 +560,13 @@ def monthly_timeline(session: Session, start_date: date, end_date: date) -> list
             for transaction in month_transactions
             if institutions[accounts[transaction.account_id].institution_id].kind == "investment"
         ]
+        month_bridges = [
+            bridge
+            for bridge in bridges
+            if month <= bridge.period_end <= end and investment_performance_available(bridge)
+        ]
         investment_result = sum(
-            (bridge.investment_result for bridge in bridges if month <= bridge.period_end <= end),
+            (bridge.investment_result for bridge in month_bridges),
             ZERO,
         )
         section_totals = {
@@ -613,7 +641,7 @@ def monthly_timeline(session: Session, start_date: date, end_date: date) -> list
                         ZERO,
                     )
                 ),
-                "investment_result": serialized(investment_result) if investment_result else None,
+                "investment_result": (serialized(investment_result) if month_bridges else None),
                 "status": "attention" if actionable else "complete",
             }
         )

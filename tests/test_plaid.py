@@ -668,10 +668,19 @@ def test_global_refresh_isolates_connection_failure_and_preserves_previous_data(
     del fidelity_client
     transaction_count = session.scalar(select(func.count(AccountTransaction.id)))
     snapshot_count = session.scalar(select(func.count(BalanceSnapshot.id))) or 0
+    sofi = session.get(PlaidConnection, sofi_id)
+    assert sofi is not None
+    assert sofi.last_synced_at is not None
+    latest_sync = sofi.last_synced_at
+    latest_sync_utc = (
+        latest_sync.replace(tzinfo=UTC)
+        if latest_sync.tzinfo is None
+        else latest_sync.astimezone(UTC)
+    )
     result = sync_all_connections(
         session,
         store=store,
-        now=datetime(2026, 8, 3, 14, tzinfo=UTC),
+        now=latest_sync_utc + timedelta(days=1),
         clients={sofi_id: sofi_client, fidelity_id: FailingFidelityPlaidClient()},
     )
     assert result["status"] == "partial"

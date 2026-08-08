@@ -1,7 +1,8 @@
 # Money Map
 
 Money Map is a local-first, read-only application for reconstructing where gross
-compensation went and exploring the mechanical effect of future allocation changes.
+compensation went, exploring future allocation changes, and testing what a particular
+life would require from the money already tracked.
 It does not move money, store bank passwords, categorize purchases, or provide
 financial advice. SoFi and Fidelity can be connected through optional Plaid
 read-only access or imported manually.
@@ -109,8 +110,47 @@ from any investment account's detail view.
 - **Accounts:** any connected bank, loan, or investment account with generic drill-down
 - **Income:** all 42 completed paychecks from 2025-01-01 through 2026-07-29
 - **Activity:** account flows without merchant spending categories
-- **Plan:** no-change and user-defined 12-month scenarios
+- **Wealth:** accessible money, retirement/restricted balances, and investment performance
+- **Plan:** Life Lab work-optional ages, deterministic stress paths, generic dated goals,
+  reverse-engineered drive paths, public state-income context, and reproducible snapshots
 - **Add account:** generic Plaid Link, local imports, and local report generation
+
+## Life Lab
+
+Open **Plan** and enter only the assumptions Money Map cannot observe: date of birth,
+state, essential and flexible monthly life, a protected cash floor, a visible pretax
+withdrawal haircut, and any work-optional ages you want to test. Ages are ordinary
+inputs rather than named templates.
+
+Life Lab runs three deterministic, today-dollar paths: middle, rough, and an early
+crash at work stop. It distinguishes confirmed accessible money from pretax retirement,
+HSA, and restricted assets; pretax retirement is unavailable for ordinary withdrawals
+before age 59½. A bridge failure therefore stays visible instead of being hidden by
+total net worth. The app does not assume a 401(k) loan, an early-withdrawal exception,
+or a probability of success.
+
+For every age and market path, Life Lab solves backward for both the minimum additional
+after-tax monthly income that repairs the full path and the additional accessible capital
+needed at the selected work-optional date. An earlier cash-flow hole stays visible as a
+separate prerequisite; it does not hijack the retirement deadline. The Drive Calculator
+uses one editable target and deadline across four inspectable routes: linear earnings, a
+seed-and-weekly-compounding sprint, an ownership/tax/multiple business exit, and a
+conservative 401(k)-loan ceiling. These are arithmetic requirements, not predictions of
+repeatable returns, an investor, an exit, plan loan eligibility, or personal suitability.
+
+Dated goals use generic amount, date, priority, reserved amount, and optional continuing
+annual cost fields. Saved scenarios retain their inputs, engine/assumption/benchmark
+versions, fingerprint, warnings, summary, and monthly projection rows; they are marked
+stale when current inputs move.
+
+The income ladder uses a checked-in public artifact derived from IRS state AGI
+percentile thresholds and BLS CPI-U. Salary and AGI are different concepts, so the
+ladder is labeled as context rather than a lifestyle recommendation. Building the
+artifact requires network access, but running Life Lab does not:
+
+```bash
+uv run python scripts/build_income_benchmarks.py
+```
 
 ## Supported sources
 

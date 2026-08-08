@@ -8,11 +8,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from paycheck_map.config import Settings
-from paycheck_map.forecasting import ScenarioInput, build_forecast
+from paycheck_map.forecasting import ScenarioInput, build_forecast, ensure_baseline
 from paycheck_map.ingestion import import_private_inbox, rollback_import_batch
 from paycheck_map.models import (
     Account,
     AccountBalancePoint,
+    AccountTransaction,
     ForecastScenario,
     ImportArtifact,
     InvestmentValueBridge,
@@ -22,7 +23,13 @@ from paycheck_map.models import (
     TransferMatch,
 )
 from paycheck_map.reporting import generate_trailing_report
-from paycheck_map.services import account_detail, accounts_dashboard, exceptions, overview, timeline
+from paycheck_map.services import (
+    account_detail,
+    accounts_dashboard,
+    exceptions,
+    overview,
+    timeline,
+)
 
 
 def test_import_reconcile_forecast_report_and_rollback(
@@ -81,8 +88,23 @@ def test_import_reconcile_forecast_report_and_rollback(
     assert summary["annual_snapshots"][0]["stock_offset"] == "5206.40"
     assert summary["recurring_paycheck"]["net_payment"] == "3765.83"
     assert summary["recurring_paycheck"]["employee_retirement"] == "438.46"
+    assert summary["recurring_paycheck"]["employee_hsa"] == "34.61"
     assert summary["recurring_paycheck"]["employer_retirement"] == "255.77"
+    assert summary["recurring_paycheck"]["employer_hsa"] == "19.23"
+    assert summary["recurring_paycheck"]["employee_fidelity_funding"] == "1169.23"
+    assert summary["recurring_paycheck"]["employee_account_funding"] == "1203.84"
+    assert summary["recurring_paycheck"]["employer_account_funding"] == "275.00"
+    assert summary["recurring_paycheck"]["all_account_value"] == "5244.67"
     assert len(summary["recurring_paycheck"]["deposit_splits"]) == 2
+    assert Decimal(summary["investments"]["employee_fidelity_contributions"]) == (
+        Decimal(summary["investments"]["employee_contributions"])
+        + Decimal(summary["investments"]["stock_plan_contributions"])
+    )
+    assert Decimal(summary["investments"]["total_payroll_fidelity_contributions"]) == (
+        Decimal(summary["investments"]["employee_contributions"])
+        + Decimal(summary["investments"]["employer_contributions"])
+        + Decimal(summary["investments"]["stock_plan_contributions"])
+    )
     assert not {
         "destination_detail",
         "pay_period_continuity",
@@ -123,6 +145,15 @@ def test_import_reconcile_forecast_report_and_rollback(
     assert month["investment_contributions"] == "850.00"
     assert month["investment_result"] == "150.00"
 
+    cash_accounts = list(
+        session.scalars(select(Account).where(Account.account_type.in_(["checking", "savings"])))
+    )
+    for cash_account in cash_accounts:
+        cash_account.display_name = (
+            "Checking ••1206" if cash_account.account_type == "checking" else "Savings ••0697"
+        )
+    session.commit()
+
     baseline = build_forecast(
         session,
         ScenarioInput(name="No-change baseline"),
@@ -151,6 +182,13 @@ def test_import_reconcile_forecast_report_and_rollback(
     assert scenario.inputs["assumption_warnings"]
     assert any("2027" in warning for warning in alternative.contribution_limit_warnings)
 
+    baseline_scenario = session.get(ForecastScenario, baseline.scenario_id)
+    assert baseline_scenario is not None
+    assert baseline_scenario.inputs["monthly_outflow_effective"] == "700.00"
+    assert baseline_scenario.inputs["outflow_months"] == ["2026-01"]
+    assert baseline_scenario.inputs["checking_split_pct_effective"] == "39.83"
+    assert baseline_scenario.periods[0].sofi_savings > baseline_scenario.periods[0].sofi_checking
+
     replacement = build_forecast(
         session,
         ScenarioInput(
@@ -169,6 +207,20 @@ def test_import_reconcile_forecast_report_and_rollback(
         )
         == 1
     )
+
+    original_fingerprint = baseline_scenario.inputs["baseline_fingerprint"]
+    observed_outflow = session.scalar(
+        select(AccountTransaction).where(AccountTransaction.role == "external_outflow")
+    )
+    assert observed_outflow is not None
+    observed_outflow.amount = Decimal("-800.00")
+    session.commit()
+    refreshed = ensure_baseline(session, runtime_settings, as_of=date(2026, 7, 25))
+    refreshed_scenario = session.get(ForecastScenario, refreshed.scenario_id)
+    assert refreshed_scenario is not None
+    assert refreshed_scenario.inputs["baseline_fingerprint"] != original_fingerprint
+    assert refreshed_scenario.inputs["monthly_outflow_effective"] == "800.00"
+    assert session.scalar(select(func.count(ForecastScenario.id))) == 1
 
     first_report = generate_trailing_report(session, runtime_settings).read_bytes()
     second_report = generate_trailing_report(session, runtime_settings).read_bytes()

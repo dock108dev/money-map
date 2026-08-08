@@ -8,6 +8,7 @@ import {
   IncomeView,
   OverviewView,
   ReviewView,
+  WealthView,
 } from "./components";
 import type {
   AccountDetail,
@@ -15,6 +16,7 @@ import type {
   Overview,
   PlaidStatus,
   PayrollHistory,
+  WealthDashboard,
 } from "./types";
 
 const accountDetail: AccountDetail = {
@@ -84,8 +86,14 @@ const overview: Overview = {
     gross_earnings: "7321.31",
     net_payment: "3765.83",
     employee_retirement: "438.46",
+    employee_hsa: "34.61",
     employer_retirement: "255.77",
+    employer_hsa: "19.23",
     employee_stock_purchase: "730.77",
+    employee_fidelity_funding: "1169.23",
+    employee_account_funding: "1203.84",
+    employer_account_funding: "275.00",
+    all_account_value: "5244.67",
     deposit_splits: [],
   },
   annual_snapshots: [],
@@ -116,6 +124,8 @@ const overview: Overview = {
     employee_contributions: "0.00",
     employer_contributions: "0.00",
     stock_plan_contributions: "0.00",
+    employee_fidelity_contributions: "25560.66",
+    total_payroll_fidelity_contributions: "33946.57",
     other_contributions: "0.00",
     withdrawals: "0.00",
     investment_result: "0.00",
@@ -262,6 +272,131 @@ const accounts: AccountsDashboard = {
   ],
 };
 
+const wealth: WealthDashboard = {
+  as_of: "2026-08-03",
+  accessible: {
+    total: "33014.92",
+    cash: "6761.75",
+    sellable_investments: "26253.17",
+    accounts: [],
+  },
+  excluded: {
+    total: "459830.08",
+    message: "Tracked for performance, excluded from accessible wealth.",
+  },
+  fidelity: {
+    current_value: "486083.25",
+    accounts: [
+      {
+        id: 7,
+        name: "Investment ••4251",
+        type: "401k",
+        current_value: "390408.00",
+        accessible_value: "0.00",
+        excluded_value: "390408.00",
+        access_status: "retirement",
+        access_reason: "Retirement or tax-advantaged",
+        recent_change: "3560.01",
+        performance_status: "tracking",
+        investment_result: null,
+        return_pct: null,
+        performance_message: "Collecting 7 more clean days.",
+      },
+      {
+        id: 8,
+        name: "Investment ••5908",
+        type: "stock plan",
+        current_value: "20974.40",
+        accessible_value: "20974.40",
+        excluded_value: "0.00",
+        access_status: "accessible",
+        access_reason: "Sellable stock-plan shares",
+        recent_change: "-356.66",
+        performance_status: "tracking",
+        investment_result: null,
+        return_pct: null,
+        performance_message: "Collecting 7 more clean days.",
+      },
+      {
+        id: 10,
+        name: "Investment ••9228",
+        type: "stock plan",
+        current_value: "67229.77",
+        accessible_value: "0.00",
+        excluded_value: "67229.77",
+        access_status: "restricted",
+        access_reason: "Restricted equity",
+        recent_change: "-1146.99",
+        performance_status: "tracking",
+        investment_result: null,
+        return_pct: null,
+        performance_message: "Collecting 7 more clean days.",
+      },
+    ],
+    history: [
+      { date: "2026-07-31", value: "483989.27" },
+      { date: "2026-08-03", value: "486083.25" },
+    ],
+    recent_observation: {
+      period_start: "2026-07-31",
+      period_end: "2026-08-03",
+      opening_value: "483989.27",
+      closing_value: "486083.25",
+      change: "2093.98",
+      change_pct: "0.43",
+      message: "Observed balance movement; not yet a contribution-adjusted return.",
+    },
+    performance_periods: [
+      {
+        key: "observed",
+        label: "Observed",
+        status: "tracking",
+        period_start: "2026-08-03",
+        period_end: "2026-08-03",
+        observation_days: 0,
+        required_days: 7,
+        opening_value: "486083.25",
+        deposits: "0.00",
+        withdrawals: "0.00",
+        investment_result: null,
+        return_pct: null,
+        closing_value: "486083.25",
+        message: "Collecting 7 more clean days.",
+      },
+      {
+        key: "one_month",
+        label: "1 month",
+        status: "tracking",
+        period_start: "2026-08-03",
+        period_end: "2026-08-03",
+        observation_days: 0,
+        required_days: 30,
+        opening_value: "486083.25",
+        deposits: "0.00",
+        withdrawals: "0.00",
+        investment_result: null,
+        return_pct: null,
+        closing_value: "486083.25",
+        message: "Collecting 30 more clean days.",
+      },
+    ],
+    funding: {
+      period_start: "2025-08-03",
+      period_end: "2026-08-03",
+      you_contributed: "25560.66",
+      employer_contributed: "8385.91",
+      total_payroll_funding: "33946.57",
+    },
+  },
+  paycheck: {
+    spendable_cash: "3765.83",
+    accessible_stock_funding: "730.77",
+    accessible_value_before_spending: "4496.60",
+    locked_account_funding: "748.07",
+    total_paycheck_value: "5244.67",
+  },
+};
+
 const plaid: PlaidStatus = {
   configuration: {
     sandbox: { configured: true, client_id_hint: "••••dbox" },
@@ -317,6 +452,17 @@ const payroll: PayrollHistory = {
     after_tax_deductions: "1461.54",
     federal_taxable_gross: "12739.00",
     net_payments: "7531.67",
+    employee_retirement: "876.92",
+    employee_hsa: "69.22",
+    employee_stock_purchase: "1461.54",
+    employee_account_funding: "2407.68",
+    employer_retirement: "511.54",
+    employer_hsa: "38.46",
+    employer_account_funding: "550.00",
+    employee_owned_value: "9939.35",
+    accessible_value_before_spending: "8993.21",
+    locked_account_funding: "1496.14",
+    total_paycheck_value: "10489.35",
   },
   rows: [
     {
@@ -339,6 +485,17 @@ const payroll: PayrollHistory = {
       after_tax_deductions: "730.77",
       federal_taxable_gross: "6751.31",
       net_payment: "3765.83",
+      employee_retirement: "438.46",
+      employee_hsa: "34.61",
+      employee_stock_purchase: "730.77",
+      employee_account_funding: "1203.84",
+      employer_retirement: "255.77",
+      employer_hsa: "19.23",
+      employer_account_funding: "275.00",
+      employee_owned_value: "4969.67",
+      accessible_value_before_spending: "4496.60",
+      locked_account_funding: "748.07",
+      total_paycheck_value: "5244.67",
       adjustments: {},
       has_adjustments: false,
       deposit_splits: [
@@ -376,6 +533,17 @@ const payroll: PayrollHistory = {
       after_tax_deductions: "730.77",
       federal_taxable_gross: "5987.69",
       net_payment: "3765.84",
+      employee_retirement: "438.46",
+      employee_hsa: "34.61",
+      employee_stock_purchase: "730.77",
+      employee_account_funding: "1203.84",
+      employer_retirement: "255.77",
+      employer_hsa: "19.23",
+      employer_account_funding: "275.00",
+      employee_owned_value: "4969.68",
+      accessible_value_before_spending: "4496.61",
+      locked_account_funding: "748.07",
+      total_paycheck_value: "5244.68",
       adjustments: { tax: "-0.01", net_payment: "0.01" },
       has_adjustments: true,
       deposit_splits: [
@@ -394,6 +562,17 @@ const payroll: PayrollHistory = {
 };
 
 describe("account-first views", () => {
+  it("separates accessible wealth from contribution-adjusted Fidelity tracking", () => {
+    render(<WealthView data={wealth} />);
+    expect(screen.getByText("$33,014.92")).toBeInTheDocument();
+    expect(screen.getAllByText("$486,083.25")).toHaveLength(3);
+    expect(screen.getByText("+$2,093.98")).toBeInTheDocument();
+    expect(screen.getByText("Collecting 7 more clean days.")).toBeInTheDocument();
+    expect(screen.getByText("Restricted")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "1 month" }));
+    expect(screen.getByText("Collecting 30 more clean days.")).toBeInTheDocument();
+  });
+
   it("shows the full financial position and quiet paycheck baseline", () => {
     render(
       <OverviewView
@@ -410,6 +589,12 @@ describe("account-first views", () => {
     expect(screen.getByText("$481,235")).toBeInTheDocument();
     expect(screen.getByText("$497,526")).toBeInTheDocument();
     expect(screen.getByText("$3,765.83")).toBeInTheDocument();
+    expect(screen.getByText("$5,244.67")).toBeInTheDocument();
+    expect(screen.getByText(/\$5,244.67 to your accounts/)).toBeInTheDocument();
+    expect(screen.getByText("Fidelity funded by you")).toBeInTheDocument();
+    expect(screen.getByText("$25,560.66")).toBeInTheDocument();
+    expect(screen.getByText("$385,970.26 now")).toBeInTheDocument();
+    expect(screen.getByText("Tracking")).toBeInTheDocument();
     expect(screen.queryByText(/unresolved/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/second dated/i)).not.toBeInTheDocument();
   });
@@ -475,8 +660,12 @@ describe("account-first views", () => {
   });
 
   it("shows only actionable review issues", () => {
+    const onUpdateData = vi.fn();
+    const onOpenAccounts = vi.fn();
     render(
       <ReviewView
+        onUpdateData={onUpdateData}
+        onOpenAccounts={onOpenAccounts}
         issues={[
           {
             id: 1,
@@ -485,13 +674,28 @@ describe("account-first views", () => {
             rule: "account_balance",
             status: "unreconciled",
             residual: "2.00",
-            details: { message: "Account balance does not match its activity." },
+            details: {
+              account_name: "Personal loan",
+              message: "Account balance does not match its activity.",
+              opening_balance: "1000.00",
+              accounted_activity: "0.00",
+              expected_closing_balance: "1000.00",
+              closing_balance: "1002.00",
+              likely_cause: "interest_or_balance_adjustment",
+              next_steps: ["Update the connection.", "Compare the statement."],
+            },
           },
         ]}
       />,
     );
     expect(screen.getByText("account balance")).toBeInTheDocument();
     expect(screen.getByText("Account balance does not match its activity.")).toBeInTheDocument();
+    expect(screen.getByText("Personal loan")).toBeInTheDocument();
+    expect(screen.getByText("Compare the statement.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open accounts" }));
+    expect(onUpdateData).toHaveBeenCalledOnce();
+    expect(onOpenAccounts).toHaveBeenCalledOnce();
   });
 
   it("adds generic account types and lists the actual institution", () => {

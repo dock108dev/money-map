@@ -28,8 +28,14 @@ export interface Overview {
     gross_earnings: Money;
     net_payment: Money;
     employee_retirement: Money;
+    employee_hsa: Money;
     employer_retirement: Money;
+    employer_hsa: Money;
     employee_stock_purchase: Money;
+    employee_fidelity_funding: Money;
+    employee_account_funding: Money;
+    employer_account_funding: Money;
+    all_account_value: Money;
     deposit_splits: Array<{ label: string; amount: Money }>;
   } | null;
   annual_snapshots: Array<{
@@ -81,6 +87,8 @@ export interface Overview {
     employee_contributions: Money;
     employer_contributions: Money;
     stock_plan_contributions: Money;
+    employee_fidelity_contributions: Money;
+    total_payroll_fidelity_contributions: Money;
     other_contributions: Money;
     withdrawals: Money;
     investment_result: Money;
@@ -152,6 +160,17 @@ export interface PayrollEntry {
   after_tax_deductions: Money;
   federal_taxable_gross: Money;
   net_payment: Money;
+  employee_retirement: Money;
+  employee_hsa: Money;
+  employee_stock_purchase: Money;
+  employee_account_funding: Money;
+  employer_retirement: Money;
+  employer_hsa: Money;
+  employer_account_funding: Money;
+  employee_owned_value: Money;
+  accessible_value_before_spending: Money;
+  locked_account_funding: Money;
+  total_paycheck_value: Money;
   adjustments: Record<string, Money>;
   has_adjustments: boolean;
   deposit_splits: Array<{
@@ -196,6 +215,17 @@ export interface PayrollHistory {
     after_tax_deductions: Money;
     federal_taxable_gross: Money;
     net_payments: Money;
+    employee_retirement: Money;
+    employee_hsa: Money;
+    employee_stock_purchase: Money;
+    employee_account_funding: Money;
+    employer_retirement: Money;
+    employer_hsa: Money;
+    employer_account_funding: Money;
+    employee_owned_value: Money;
+    accessible_value_before_spending: Money;
+    locked_account_funding: Money;
+    total_paycheck_value: Money;
   };
   rows: PayrollEntry[];
 }
@@ -458,6 +488,84 @@ export interface AccountsDashboard {
   activity: AccountActivity[];
 }
 
+export interface WealthPerformancePeriod {
+  key: "observed" | "one_month" | "three_months" | "year_to_date" | "one_year";
+  label: string;
+  status: "available" | "tracking";
+  period_start: string;
+  period_end: string;
+  observation_days: number;
+  required_days: number;
+  opening_value: Money;
+  deposits: Money;
+  withdrawals: Money;
+  investment_result: Money;
+  return_pct: Money;
+  closing_value: Money;
+  message: string;
+}
+
+export interface WealthDashboard {
+  as_of: string | null;
+  accessible: {
+    total: Money;
+    cash: Money;
+    sellable_investments: Money;
+    accounts: Array<{
+      id: number;
+      name: string;
+      type: string;
+      value: Money;
+      access_status: string;
+      access_reason: string;
+    }>;
+  };
+  excluded: { total: Money; message: string };
+  fidelity: {
+    current_value: Money;
+    accounts: Array<{
+      id: number;
+      name: string;
+      type: string;
+      current_value: Money;
+      accessible_value: Money;
+      excluded_value: Money;
+      access_status: string;
+      access_reason: string;
+      recent_change: Money;
+      performance_status: "available" | "tracking";
+      investment_result: Money;
+      return_pct: Money;
+      performance_message: string;
+    }>;
+    history: Array<{ date: string; value: Money }>;
+    recent_observation: {
+      period_start: string;
+      period_end: string;
+      opening_value: Money;
+      closing_value: Money;
+      change: Money;
+      change_pct: Money;
+      message: string;
+    } | null;
+    performance_periods: WealthPerformancePeriod[];
+    funding: {
+      period_start: string;
+      period_end: string;
+      you_contributed: Money;
+      employer_contributed: Money;
+      total_payroll_funding: Money;
+    };
+  };
+  paycheck: {
+    spendable_cash: Money;
+    accessible_stock_funding: Money;
+    accessible_value_before_spending: Money;
+    locked_account_funding: Money;
+    total_paycheck_value: Money;
+  } | null;
+}
+
 export interface DashboardData {
   overview: Overview;
   accounts: AccountsDashboard;
@@ -470,4 +578,5 @@ export interface DashboardData {
   fidelity: FidelitySummary;
   plaid: PlaidStatus;
   payroll: PayrollHistory;
+  wealth: WealthDashboard;
 }

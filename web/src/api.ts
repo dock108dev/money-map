@@ -1,6 +1,6 @@
 import type { AccountDetail, DashboardData, PlaidRefreshResult, PlaidStatus } from "./types";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     ...init,
@@ -13,9 +13,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
-  const [overview, accounts, issues, plaid, payroll, timeline, scenarios, imports] = await Promise.all([
+  const [overview, accounts, wealth, issues, plaid, payroll, timeline, scenarios, imports] = await Promise.all([
       request<DashboardData["overview"]>("/api/overview"),
       request<DashboardData["accounts"]>("/api/accounts"),
+      request<DashboardData["wealth"]>("/api/wealth"),
       request<DashboardData["issues"]>("/api/exceptions"),
       request<DashboardData["plaid"]>("/api/plaid/status"),
       request<DashboardData["payroll"]>("/api/payroll"),
@@ -26,6 +27,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   return {
     overview,
     accounts,
+    wealth,
     issues,
     plaid,
     payroll,
