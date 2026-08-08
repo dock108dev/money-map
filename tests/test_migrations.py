@@ -30,6 +30,10 @@ def test_initial_migration_upgrades_and_downgrades(tmp_path: Path) -> None:
         "payroll_allocations",
         "account_balance_points",
         "application_settings",
+        "life_plan_profiles",
+        "life_goals",
+        "life_scenarios",
+        "life_projection_periods",
     } <= names
     payroll_columns = {
         column["name"] for column in inspect(engine).get_columns("payroll_statements")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
 from collections import defaultdict
 from datetime import date, timedelta
@@ -8,7 +9,7 @@ from decimal import Decimal
 from typing import cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .config import Settings, settings
@@ -17,7 +18,6 @@ from .models import (
     AccountBalancePoint,
     AccountTransaction,
     BalanceSnapshot,
-    ExternalFlow,
     ForecastPeriod,
     ForecastScenario,
     Institution,
@@ -26,7 +26,7 @@ from .models import (
 )
 from .money import ZERO, money
 
-FORECAST_VERSION = "money-map-v1.0.0"
+FORECAST_VERSION = "money-map-v1.0.5"
 
 
 class ScenarioInput(BaseModel):
@@ -36,7 +36,7 @@ class ScenarioInput(BaseModel):
     additional_401k_pct: Decimal = Field(default=ZERO, ge=0, le=100)
     stock_plan_pct: Decimal = Field(default=ZERO, ge=0, le=100)
     hsa_per_paycheck: Decimal | None = Field(default=None, ge=0)
-    checking_split_pct: Decimal = Field(default=Decimal("100"), ge=0, le=100)
+    checking_split_pct: Decimal | None = Field(default=None, ge=0, le=100)
     monthly_outflow: Decimal | None = Field(default=None, ge=0)
     cash_floor: Decimal = Field(default=ZERO, ge=0)
     redirect_cash_above_floor: bool = False
@@ -139,67 +139,210 @@ def _latest_investment_balance(session: Session) -> Decimal:
 
 
 def _observed_monthly_outflow(session: Session, as_of: date) -> tuple[Decimal, list[str]]:
-    flows = list(
+    cash_accounts = list(
         session.scalars(
-            select(ExternalFlow).where(
-                ExternalFlow.amount < 0,
-                ExternalFlow.role.in_(["external_outflow", "fee"]),
+            select(Account)
+            .join(Institution)
+            .where(
+                Institution.kind == "bank",
+                Account.account_type.in_(["checking", "savings"]),
             )
         )
     )
-    if not flows:
+    if not cash_accounts:
         return ZERO, []
-    explicit_complete: set[tuple[int, int]] = set()
-    bank_accounts = list(
-        session.scalars(select(Account).join(Institution).where(Institution.kind == "bank"))
-    )
-    for account in bank_accounts:
+    complete_by_account: list[set[tuple[int, int]]] = []
+    for account in cash_accounts:
         snapshots = list(
             session.scalars(select(BalanceSnapshot).where(BalanceSnapshot.account_id == account.id))
         )
-        openings = {
+        snapshot_openings = {
             (row.snapshot_date.year, row.snapshot_date.month)
             for row in snapshots
             if row.kind == "opening" and row.snapshot_date.day == 1
         }
-        closings = {
+        snapshot_closings = {
             (row.snapshot_date.year, row.snapshot_date.month)
             for row in snapshots
-            if row.kind == "closing"
+            if row.kind in {"closing", "current"}
             and row.snapshot_date.day
             == calendar.monthrange(row.snapshot_date.year, row.snapshot_date.month)[1]
         }
-        explicit_complete.update(openings & closings)
         points = list(
             session.scalars(
                 select(AccountBalancePoint).where(AccountBalancePoint.account_id == account.id)
             )
         )
-        point_openings = {
+        openings = {
             (row.balance_date.year, row.balance_date.month)
             for row in points
             if row.kind == "month_open"
         }
-        point_closings = {
+        closings = {
             (row.balance_date.year, row.balance_date.month)
             for row in points
             if row.kind == "month_close"
+            or (
+                row.source_kind == "observed"
+                and row.balance_date.day
+                == calendar.monthrange(row.balance_date.year, row.balance_date.month)[1]
+            )
         }
-        explicit_complete.update(point_openings & point_closings)
+        complete_by_account.append((snapshot_openings & snapshot_closings) | (openings & closings))
+    complete_months = set.intersection(*complete_by_account) if complete_by_account else set()
     current_month = (as_of.year, as_of.month)
-    explicit_complete.discard(current_month)
+    complete_months.discard(current_month)
     by_month: dict[tuple[int, int], Decimal] = defaultdict(lambda: ZERO)
-    for flow in flows:
-        posted = session.get(AccountTransaction, flow.transaction_id)
-        if posted is None:
-            continue
-        key = (posted.posted_date.year, posted.posted_date.month)
-        if key in explicit_complete:
-            by_month[key] += abs(flow.amount)
+    account_ids = [account.id for account in cash_accounts]
+    transactions = list(
+        session.scalars(
+            select(AccountTransaction).where(
+                AccountTransaction.account_id.in_(account_ids),
+                AccountTransaction.amount < ZERO,
+                AccountTransaction.role.in_(["external_outflow", "fee"]),
+            )
+        )
+    )
+    for transaction in transactions:
+        key = (transaction.posted_date.year, transaction.posted_date.month)
+        if key in complete_months:
+            by_month[key] += abs(transaction.amount)
     if not by_month:
         return ZERO, []
     labels = [f"{year:04d}-{month:02d}" for year, month in sorted(by_month)]
     return money(sum(by_month.values(), ZERO) / len(by_month)), labels
+
+
+def _observed_checking_split(session: Session, latest: PayrollStatement) -> tuple[Decimal, str]:
+    distributions = list(
+        session.scalars(
+            select(PayrollLineItem).where(
+                PayrollLineItem.statement_id == latest.id,
+                PayrollLineItem.category.like("net_distribution.%"),
+            )
+        )
+    )
+    total = money(sum((line.amount for line in distributions), ZERO))
+    if total <= ZERO:
+        return Decimal("100"), "fallback because payroll has no net distribution detail"
+    checking_accounts = list(
+        session.scalars(
+            select(Account)
+            .join(Institution)
+            .where(
+                Institution.kind == "bank",
+                Account.account_type == "checking",
+            )
+        )
+    )
+    checking_markers = {
+        marker
+        for account in checking_accounts
+        for marker in [
+            "".join(character for character in account.display_name if character.isdigit())[-4:]
+        ]
+        if marker
+    }
+    checking = money(
+        sum(
+            (
+                line.amount
+                for line in distributions
+                if "checking" in line.original_label.lower()
+                or any(marker in line.original_label for marker in checking_markers)
+            ),
+            ZERO,
+        )
+    )
+    if checking <= ZERO:
+        return Decimal("100"), "fallback because the checking destination could not be matched"
+    return money(checking / total * Decimal("100")), "latest detailed payroll distribution"
+
+
+def _baseline_fingerprint(session: Session, as_of: date) -> str:
+    latest = session.scalar(
+        select(PayrollStatement).order_by(PayrollStatement.payment_date.desc()).limit(1)
+    )
+    cash_accounts = list(
+        session.scalars(
+            select(Account)
+            .join(Institution)
+            .where(
+                Institution.kind == "bank",
+                Account.account_type.in_(["checking", "savings"]),
+            )
+            .order_by(Account.id)
+        )
+    )
+    account_ids = [account.id for account in cash_accounts]
+    snapshots = (
+        list(
+            session.scalars(
+                select(BalanceSnapshot)
+                .where(BalanceSnapshot.account_id.in_(account_ids))
+                .order_by(
+                    BalanceSnapshot.account_id, BalanceSnapshot.snapshot_date, BalanceSnapshot.id
+                )
+            )
+        )
+        if account_ids
+        else []
+    )
+    transactions = (
+        list(
+            session.scalars(
+                select(AccountTransaction)
+                .where(AccountTransaction.account_id.in_(account_ids))
+                .order_by(
+                    AccountTransaction.account_id,
+                    AccountTransaction.posted_date,
+                    AccountTransaction.id,
+                )
+            )
+        )
+        if account_ids
+        else []
+    )
+    lines = (
+        list(
+            session.scalars(
+                select(PayrollLineItem)
+                .where(PayrollLineItem.statement_id == latest.id)
+                .order_by(PayrollLineItem.category, PayrollLineItem.id)
+            )
+        )
+        if latest
+        else []
+    )
+    payload = {
+        "forecast_month": str(_next_month(_month_start(as_of))),
+        "payroll": (
+            [
+                latest.id,
+                str(latest.payment_date),
+                str(latest.base_salary),
+                str(latest.gross_earnings),
+                str(latest.net_payment),
+                str(latest.observed_deposit_date),
+            ]
+            if latest
+            else None
+        ),
+        "payroll_lines": [
+            [line.category, line.original_label, str(line.amount), str(line.ytd_amount)]
+            for line in lines
+        ],
+        "cash_accounts": [[account.id, account.account_type] for account in cash_accounts],
+        "cash_snapshots": [
+            [row.account_id, str(row.snapshot_date), row.kind, str(row.amount)] for row in snapshots
+        ],
+        "cash_activity": [
+            [row.account_id, str(row.posted_date), row.role, str(row.amount)]
+            for row in transactions
+        ],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _contribution_limits(runtime_settings: Settings) -> dict[str, dict[str, str]]:
@@ -292,6 +435,12 @@ def build_forecast(
         if scenario_input.monthly_outflow is not None
         else observed_outflow
     )
+    observed_checking_split, checking_split_source = _observed_checking_split(session, latest)
+    checking_split_pct = (
+        scenario_input.checking_split_pct
+        if scenario_input.checking_split_pct is not None
+        else observed_checking_split
+    )
     employer_hsa_per_paycheck = latest_line_total("employer_benefit.employer_hsa")
     hsa_per_paycheck = (
         scenario_input.hsa_per_paycheck
@@ -327,7 +476,20 @@ def build_forecast(
             "observed_retirement_pct": str(money(retirement_rate * Decimal("100"))),
             "observed_stock_plan_pct": str(money(stock_plan_rate * Decimal("100"))),
             "forecast_version": FORECAST_VERSION,
+            "baseline_fingerprint": _baseline_fingerprint(session, today) if is_baseline else None,
             "outflow_months": outflow_months,
+            "monthly_outflow_effective": str(monthly_outflow),
+            "monthly_outflow_source": (
+                "manual scenario input"
+                if scenario_input.monthly_outflow is not None
+                else "complete observed cash months"
+            ),
+            "checking_split_pct_effective": str(checking_split_pct),
+            "checking_split_source": (
+                "manual scenario input"
+                if scenario_input.checking_split_pct is not None
+                else checking_split_source
+            ),
         },
     )
     session.add(scenario)
@@ -374,7 +536,7 @@ def build_forecast(
             ZERO,
             money(gross - benefits_and_other - taxes - retirement - employee_hsa - stock_plan),
         )
-        checking_deposit = money(net_to_sofi * scenario_input.checking_split_pct / Decimal("100"))
+        checking_deposit = money(net_to_sofi * checking_split_pct / Decimal("100"))
         savings_deposit = money(net_to_sofi - checking_deposit)
         checking_balance = money(checking_balance + checking_deposit - monthly_outflow)
         savings_balance = money(savings_balance + savings_deposit)
@@ -476,8 +638,19 @@ def build_forecast(
         )
     elif scenario_input.monthly_outflow is None:
         assumption_warnings.append(
-            f"Aggregate outflow uses {len(outflow_months)} complete observed month"
-            f"{'s' if len(outflow_months) != 1 else ''}."
+            f"Monthly outflow is {monthly_outflow:,.2f}, averaged from {len(outflow_months)} "
+            f"complete observed cash month{'s' if len(outflow_months) != 1 else ''}: "
+            f"{', '.join(outflow_months)}."
+        )
+    if scenario_input.checking_split_pct is None:
+        assumption_warnings.append(
+            f"Net SoFi deposits use {checking_split_pct:.2f}% checking and "
+            f"{Decimal('100') - checking_split_pct:.2f}% savings from the "
+            f"{checking_split_source}."
+        )
+    if lowest_cash < ZERO:
+        assumption_warnings.append(
+            "Projected cash falls below zero; this baseline is a warning, not a viable plan."
         )
     if scenario_input.cash_floor and lowest_cash < scenario_input.cash_floor:
         assumption_warnings.append("Projected cash falls below the selected cash floor.")
@@ -505,13 +678,21 @@ def build_forecast(
     )
 
 
-def ensure_baseline(session: Session, runtime_settings: Settings = settings) -> ForecastSummary:
+def ensure_baseline(
+    session: Session,
+    runtime_settings: Settings = settings,
+    *,
+    as_of: date | None = None,
+) -> ForecastSummary:
+    today = as_of or date.today()
+    current_fingerprint = _baseline_fingerprint(session, today)
     baseline = session.scalar(
         select(ForecastScenario).where(ForecastScenario.is_baseline.is_(True)).limit(1)
     )
     if (
         baseline is not None
         and baseline.inputs.get("forecast_version") == FORECAST_VERSION
+        and baseline.inputs.get("baseline_fingerprint") == current_fingerprint
         and "assumption_warnings" in baseline.inputs
         and baseline.periods
     ):
@@ -530,12 +711,18 @@ def ensure_baseline(session: Session, runtime_settings: Settings = settings) -> 
                 ZERO,
             ),
             lowest_projected_cash=min(period.ending_cash for period in periods),
-            contribution_limit_warnings=[],
-            assumption_warnings=[],
+            contribution_limit_warnings=list(
+                baseline.inputs.get("contribution_limit_warnings", [])
+            ),
+            assumption_warnings=list(baseline.inputs.get("assumption_warnings", [])),
         )
+    session.execute(delete(ForecastScenario))
+    session.flush()
+    session.expunge_all()
     return build_forecast(
         session,
         ScenarioInput(name="No-change baseline"),
         runtime_settings,
         is_baseline=True,
+        as_of=today,
     )

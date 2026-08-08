@@ -28,6 +28,27 @@ from .money import ZERO, money
 from .payroll import schedule_validation
 
 TOLERANCE = Decimal("0.01")
+MIN_INVESTMENT_PERFORMANCE_DAYS = 7
+AVAILABLE_INVESTMENT_RETURN_METHODS = {"modified_dietz", "dollar_residual"}
+INVESTMENT_CASH_FLOW_ROLES = {
+    "employee_contribution",
+    "employer_contribution",
+    "stock_plan_contribution",
+    "external_deposit",
+    "external_withdrawal",
+    "internal_transfer",
+}
+DEBT_ACCOUNT_TYPES = {
+    "auto",
+    "consumer",
+    "credit card",
+    "credit",
+    "home equity",
+    "loan",
+    "mortgage",
+    "overdraft",
+    "student",
+}
 INVESTMENT_ACCOUNT_TYPES = {
     "401k",
     "403b",
@@ -80,6 +101,14 @@ def fidelity_investment_result(
         - other_deposits
         + withdrawals
     )
+
+
+def investment_performance_available(bridge: InvestmentValueBridge) -> bool:
+    return bridge.return_method in AVAILABLE_INVESTMENT_RETURN_METHODS
+
+
+def _currency(value: Decimal) -> str:
+    return f"${money(value):,.2f}"
 
 
 def _transaction_total(transactions: list[AccountTransaction], role: str) -> Decimal:
@@ -268,32 +297,136 @@ def _reconcile_bank_accounts(session: Session, matched_transfers: set[int]) -> N
             closings = [current[-1]]
         all_transactions = list(
             session.scalars(
-                select(AccountTransaction).where(AccountTransaction.account_id == account.id)
+                select(AccountTransaction)
+                .where(AccountTransaction.account_id == account.id)
+                .order_by(AccountTransaction.posted_date, AccountTransaction.id)
             )
         )
-        transactions = all_transactions
         if openings and closings and openings[0].snapshot_date < closings[-1].snapshot_date:
             opening = openings[0]
             closing = closings[-1]
-            transactions = [
+            interval_transactions = [
                 transaction
                 for transaction in all_transactions
                 if opening.snapshot_date < transaction.posted_date <= closing.snapshot_date
             ]
-            residual = sofi_balance_residual(
+            strict_residual = sofi_balance_residual(
                 opening.amount,
-                [transaction.amount for transaction in transactions],
+                [transaction.amount for transaction in interval_transactions],
                 closing.amount,
             )
+            opening_date_transactions = [
+                transaction
+                for transaction in all_transactions
+                if transaction.posted_date == opening.snapshot_date
+                and transaction.id not in matched_transfers
+                and transaction.role != "internal_transfer"
+            ]
+            opening_date_outflows = money(
+                sum(
+                    (
+                        transaction.amount
+                        for transaction in opening_date_transactions
+                        if transaction.amount < 0
+                    ),
+                    ZERO,
+                )
+            )
+            opening_date_inflows = money(
+                sum(
+                    (
+                        transaction.amount
+                        for transaction in opening_date_transactions
+                        if transaction.amount > 0
+                    ),
+                    ZERO,
+                )
+            )
+            boundary_explanation: str | None = None
+            if abs(strict_residual + opening_date_outflows) <= TOLERANCE:
+                boundary_explanation = "opening-date outflows"
+            elif abs(strict_residual + opening_date_inflows) <= TOLERANCE:
+                boundary_explanation = "opening-date inflows"
+            timing_reconciled = boundary_explanation is not None
+            reconciled = abs(strict_residual) <= TOLERANCE or timing_reconciled
+            interval_total = money(sum((row.amount for row in interval_transactions), ZERO))
+            expected_closing = money(opening.amount + interval_total)
+            account_type = account.account_type.strip().lower().replace("_", " ")
+            is_debt = account_type in DEBT_ACCOUNT_TYPES or any(
+                token in account.display_name.lower()
+                for token in ("loan", "mortgage", "credit card")
+            )
+            if timing_reconciled:
+                message = (
+                    f"{account.display_name} reconciles when {boundary_explanation} dated "
+                    f"{opening.snapshot_date:%b %-d} are placed after the opening balance. "
+                    "Plaid supplies a posting date but not a within-day posting time."
+                )
+                likely_cause = "same_day_posting_boundary"
+                next_steps = [
+                    "No adjustment is needed; the dated activity exactly explains the difference.",
+                    "Keep the next observed balance so the timing boundary remains "
+                    "independently checkable.",
+                ]
+            elif is_debt and not reconciled:
+                direction = "higher" if strict_residual < 0 else "lower"
+                message = (
+                    f"{account.display_name} closed {_currency(abs(strict_residual))} {direction} "
+                    "than its posted activity explains. Loan balances can change from accrued "
+                    "interest "
+                    "or provider adjustments that are not returned as transactions."
+                )
+                likely_cause = "interest_or_balance_adjustment"
+                next_steps = [
+                    "Update the connection and check whether the provider supplies the missing "
+                    "loan activity.",
+                    "If it persists, compare the opening and closing balances with the loan "
+                    "statement.",
+                    "Leave the item open unless statement evidence identifies the interest or "
+                    "adjustment.",
+                ]
+            elif reconciled:
+                message = f"{account.display_name} balances reconcile to posted activity."
+                likely_cause = "none"
+                next_steps = []
+            else:
+                direction = "below" if strict_residual > 0 else "above"
+                message = (
+                    f"{account.display_name} closed {_currency(abs(strict_residual))} {direction} "
+                    "the balance implied by posted activity."
+                )
+                likely_cause = "missing_or_mistimed_activity"
+                next_steps = [
+                    "Update the connection to retrieve newly posted or corrected activity.",
+                    "Compare the listed opening and closing evidence with the source account "
+                    "statement.",
+                    "Do not add a balancing adjustment without source evidence.",
+                ]
             _result(
                 session,
                 "account",
                 account.id,
                 "account_balance",
-                "reconciled" if abs(residual) <= TOLERANCE else "unreconciled",
-                residual,
+                "reconciled" if reconciled else "unreconciled",
+                ZERO if reconciled else strict_residual,
+                {
+                    "account_name": account.display_name,
+                    "institution": account.institution.canonical_name,
+                    "opening_date": str(opening.snapshot_date),
+                    "opening_balance": f"{opening.amount:.2f}",
+                    "closing_date": str(closing.snapshot_date),
+                    "closing_balance": f"{closing.amount:.2f}",
+                    "accounted_activity": f"{interval_total:.2f}",
+                    "expected_closing_balance": f"{expected_closing:.2f}",
+                    "strict_residual": f"{strict_residual:.2f}",
+                    "opening_date_outflows": f"{abs(opening_date_outflows):.2f}",
+                    "opening_date_inflows": f"{opening_date_inflows:.2f}",
+                    "likely_cause": likely_cause,
+                    "message": message,
+                    "next_steps": next_steps,
+                },
             )
-        for transaction in transactions:
+        for transaction in all_transactions:
             if transaction.role in {
                 "external_inflow",
                 "external_outflow",
@@ -559,6 +692,32 @@ def _reconcile_investment_accounts(session: Session) -> None:
                 other_deposits=other,
                 withdrawals=withdrawals,
             )
+            observation_days = (closing.snapshot_date - opening.snapshot_date).days
+            boundary_transactions = list(
+                session.scalars(
+                    select(AccountTransaction).where(
+                        AccountTransaction.account_id == account.id,
+                        AccountTransaction.posted_date >= opening.snapshot_date,
+                        AccountTransaction.posted_date <= closing.snapshot_date,
+                    )
+                )
+            )
+            boundary_cash_flows = [
+                transaction
+                for transaction in boundary_transactions
+                if transaction.posted_date in {opening.snapshot_date, closing.snapshot_date}
+                and transaction.role in INVESTMENT_CASH_FLOW_ROLES
+            ]
+            unresolved_activity = any(
+                transaction.role == "unresolved" for transaction in boundary_transactions
+            )
+            tracking_reason: str | None = None
+            if observation_days < MIN_INVESTMENT_PERFORMANCE_DAYS:
+                tracking_reason = "tracking_short_window"
+            elif boundary_cash_flows:
+                tracking_reason = "tracking_boundary_activity"
+            elif unresolved_activity:
+                tracking_reason = "tracking_unresolved_activity"
             signed_flows = [
                 (transaction.posted_date, transaction.amount)
                 for transaction in transactions
@@ -574,12 +733,19 @@ def _reconcile_investment_accounts(session: Session) -> None:
                 )
                 or (transaction.amount < ZERO and transaction.role == "external_withdrawal")
             ]
-            calculated_return = _modified_dietz(
-                opening.amount,
-                result,
-                opening.snapshot_date,
-                closing.snapshot_date,
-                signed_flows,
+            calculated_return = (
+                _modified_dietz(
+                    opening.amount,
+                    result,
+                    opening.snapshot_date,
+                    closing.snapshot_date,
+                    signed_flows,
+                )
+                if tracking_reason is None
+                else None
+            )
+            return_method = tracking_reason or (
+                "modified_dietz" if calculated_return is not None else "dollar_residual"
             )
             session.add(
                 InvestmentValueBridge(
@@ -595,9 +761,7 @@ def _reconcile_investment_accounts(session: Session) -> None:
                     investment_result=result,
                     closing_value=closing.amount,
                     calculated_return_pct=calculated_return,
-                    return_method=(
-                        "modified_dietz" if calculated_return is not None else "dollar_residual"
-                    ),
+                    return_method=return_method,
                 )
             )
             _result(
@@ -605,12 +769,20 @@ def _reconcile_investment_accounts(session: Session) -> None:
                 "investment_bridge",
                 f"{account.id}:{opening.snapshot_date}:{closing.snapshot_date}",
                 "investment_value_bridge",
-                "reconciled",
+                "reconciled" if tracking_reason is None else "tracking",
                 ZERO,
                 {
-                    "return_method": (
-                        "modified_dietz" if calculated_return is not None else "dollar_residual"
-                    )
+                    "return_method": return_method,
+                    "observation_days": observation_days,
+                    "boundary_cash_flow_count": len(boundary_cash_flows),
+                    "message": (
+                        "Performance is available for this observation interval."
+                        if tracking_reason is None
+                        else (
+                            "Performance stays hidden until a longer, unambiguous observation "
+                            "interval is available."
+                        )
+                    ),
                 },
             )
             for transaction in transactions:

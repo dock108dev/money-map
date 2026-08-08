@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Paycheck Map",
-    version="1.0.2",
+    version="1.2.1",
     docs_url="/api/docs",
     redoc_url=None,
     lifespan=lifespan,

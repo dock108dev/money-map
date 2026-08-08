@@ -248,6 +248,38 @@ def test_generation_is_idempotent_and_uses_integer_cents(session: Session) -> No
 def test_date_ranges_and_normalized_deposit_splits(session: Session) -> None:
     _add_complete_checkpoints(session)
     generate_payroll_schedule(session)
+    latest_entry = session.scalar(
+        select(PayrollScheduleEntry)
+        .where(PayrollScheduleEntry.observed_deposit_date == date(2026, 7, 29))
+        .limit(1)
+    )
+    assert latest_entry is not None
+    session.add_all(
+        [
+            PayrollAllocation(
+                schedule_entry_id=latest_entry.id,
+                category=category,
+                label=category,
+                section=section,
+                amount=Decimal(value),
+                source_kind="statement",
+                previous_checkpoint_id=None,
+                next_checkpoint_id=None,
+                calculation_version="test-v1",
+                fingerprint=f"test-{index}",
+            )
+            for index, (category, section, value) in enumerate(
+                [
+                    ("pretax.employee_retirement", "pretax", "438.46"),
+                    ("pretax.employee_hsa", "pretax", "34.61"),
+                    ("after_tax.employee_stock_purchase", "after_tax", "730.77"),
+                    ("employer_benefit.employer_retirement", "employer", "255.77"),
+                    ("employer_benefit.employer_hsa", "employer", "19.23"),
+                ],
+                start=1,
+            )
+        ]
+    )
     session.flush()
     full = payroll_history(session)
     assert full["count"] == 42
@@ -257,6 +289,10 @@ def test_date_ranges_and_normalized_deposit_splits(session: Session) -> None:
     single = payroll_history(session, date(2026, 7, 29), date(2026, 7, 29))
     assert single["count"] == 1
     assert single["rows"][0]["net_payment"] == "3765.83"
+    assert single["rows"][0]["employee_account_funding"] == "1203.84"
+    assert single["rows"][0]["employer_account_funding"] == "275.00"
+    assert single["rows"][0]["accessible_value_before_spending"] == "4496.60"
+    assert single["rows"][0]["total_paycheck_value"] == "5244.67"
     legacy = next(row for row in full["rows"] if row["payment_date"] == date(2025, 12, 19))
     assert {split["institution"] for split in legacy["deposit_splits"]} == {"SoFi"}
     assert legacy["deposit_splits"][0]["account"] == "SoFi legacy ••3055"

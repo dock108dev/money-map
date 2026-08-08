@@ -25,7 +25,7 @@ const overview = {
     },
   },
   cashflow: { coverage: { start: null, end: null, transactions: 0 }, external_inflows: "0.00", external_outflows: "0.00", transfer_in: "0.00", transfer_out: "0.00", interest: "0.00", fees: "0.00", net_external: "0.00", matched_transfer_transactions: 0 },
-  investments: { coverage: { start: null, end: null, transactions: 0 }, employee_contributions: "0.00", employer_contributions: "0.00", stock_plan_contributions: "0.00", other_contributions: "0.00", withdrawals: "0.00", investment_result: "0.00", bridge_count: 0 },
+  investments: { coverage: { start: null, end: null, transactions: 0 }, employee_contributions: "0.00", employer_contributions: "0.00", stock_plan_contributions: "0.00", employee_fidelity_contributions: "0.00", total_payroll_fidelity_contributions: "0.00", other_contributions: "0.00", withdrawals: "0.00", investment_result: "0.00", bridge_count: 0 },
   warnings: [],
 };
 
@@ -35,6 +35,21 @@ const accounts = {
   totals: { net_worth: "100.00", assets: "100.00", debts: "0.00", cash: "100.00", investments: "0.00", money_in: "0.00", money_out: "0.00", net_cash_flow: "0.00" },
   accounts: [],
   activity: [],
+};
+
+const wealth = {
+  as_of: "2026-08-03",
+  accessible: { total: "33014.92", cash: "6761.75", sellable_investments: "26253.17", accounts: [] },
+  excluded: { total: "459830.08", message: "Tracked separately." },
+  fidelity: {
+    current_value: "486083.25",
+    accounts: [],
+    history: [],
+    recent_observation: null,
+    performance_periods: [],
+    funding: { period_start: "2025-08-03", period_end: "2026-08-03", you_contributed: "25560.66", employer_contributed: "8385.91", total_payroll_funding: "33946.57" },
+  },
+  paycheck: { spendable_cash: "3765.83", accessible_stock_funding: "730.77", accessible_value_before_spending: "4496.60", locked_account_funding: "748.07", total_paycheck_value: "5244.67" },
 };
 
 function plaid(refreshDue: boolean, connectionCount = 1) {
@@ -94,9 +109,15 @@ function workingFetch(refreshDue = false, connectionCount = 1) {
     }
     if (url === "/api/overview") return json(overview);
     if (url === "/api/accounts") return json(accounts);
+    if (url === "/api/wealth") return json(wealth);
     if (url === "/api/exceptions" || url === "/api/timeline" || url === "/api/scenarios" || url === "/api/imports") return json([]);
     if (url === "/api/plaid/status") return json(plaid(refreshDue, connectionCount));
     if (url === "/api/payroll") return json({ period: { start: "2025-01-01", end: "2026-07-29" }, count: 0, statement_count: 0, calculated_count: 0, totals: {}, rows: [] });
+    if (url === "/api/life-plan/profile") return json(null);
+    if (url === "/api/life-plan/goals" || url === "/api/life-plan/scenarios") return json([]);
+    if (url === "/api/life-plan/starting-point") return json({
+      as_of: "2026-08-03", cash: "6761.75", accessible_investments: "26253.17", pretax_retirement: "459830.08", hsa: "0.00", restricted_assets: "0.00", debt: "0.00", accessible_total: "33014.92", tracked_total: "492845.00", observed_monthly_outflow: "5500.00", outflow_months: [], payroll: null, accounts: [], warnings: [],
+    });
     return new Response("Not found", { status: 404 });
   });
 }
@@ -168,5 +189,25 @@ describe("application states", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Update data" }));
     expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
     expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/plaid/sync-all")).toHaveLength(0);
+  });
+
+  it("opens the accessible wealth and Fidelity performance screen", async () => {
+    vi.stubGlobal("fetch", workingFetch(false, 2));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "◇ Wealth" }));
+    expect(await screen.findByRole("heading", { name: "Wealth" })).toBeInTheDocument();
+    expect(screen.getByText("$33,014.92")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "◎ Plan" })).toBeInTheDocument();
+  });
+
+  it("loads Life Lab only after Plan is opened", async () => {
+    const fetch = workingFetch(false, 2);
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    const plan = await screen.findByRole("button", { name: "◎ Plan" });
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/life-plan"))).toBe(false);
+    fireEvent.click(plan);
+    expect(await screen.findByRole("heading", { name: "Set up Life Lab" })).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([input]) => String(input) === "/api/life-plan/starting-point")).toBe(true);
   });
 });
