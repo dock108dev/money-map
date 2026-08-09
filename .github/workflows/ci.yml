@@ -29,7 +29,9 @@ jobs:
           persist-credentials: false
 
       - name: Configure ephemeral runtime
-        run: echo "PAYCHECK_MAP_LOCAL_DIR=$RUNNER_TEMP/paycheck-map-ci" >> "$GITHUB_ENV"
+        run: |
+          echo "PAYCHECK_MAP_LOCAL_DIR=$RUNNER_TEMP/paycheck-map-ci" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/paycheck-map-ci" web/dist
 
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
