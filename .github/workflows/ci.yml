@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure ephemeral runtime
+        run: |
+          echo "PAYCHECK_MAP_LOCAL_DIR=$RUNNER_TEMP/paycheck-map-ci" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/paycheck-map-ci" web/dist
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.9.10"
+          enable-cache: false
+
+      - name: Install pnpm 10.9.0
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 10.9.0
+          run_install: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install locked Python dependencies
+        run: uv sync --all-extras --locked
+
+      - name: Install locked frontend dependencies
+        run: pnpm --dir web install --frozen-lockfile
+
+      - name: Verify migrations and timestamp repair
+        run: uv run pytest tests/test_migrations.py
+
+      - name: Run complete release and privacy gate
+        run: uv run paycheck-map verify
+
+      - name: Build Python distribution
+        run: uv build

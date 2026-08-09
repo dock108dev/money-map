@@ -186,6 +186,14 @@ uv run paycheck-map verify
 The command runs backend tests, formatting, linting, strict type checking, frontend
 tests, frontend linting, the production build, and the private-data leak check.
 
+## Continuous integration
+
+[![CI](https://github.com/dock108dev/money-map/actions/workflows/ci.yml/badge.svg)](https://github.com/dock108dev/money-map/actions/workflows/ci.yml)
+
+GitHub Actions runs the locked release gate, migration checks, and package build with
+synthetic or empty state only. CI never requires private financial data, Plaid
+credentials, or repository secrets.
+
 ## Local maintenance
 
 ```bash
