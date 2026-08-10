@@ -1,0 +1,161 @@
+{
+  "fixture_origin": "invented synthetic values only",
+  "primary_goal_program": {
+    "goal_program_id": "goal_home",
+    "name": "Synthetic home reserve",
+    "target_date": "2027-08-09",
+    "target_amount": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["life_goal:1:target"], "derivation": null, "unavailable_reason": null},
+    "protected_cash_floor": {"amount": "3000.00", "evidence": "user_entered", "source_refs": ["life_profile:1:cash_floor"], "derivation": null, "unavailable_reason": null},
+    "reserved_for_goal": {"amount": "2000.00", "evidence": "user_entered", "source_refs": ["life_goal:1:reserved"], "derivation": null, "unavailable_reason": null},
+    "primary": true,
+    "reservation_policy": "exclusive_primary_goal",
+    "source_life_goal_id": 1
+  },
+  "goal_position": {
+    "goal_program_id": "goal_home",
+    "observed_on": "2026-08-10",
+    "target_date": "2027-08-09",
+    "accessible_cash": {"amount": "6000.00", "evidence": "observed", "source_refs": ["balance:cash:2026-08-10"], "derivation": null, "unavailable_reason": null},
+    "accessible_investments": {"amount": "1500.00", "evidence": "observed", "source_refs": ["holding:taxable:2026-08-10"], "derivation": null, "unavailable_reason": null},
+    "retirement_assets_excluded": {"amount": "18000.00", "evidence": "observed", "source_refs": ["balance:retirement:2026-08-10"], "derivation": null, "unavailable_reason": null},
+    "tracked_debt": {"amount": "400.00", "evidence": "observed", "source_refs": ["balance:debt:2026-08-10"], "derivation": null, "unavailable_reason": null},
+    "accessible_now": {"amount": "7500.00", "evidence": "derived", "source_refs": ["balance:cash:2026-08-10", "holding:taxable:2026-08-10"], "derivation": "accessible_now", "unavailable_reason": null},
+    "protected_cash_floor": {"amount": "3000.00", "evidence": "user_entered", "source_refs": ["goal-config:floor"], "derivation": null, "unavailable_reason": null},
+    "available_above_floor": {"amount": "4500.00", "evidence": "derived", "source_refs": ["goal-config:floor", "position:accessible_now"], "derivation": "available_above_floor", "unavailable_reason": null},
+    "reserved_for_goal": {"amount": "2000.00", "evidence": "user_entered", "source_refs": ["goal-config:reserved"], "derivation": null, "unavailable_reason": null},
+    "goal_target": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal-config:target"], "derivation": null, "unavailable_reason": null},
+    "remaining_target": {"amount": "12000.00", "evidence": "derived", "source_refs": ["goal-config:reserved", "goal-config:target"], "derivation": "remaining_target", "unavailable_reason": null},
+    "effective_recurring_take_home": {"amount": "4200.00", "evidence": "derived", "source_refs": ["payroll:synthetic"], "derivation": "effective_recurring_take_home", "unavailable_reason": null},
+    "observed_recurring_outflow": {"amount": "3900.00", "evidence": "observed", "source_refs": ["outflow:synthetic-window"], "derivation": null, "unavailable_reason": null},
+    "recurring_cash_flow_gap": {"amount": "0.00", "evidence": "derived", "source_refs": ["outflow:synthetic-window", "payroll:synthetic"], "derivation": "recurring_cash_flow_gap", "unavailable_reason": null},
+    "funding_months": "12.000000000000",
+    "pace_status": "active",
+    "required_funding_pace": {"amount": "1000.00", "evidence": "derived", "source_refs": ["calendar:2026-08-10:2027-08-09", "goal-config:reserved", "goal-config:target"], "derivation": "required_funding_pace", "unavailable_reason": null},
+    "calculation_version": "goal-arithmetic-v1"
+  },
+  "goal_check_in": {
+    "check_in_id": "9aa6544aff70291910b28ce1fdac0eccc564a25bf79b6eff55335e09a1bb6b74",
+    "goal_program_id": "goal_home",
+    "source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "effective_observation_date": "2026-08-10",
+    "position": {
+      "goal_program_id": "goal_home",
+      "observed_on": "2026-08-10",
+      "target_date": "2027-08-09",
+      "accessible_cash": {"amount": "6000.00", "evidence": "observed", "source_refs": ["balance:cash:2026-08-10"], "derivation": null, "unavailable_reason": null},
+      "accessible_investments": {"amount": "1500.00", "evidence": "observed", "source_refs": ["holding:taxable:2026-08-10"], "derivation": null, "unavailable_reason": null},
+      "retirement_assets_excluded": {"amount": "18000.00", "evidence": "observed", "source_refs": ["balance:retirement:2026-08-10"], "derivation": null, "unavailable_reason": null},
+      "tracked_debt": {"amount": "400.00", "evidence": "observed", "source_refs": ["balance:debt:2026-08-10"], "derivation": null, "unavailable_reason": null},
+      "accessible_now": {"amount": "7500.00", "evidence": "derived", "source_refs": ["balance:cash:2026-08-10", "holding:taxable:2026-08-10"], "derivation": "accessible_now", "unavailable_reason": null},
+      "protected_cash_floor": {"amount": "3000.00", "evidence": "user_entered", "source_refs": ["goal-config:floor"], "derivation": null, "unavailable_reason": null},
+      "available_above_floor": {"amount": "4500.00", "evidence": "derived", "source_refs": ["goal-config:floor", "position:accessible_now"], "derivation": "available_above_floor", "unavailable_reason": null},
+      "reserved_for_goal": {"amount": "2000.00", "evidence": "user_entered", "source_refs": ["goal-config:reserved"], "derivation": null, "unavailable_reason": null},
+      "goal_target": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal-config:target"], "derivation": null, "unavailable_reason": null},
+      "remaining_target": {"amount": "12000.00", "evidence": "derived", "source_refs": ["goal-config:reserved", "goal-config:target"], "derivation": "remaining_target", "unavailable_reason": null},
+      "effective_recurring_take_home": {"amount": "4200.00", "evidence": "derived", "source_refs": ["payroll:synthetic"], "derivation": "effective_recurring_take_home", "unavailable_reason": null},
+      "observed_recurring_outflow": {"amount": "3900.00", "evidence": "observed", "source_refs": ["outflow:synthetic-window"], "derivation": null, "unavailable_reason": null},
+      "recurring_cash_flow_gap": {"amount": "0.00", "evidence": "derived", "source_refs": ["outflow:synthetic-window", "payroll:synthetic"], "derivation": "recurring_cash_flow_gap", "unavailable_reason": null},
+      "funding_months": "12.000000000000",
+      "pace_status": "active",
+      "required_funding_pace": {"amount": "1000.00", "evidence": "derived", "source_refs": ["calendar:2026-08-10:2027-08-09", "goal-config:reserved", "goal-config:target"], "derivation": "required_funding_pace", "unavailable_reason": null},
+      "calculation_version": "goal-arithmetic-v1"
+    },
+    "created_at": "2026-08-10T16:30:00Z",
+    "contract_version": "money-map-v2-contract-v1"
+  },
+  "goal_comparison": {
+    "goal_program_id": "goal_home",
+    "previous_check_in_id": "1111111111111111111111111111111111111111111111111111111111111111",
+    "current_check_in_id": "2222222222222222222222222222222222222222222222222222222222222222",
+    "previous_source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "current_source_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "previous_observation_date": "2026-08-09",
+    "current_observation_date": "2026-08-10",
+    "components": [
+      {"component": "accessible_now", "change": {"amount": "100.00", "evidence": "derived", "source_refs": ["check-in:current", "check-in:previous"], "derivation": "comparison_delta", "unavailable_reason": null}, "interpretation": "arithmetic_only", "supporting_evidence_refs": []},
+      {"component": "accessible_cash", "change": {"amount": "100.00", "evidence": "derived", "source_refs": ["check-in:current", "check-in:previous"], "derivation": "comparison_delta", "unavailable_reason": null}, "interpretation": "arithmetic_only", "supporting_evidence_refs": []},
+      {"component": "unexplained_residual", "change": {"amount": "100.00", "evidence": "derived", "source_refs": ["check-in:current", "check-in:previous"], "derivation": "unexplained_residual", "unavailable_reason": null}, "interpretation": "arithmetic_only", "supporting_evidence_refs": []}
+    ]
+  },
+  "goal_milestone": {
+    "goal_program_id": "goal_home",
+    "kind": "fund_goal",
+    "sequence_rank": 3,
+    "amount": {"amount": "1000.00", "evidence": "derived", "source_refs": ["position:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"], "derivation": "milestone_amount", "unavailable_reason": null},
+    "position_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "retirement_run_selection": {
+    "run_selection_id": "retirement_with_goal",
+    "include_operational_goal": true,
+    "included_goal": {
+      "goal_program_id": "goal_home",
+      "goal_source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "target_amount": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal:target"], "derivation": null, "unavailable_reason": null},
+      "reserved_for_goal": {"amount": "2000.00", "evidence": "user_entered", "source_refs": ["goal:reserved"], "derivation": null, "unavailable_reason": null},
+      "remaining_target": {"amount": "12000.00", "evidence": "derived", "source_refs": ["goal:reserved", "goal:target"], "derivation": "retirement_goal_snapshot", "unavailable_reason": null},
+      "selection": "explicit"
+    },
+    "goal_default_policy": "excluded",
+    "operational_goal_mutation": false
+  },
+  "life_lab_experiment_seed": {
+    "experiment_id": "lab_synthetic_goal",
+    "seed_kind": "current_goal",
+    "source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "seeded_money": {
+      "goal_target": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal:target"], "derivation": null, "unavailable_reason": null}
+    },
+    "edit_scope": "isolated_draft",
+    "goal_mutation": false,
+    "retirement_mutation": false
+  },
+  "life_lab_promotion_preview": {
+    "experiment_id": "lab_synthetic_goal",
+    "experiment_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "target_surface": "goals",
+    "changes": [
+      {
+        "field": "goal_target",
+        "before": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal:target"], "derivation": null, "unavailable_reason": null},
+        "after": {"amount": "15000.00", "evidence": "user_entered", "source_refs": ["lab:goal_target"], "derivation": null, "unavailable_reason": null}
+      }
+    ],
+    "state": "preview_only",
+    "requires_explicit_confirmation": true,
+    "applied": false
+  },
+  "source_fingerprint_vector": {
+    "material": {
+      "fingerprint_version": "goal-source-fingerprint-v1",
+      "calculation_version": "goal-arithmetic-v1",
+      "goal_configuration": {
+        "goal_program_id": "goal_home",
+        "target_date": "2027-08-09",
+        "target_amount": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal-config:target"], "derivation": null, "unavailable_reason": null},
+        "protected_cash_floor": {"amount": "3000.00", "evidence": "user_entered", "source_refs": ["goal-config:floor"], "derivation": null, "unavailable_reason": null},
+        "reserved_for_goal": {"amount": "2000.00", "evidence": "user_entered", "source_refs": ["goal-config:reserved"], "derivation": null, "unavailable_reason": null}
+      },
+      "source_records": [
+        {
+          "kind": "payroll",
+          "record_identity": "payroll-synthetic-2026-08-07",
+          "record_hash": null,
+          "effective_date": "2026-08-07",
+          "money_facts": [{"field": "effective_monthly_take_home", "amount": "4200.00", "evidence": "derived"}]
+        },
+        {
+          "kind": "balance",
+          "record_identity": "balance-synthetic-cash-2026-08-10",
+          "record_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "effective_date": "2026-08-10",
+          "money_facts": [
+            {"field": "accessible_cash", "amount": "6000.00", "evidence": "observed"},
+            {"field": "retirement_assets_excluded", "amount": "18000.00", "evidence": "observed"}
+          ]
+        }
+      ]
+    },
+    "canonical_json": "{\"calculation_version\":\"goal-arithmetic-v1\",\"fingerprint_version\":\"goal-source-fingerprint-v1\",\"goal_configuration\":{\"goal_program_id\":\"goal_home\",\"protected_cash_floor\":{\"amount\":\"3000.00\",\"derivation\":null,\"evidence\":\"user_entered\",\"source_refs\":[\"goal-config:floor\"],\"unavailable_reason\":null},\"reserved_for_goal\":{\"amount\":\"2000.00\",\"derivation\":null,\"evidence\":\"user_entered\",\"source_refs\":[\"goal-config:reserved\"],\"unavailable_reason\":null},\"target_amount\":{\"amount\":\"14000.00\",\"derivation\":null,\"evidence\":\"user_entered\",\"source_refs\":[\"goal-config:target\"],\"unavailable_reason\":null},\"target_date\":\"2027-08-09\"},\"source_records\":[{\"effective_date\":\"2026-08-10\",\"kind\":\"balance\",\"money_facts\":[{\"amount\":\"6000.00\",\"evidence\":\"observed\",\"field\":\"accessible_cash\"},{\"amount\":\"18000.00\",\"evidence\":\"observed\",\"field\":\"retirement_assets_excluded\"}],\"record_hash\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"record_identity\":\"balance-synthetic-cash-2026-08-10\"},{\"effective_date\":\"2026-08-07\",\"kind\":\"payroll\",\"money_facts\":[{\"amount\":\"4200.00\",\"evidence\":\"derived\",\"field\":\"effective_monthly_take_home\"}],\"record_hash\":null,\"record_identity\":\"payroll-synthetic-2026-08-07\"}]}",
+    "sha256": "f97e31abaadded2094adb7a514544f62e1d24673d8bfa0553b2551dca74878e5"
+  }
+}

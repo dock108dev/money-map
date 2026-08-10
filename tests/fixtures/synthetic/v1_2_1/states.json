@@ -1,0 +1,459 @@
+{
+  "fixture_format": "money-map-v1.2.1-synthetic-v1",
+  "fixture_origin": "All people, dates, amounts, records, and identifiers are invented for tests.",
+  "states": [
+    {
+      "id": "no_life_lab_profile",
+      "traits": ["no_life_lab_profile"],
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "3200.00",
+        "accessible_investments": "800.00",
+        "retirement_assets": "9000.00",
+        "effective_monthly_take_home": "4100.00",
+        "observed_monthly_outflow": "3000.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "profile_without_goals",
+      "traits": ["profile_without_goals"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "2800.00",
+            "essential_monthly_spend": "2100.00",
+            "flexible_monthly_spend": "700.00",
+            "cash_floor": "2500.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Synthetic profile without goals",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-07-01T12:00:00Z"
+          }
+        ],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "4200.00",
+        "accessible_investments": "1100.00",
+        "retirement_assets": "12500.00",
+        "effective_monthly_take_home": "4300.00",
+        "observed_monthly_outflow": "2800.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "one_enabled_goal_with_floor",
+      "traits": ["one_enabled_goal", "protected_floor"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "3000.00",
+            "essential_monthly_spend": "2200.00",
+            "flexible_monthly_spend": "800.00",
+            "cash_floor": "3000.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Synthetic single-goal profile",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_goals": [
+          {
+            "id": 10,
+            "profile_id": 1,
+            "name": "Synthetic equipment fund",
+            "target_date": "2027-08-09",
+            "target_amount": "12000.00",
+            "reserved_amount": "1500.00",
+            "annual_cost": "0.00",
+            "priority": "required",
+            "enabled": true,
+            "notes": "Invented migration candidate",
+            "created_at": "2026-07-02T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "6200.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": 10, "requires_primary_selection": false}
+    },
+    {
+      "id": "multiple_enabled_goals_ambiguous",
+      "traits": ["multiple_enabled_goals", "no_unambiguous_primary"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "3000.00",
+            "essential_monthly_spend": "2200.00",
+            "flexible_monthly_spend": "800.00",
+            "cash_floor": "3000.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Synthetic ambiguous-goal profile",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_goals": [
+          {
+            "id": 20,
+            "profile_id": 1,
+            "name": "Synthetic studio fund",
+            "target_date": "2027-05-31",
+            "target_amount": "8000.00",
+            "reserved_amount": "900.00",
+            "annual_cost": "0.00",
+            "priority": "required",
+            "enabled": true,
+            "notes": "Invented candidate one",
+            "created_at": "2026-07-02T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          },
+          {
+            "id": 21,
+            "profile_id": 1,
+            "name": "Synthetic workshop fund",
+            "target_date": "2027-09-30",
+            "target_amount": "11000.00",
+            "reserved_amount": "600.00",
+            "annual_cost": "0.00",
+            "priority": "required",
+            "enabled": true,
+            "notes": "Invented candidate two",
+            "created_at": "2026-07-03T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "5800.00",
+        "accessible_investments": "900.00",
+        "retirement_assets": "17000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": true}
+    },
+    {
+      "id": "stale_saved_scenario",
+      "traits": ["stale_saved_scenarios"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "3100.00",
+            "essential_monthly_spend": "2250.00",
+            "flexible_monthly_spend": "850.00",
+            "cash_floor": "3000.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Profile changed after scenario save",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-08-05T12:00:00Z"
+          }
+        ],
+        "life_goals": [],
+        "life_scenarios": [
+          {
+            "id": 30,
+            "profile_id": 1,
+            "name": "Synthetic earlier assumptions",
+            "target_age": 52,
+            "path_key": "middle",
+            "input_snapshot": {"current_monthly_outflow": "3000.00", "cash_floor": "2800.00"},
+            "source_fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "engine_version": "life-lab-v0.3.0",
+            "assumption_version": "life-lab-drive-paths-v3",
+            "benchmark_version": "synthetic-benchmark-v1",
+            "status": "works",
+            "warnings": ["Synthetic saved evidence"],
+            "summary": {"ending_cash": "500.00"},
+            "created_at": "2026-07-15T12:00:00Z"
+          }
+        ],
+        "life_projection_periods": [
+          {
+            "id": 31,
+            "scenario_id": 30,
+            "month": "2026-08-01",
+            "age_months": 412,
+            "working": true,
+            "gross_income": "5200.00",
+            "net_income": "4100.00",
+            "employee_retirement": "300.00",
+            "employer_retirement": "180.00",
+            "stock_plan": "100.00",
+            "essential_spend": "2200.00",
+            "flexible_spend": "800.00",
+            "goal_spend": "0.00",
+            "cash": "4600.00",
+            "accessible_investments": "1100.00",
+            "pretax_retirement": "15000.00",
+            "hsa": "900.00",
+            "restricted_assets": "0.00",
+            "debt": "400.00",
+            "investment_result": "40.00",
+            "total_spendable": "5700.00"
+          }
+        ]
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "4700.00",
+        "accessible_investments": "1200.00",
+        "retirement_assets": "15500.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3100.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "negative_recurring_cash_flow",
+      "traits": ["negative_recurring_cash_flow"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "4700.00",
+            "essential_monthly_spend": "3600.00",
+            "flexible_monthly_spend": "1100.00",
+            "cash_floor": "3000.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Synthetic negative recurring flow",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_goals": [
+          {
+            "id": 40,
+            "profile_id": 1,
+            "name": "Synthetic reserve goal",
+            "target_date": "2027-08-09",
+            "target_amount": "12000.00",
+            "reserved_amount": "1500.00",
+            "annual_cost": "0.00",
+            "priority": "required",
+            "enabled": true,
+            "notes": "Invented cash-flow state",
+            "created_at": "2026-07-02T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "6100.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "4700.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": 40, "requires_primary_selection": false}
+    },
+    {
+      "id": "cash_below_protected_floor",
+      "traits": ["cash_below_protected_floor"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "3000.00",
+            "essential_monthly_spend": "2200.00",
+            "flexible_monthly_spend": "800.00",
+            "cash_floor": "3500.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Synthetic floor breach",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_goals": [
+          {
+            "id": 50,
+            "profile_id": 1,
+            "name": "Synthetic reserve goal",
+            "target_date": "2027-08-09",
+            "target_amount": "12000.00",
+            "reserved_amount": "1500.00",
+            "annual_cost": "0.00",
+            "priority": "required",
+            "enabled": true,
+            "notes": "Invented floor state",
+            "created_at": "2026-07-02T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "2400.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": 50, "requires_primary_selection": false}
+    },
+    {
+      "id": "completed_goal",
+      "traits": ["completed_goal"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "3000.00",
+            "essential_monthly_spend": "2200.00",
+            "flexible_monthly_spend": "800.00",
+            "cash_floor": "3000.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Synthetic completed goal",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_goals": [
+          {
+            "id": 60,
+            "profile_id": 1,
+            "name": "Synthetic completed reserve",
+            "target_date": "2026-08-09",
+            "target_amount": "5000.00",
+            "reserved_amount": "5000.00",
+            "annual_cost": "0.00",
+            "priority": "required",
+            "enabled": true,
+            "notes": "Invented completed state",
+            "created_at": "2026-07-02T12:00:00Z",
+            "updated_at": "2026-08-09T12:00:00Z"
+          }
+        ],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "7000.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": 60, "requires_primary_selection": false}
+    },
+    {
+      "id": "missing_source_coverage",
+      "traits": ["missing_or_insufficient_source_coverage"],
+      "tables": {
+        "life_plan_profiles": [
+          {
+            "id": 1,
+            "birth_date": "1992-04-12",
+            "state": "OR",
+            "end_age": 94,
+            "current_monthly_outflow": "3000.00",
+            "essential_monthly_spend": "2200.00",
+            "flexible_monthly_spend": "800.00",
+            "cash_floor": "3000.00",
+            "retirement_tax_rate_pct": "18.0000",
+            "target_ages": [52, 61],
+            "notes": "Synthetic incomplete evidence",
+            "created_at": "2026-07-01T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_goals": [
+          {
+            "id": 70,
+            "profile_id": 1,
+            "name": "Synthetic reserve goal",
+            "target_date": "2027-08-09",
+            "target_amount": "12000.00",
+            "reserved_amount": "1500.00",
+            "annual_cost": "0.00",
+            "priority": "required",
+            "enabled": true,
+            "notes": "Invented unavailable-source state",
+            "created_at": "2026-07-02T12:00:00Z",
+            "updated_at": "2026-08-01T12:00:00Z"
+          }
+        ],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": null,
+        "accessible_investments": null,
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": null,
+        "observed_monthly_outflow": null,
+        "coverage": "insufficient"
+      },
+      "expected_slice_1": {"primary_goal_source_id": 70, "requires_primary_selection": false}
+    }
+  ]
+}
