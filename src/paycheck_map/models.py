@@ -7,22 +7,52 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
+from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from .money import ZERO, Money
 
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """Persist UTC and always return an aware datetime, including on SQLite."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Timestamp must be timezone-aware")
+        normalized = value.astimezone(UTC)
+        if dialect.name == "sqlite":
+            return normalized.replace(tzinfo=None)
+        return normalized
+
+    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        del dialect
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
 
 class Base(DeclarativeBase):
@@ -655,6 +685,150 @@ class LifeProjectionPeriod(Base):
     investment_result: Mapped[Decimal] = mapped_column(Money, default=ZERO)
     total_spendable: Mapped[Decimal] = mapped_column(Money, default=ZERO)
     scenario: Mapped[LifeScenario] = relationship(back_populates="periods")
+
+
+class GoalProgram(Base):
+    """Independent v2 operational-goal configuration copied from Life Lab."""
+
+    __tablename__ = "goal_programs"
+    __table_args__ = (
+        CheckConstraint("target_amount >= 0", name="ck_goal_program_target_nonnegative"),
+        CheckConstraint("protected_cash_floor >= 0", name="ck_goal_program_floor_nonnegative"),
+        CheckConstraint("reserved_amount >= 0", name="ck_goal_program_reserved_nonnegative"),
+        CheckConstraint(
+            "reserved_amount <= target_amount", name="ck_goal_program_reserved_within_target"
+        ),
+        CheckConstraint(
+            "reservation_policy = 'exclusive_primary_goal'",
+            name="ck_goal_program_reservation_policy",
+        ),
+        CheckConstraint("status IN ('active', 'complete')", name="ck_goal_program_status"),
+        CheckConstraint(
+            "tracking_mode = 'explicit_reservation'", name="ck_goal_program_tracking_mode"
+        ),
+        CheckConstraint("json_valid(field_provenance)", name="ck_goal_program_provenance_json"),
+        Index(
+            "uq_goal_programs_single_primary",
+            "is_primary",
+            unique=True,
+            sqlite_where=text("is_primary = 1"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    public_key: Mapped[str] = mapped_column(String(64), unique=True)
+    source_life_goal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("life_goals.id", ondelete="RESTRICT"), nullable=True, unique=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    target_date: Mapped[date] = mapped_column(Date)
+    target_amount: Mapped[Decimal] = mapped_column(Money)
+    protected_cash_floor: Mapped[Decimal] = mapped_column(Money)
+    reserved_amount: Mapped[Decimal] = mapped_column(Money, default=ZERO)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(16))
+    tracking_mode: Mapped[str] = mapped_column(String(32), default="explicit_reservation")
+    reservation_policy: Mapped[str] = mapped_column(String(40), default="exclusive_primary_goal")
+    field_provenance: Mapped[dict[str, Any]] = mapped_column(JSON)
+    contract_version: Mapped[str] = mapped_column(String(40))
+    migration_version: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
+    source_life_goal: Mapped[LifeGoal | None] = relationship()
+    check_ins: Mapped[list[GoalCheckIn]] = relationship(back_populates="goal_program")
+
+
+class GoalCheckIn(Base):
+    """Immutable, source-fingerprinted v2 goal position."""
+
+    __tablename__ = "goal_check_ins"
+    __table_args__ = (
+        UniqueConstraint(
+            "goal_program_id", "source_fingerprint", name="uq_goal_check_in_program_source"
+        ),
+        CheckConstraint("length(check_in_id) = 64", name="ck_goal_check_in_id_length"),
+        CheckConstraint("check_in_id NOT GLOB '*[^0-9a-f]*'", name="ck_goal_check_in_id_hex"),
+        CheckConstraint(
+            "length(source_fingerprint) = 64", name="ck_goal_check_in_fingerprint_length"
+        ),
+        CheckConstraint(
+            "source_fingerprint NOT GLOB '*[^0-9a-f]*'",
+            name="ck_goal_check_in_fingerprint_hex",
+        ),
+        CheckConstraint(
+            "json_valid(position_evidence) AND json_type(position_evidence) = 'object'",
+            name="ck_goal_check_in_evidence_json",
+        ),
+        CheckConstraint(
+            "json_valid(canonical_position_payload) "
+            "AND json_type(canonical_position_payload) = 'object'",
+            name="ck_goal_check_in_payload_json",
+        ),
+    )
+
+    check_in_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    goal_program_id: Mapped[int] = mapped_column(
+        ForeignKey("goal_programs.id", ondelete="RESTRICT"), index=True
+    )
+    source_fingerprint: Mapped[str] = mapped_column(String(64))
+    effective_observation_date: Mapped[date] = mapped_column(Date)
+    accessible_cash: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    accessible_investments: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    retirement_assets_excluded: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    tracked_debt: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    accessible_now: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    protected_cash_floor: Mapped[Decimal] = mapped_column(Money)
+    available_above_floor: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    reserved_amount: Mapped[Decimal] = mapped_column(Money)
+    goal_target: Mapped[Decimal] = mapped_column(Money)
+    remaining_target: Mapped[Decimal] = mapped_column(Money)
+    effective_recurring_take_home: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    observed_recurring_outflow: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    recurring_cash_flow_gap: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    funding_months: Mapped[Decimal] = mapped_column(Numeric(24, 12, asdecimal=True))
+    pace_status: Mapped[str] = mapped_column(String(16))
+    required_funding_pace: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    position_evidence: Mapped[dict[str, Any]] = mapped_column(JSON)
+    canonical_position_payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    position_payload_version: Mapped[str] = mapped_column(String(40))
+    contract_version: Mapped[str] = mapped_column(String(40))
+    calculation_version: Mapped[str] = mapped_column(String(40))
+    fingerprint_version: Mapped[str] = mapped_column(String(40))
+    trigger: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    goal_program: Mapped[GoalProgram] = relationship(back_populates="check_ins")
+    components: Mapped[list[GoalCheckInComponent]] = relationship(back_populates="check_in")
+
+
+class GoalCheckInComponent(Base):
+    """Versioned evidence component belonging to an immutable check-in."""
+
+    __tablename__ = "goal_check_in_components"
+    __table_args__ = (
+        UniqueConstraint("check_in_id", "component_key", name="uq_goal_check_in_component_key"),
+        CheckConstraint(
+            "evidence_class IN ('observed', 'derived', 'user_entered', 'assumed')",
+            name="ck_goal_component_evidence_class",
+        ),
+        CheckConstraint(
+            "json_valid(supporting_source_refs) "
+            "AND json_type(supporting_source_refs) = 'array' "
+            "AND json_array_length(supporting_source_refs) > 0",
+            name="ck_goal_component_source_refs_json",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    check_in_id: Mapped[str] = mapped_column(
+        ForeignKey("goal_check_ins.check_in_id", ondelete="RESTRICT"), index=True
+    )
+    component_key: Mapped[str] = mapped_column(String(64))
+    component_version: Mapped[str] = mapped_column(String(40))
+    amount: Mapped[Decimal] = mapped_column(Money)
+    evidence_class: Mapped[str] = mapped_column(String(16))
+    derivation: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    supporting_source_refs: Mapped[list[str]] = mapped_column(JSON)
+    check_in: Mapped[GoalCheckIn] = relationship(back_populates="components")
 
 
 class ManualCorrection(Base):

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +20,18 @@ from .payroll import generate_payroll_schedule, schedule_validation
 from .reconciliation import reconcile_all
 from .refresh import refresh_status, sync_all_connections
 from .reporting import generate_trailing_report
+
+DATABASE_INITIALIZING_COMMANDS = frozenset(
+    {
+        "serve",
+        "import",
+        "rollback",
+        "report",
+        "payroll-regenerate",
+        "payroll-status",
+        "sync",
+    }
+)
 
 
 def _run(command: list[str]) -> None:
@@ -48,11 +62,11 @@ def _build_frontend_if_needed() -> None:
 def _backup_database(label: str = "backup") -> Path:
     settings.ensure_private_dirs()
     if not settings.database_path.exists():
-        initialize_database()
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        raise FileNotFoundError(f"Active database does not exist: {settings.database_path}")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     destination = settings.backups_dir / f"paycheck-map-{label}-{stamp}.sqlite3"
     with (
-        sqlite3.connect(settings.database_path) as source,
+        _read_only_connection(settings.database_path) as source,
         sqlite3.connect(destination) as target,
     ):
         source.backup(target)
@@ -63,21 +77,43 @@ def _restore_database(source_path: Path) -> Path:
     source = source_path.expanduser().resolve()
     if not source.is_file():
         raise ValueError(f"Backup does not exist: {source}")
-    if source == settings.database_path.resolve():
+    active = settings.database_path.resolve()
+    if source == active or (active.exists() and os.path.samefile(source, active)):
         raise ValueError("Restore source must not be the active database")
-    with sqlite3.connect(source) as check:
-        result = check.execute("PRAGMA integrity_check").fetchone()
-    if result is None or result[0] != "ok":
-        raise ValueError("Backup failed SQLite integrity validation")
+    _validate_sqlite_database(source)
     safety_backup = _backup_database("pre-restore")
-    temporary = settings.database_path.with_suffix(".restore.tmp")
-    with (
-        sqlite3.connect(source) as source_connection,
-        sqlite3.connect(temporary) as target_connection,
-    ):
-        source_connection.backup(target_connection)
-    temporary.replace(settings.database_path)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{settings.database_path.name}.restore-",
+        suffix=".tmp",
+        dir=settings.database_path.parent,
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        with (
+            _read_only_connection(source) as source_connection,
+            sqlite3.connect(temporary) as target_connection,
+        ):
+            source_connection.backup(target_connection)
+        _validate_sqlite_database(temporary)
+        temporary.replace(settings.database_path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return safety_backup
+
+
+def _read_only_connection(path: Path) -> sqlite3.Connection:
+    return sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True)
+
+
+def _validate_sqlite_database(path: Path) -> None:
+    with _read_only_connection(path) as connection:
+        integrity = connection.execute("PRAGMA integrity_check").fetchall()
+        foreign_key_failures = connection.execute("PRAGMA foreign_key_check").fetchall()
+    if integrity != [("ok",)]:
+        raise ValueError("Backup failed SQLite integrity validation")
+    if foreign_key_failures:
+        raise ValueError("Backup failed SQLite foreign-key validation")
 
 
 def _verify() -> None:
@@ -127,8 +163,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     arguments = build_parser().parse_args()
-    settings.ensure_private_dirs()
-    initialize_database()
+    if arguments.command in DATABASE_INITIALIZING_COMMANDS:
+        settings.ensure_private_dirs()
+        initialize_database()
     if arguments.command == "serve":
         _build_frontend_if_needed()
         url = f"http://{settings.host}:{settings.port}"
