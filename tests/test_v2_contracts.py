@@ -267,6 +267,7 @@ def test_check_ins_are_immutable_and_source_equivalent_duplicates_are_rejected()
         source_fingerprint=FINGERPRINT_A,
         effective_observation_date=date(2026, 8, 10),
         position=source_position,
+        trigger="synthetic_test",
         created_at=datetime(2026, 8, 10, 16, 30, tzinfo=UTC),
     )
 

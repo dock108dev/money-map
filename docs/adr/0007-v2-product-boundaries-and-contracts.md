@@ -90,3 +90,16 @@ visible promotion confirmation, remain intentionally deferred to Slices 1–5.
 Existing v1.2.1 accounting, provenance, imports, optional read-only Plaid behavior,
 forecasting, Life Lab results, backup behavior, privacy boundaries, and runtime version are
 unchanged.
+
+## Slice 4 operation boundary
+
+Slice 4 implements one explicit post-operation observation coordinator. Plaid refreshes,
+manual imports, payroll rebuilds, and the typed Goals load-backfill command pass an Eastern
+business observation date plus a completed operation state. The coordinator persists sanitized
+per-source currentness in the existing application-settings domain, then creates an idempotent
+check-in in a separate transaction only when every affected persisted source is current.
+
+Partial and failed states remain retryable and cannot be converted into successful-current
+observations by a browser load. A later complete operation for the affected source restores
+eligibility. Zero Plaid connections remains a valid manual-only state. Existing Goals GET
+endpoints remain read-only; only the explicit backfill command may request persistence.

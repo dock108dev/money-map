@@ -73,8 +73,10 @@ export default function App() {
         const accountCount = result.connections.reduce((total, row) => total + row.accounts, 0);
         setUpdateMessage(
           result.failed > 0
-            ? `${result.failed} account connection${result.failed === 1 ? "" : "s"} needs attention`
-            : `${accountCount} accounts updated`,
+            ? `${result.failed} account connection${result.failed === 1 ? "" : "s"} needs attention · no new goal observation saved`
+            : result.goal_observation.status === "unavailable"
+              ? `${accountCount} accounts updated · goal observation needs retry`
+              : `${accountCount} accounts updated`,
         );
       }
       await refresh();

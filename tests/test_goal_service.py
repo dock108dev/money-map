@@ -19,6 +19,12 @@ from sqlalchemy.orm import Session
 from alembic import command
 from paycheck_map.app import app
 from paycheck_map.db import get_session
+from paycheck_map.goal_observation import (
+    CompletedOperationState,
+    SourceCurrentnessUpdate,
+    coordinate_goal_observation,
+    load_backfill_goal_observation,
+)
 from paycheck_map.goal_service import (
     CalculatedGoalPosition,
     GoalCheckInTrigger,
@@ -676,6 +682,38 @@ def test_check_in_idempotency_same_day_change_and_atomicity(
         assert component_count is not None and component_count > 0
 
 
+def test_observation_date_changes_live_pace_without_changing_check_in_identity(
+    migrated_engine: Engine,
+) -> None:
+    with Session(migrated_engine, expire_on_commit=False) as session:
+        _seed(session)
+        first_position = calculate_primary_goal_position(session, observed_on=date(2026, 8, 10))
+        assert first_position is not None
+        first = ensure_goal_check_in(
+            session,
+            trigger=GoalCheckInTrigger.LOAD_BACKFILL,
+            effective_observation_date=date(2026, 8, 10),
+        )
+        session.commit()
+
+        later_position = calculate_primary_goal_position(session, observed_on=date(2026, 9, 10))
+        assert later_position is not None
+        later = ensure_goal_check_in(
+            session,
+            trigger=GoalCheckInTrigger.LOAD_BACKFILL,
+            effective_observation_date=date(2026, 9, 10),
+        )
+        session.commit()
+
+        assert later_position.source_fingerprint == first_position.source_fingerprint
+        assert later_position.position.required_funding_pace.amount != (
+            first_position.position.required_funding_pace.amount
+        )
+        assert later.check_in_id == first.check_in_id
+        assert later.effective_observation_date == date(2026, 8, 10)
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+
 def test_concurrent_duplicate_creation_converges(migrated_engine: Engine) -> None:
     with Session(migrated_engine, expire_on_commit=False) as session:
         _seed(session)
@@ -695,6 +733,124 @@ def test_concurrent_duplicate_creation_converges(migrated_engine: Engine) -> Non
     assert len(set(identities)) == 1
     with Session(migrated_engine) as session:
         assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+
+def test_load_backfill_created_unchanged_concurrent_and_no_primary(
+    migrated_engine: Engine,
+) -> None:
+    with Session(migrated_engine, expire_on_commit=False) as session:
+        ids = _seed(session)
+        first = load_backfill_goal_observation(session, observed_on=date(2026, 8, 10))
+        repeated = load_backfill_goal_observation(session, observed_on=date(2026, 8, 11))
+        assert first.status == "created"
+        assert repeated.status == "unchanged"
+        assert first.check_in is not None and repeated.check_in is not None
+        assert repeated.check_in.check_in_id == first.check_in.check_in_id
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+        goal = session.get(GoalProgram, ids.goal_id)
+        assert goal is not None
+        goal.is_primary = False
+        session.commit()
+        no_primary = load_backfill_goal_observation(session, observed_on=date(2026, 8, 12))
+        assert no_primary.status == "no_primary"
+
+    with Session(migrated_engine) as session:
+        goal = session.get(GoalProgram, ids.goal_id)
+        assert goal is not None
+        goal.is_primary = True
+        goal.target_amount = Decimal("14001.00")
+        session.commit()
+
+    def worker() -> str:
+        with Session(migrated_engine, expire_on_commit=False) as worker_session:
+            result = load_backfill_goal_observation(worker_session, observed_on=date(2026, 8, 12))
+            assert result.check_in is not None
+            return result.check_in.check_in_id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        identities = list(executor.map(lambda _: worker(), range(2)))
+    assert len(set(identities)) == 1
+    with Session(migrated_engine) as session:
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 2
+
+
+def test_partial_source_state_blocks_load_until_same_source_recovers(
+    migrated_engine: Engine,
+) -> None:
+    with Session(migrated_engine, expire_on_commit=False) as session:
+        _seed(session)
+        partial = coordinate_goal_observation(
+            session,
+            trigger=GoalCheckInTrigger.POST_IMPORT,
+            observed_on=date(2026, 8, 10),
+            operation_state=CompletedOperationState.PARTIAL,
+            source_updates=(
+                SourceCurrentnessUpdate(
+                    source_key="manual_import",
+                    state="partial",
+                    evidence_ref="import_batch:synthetic_partial",
+                ),
+            ),
+        )
+        assert partial.status == "not_current"
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 0
+        assert (
+            load_backfill_goal_observation(session, observed_on=date(2026, 8, 11)).status
+            == "not_current"
+        )
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 0
+
+        recovered = coordinate_goal_observation(
+            session,
+            trigger=GoalCheckInTrigger.POST_IMPORT,
+            observed_on=date(2026, 8, 11),
+            operation_state=CompletedOperationState.COMPLETE,
+            source_updates=(
+                SourceCurrentnessUpdate(
+                    source_key="manual_import",
+                    state="complete",
+                    evidence_ref="import_batch:synthetic_complete",
+                ),
+            ),
+        )
+        assert recovered.status == "created"
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+
+def test_observation_failure_rolls_back_only_check_in_transaction(
+    migrated_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with Session(migrated_engine, expire_on_commit=False) as session:
+        _seed(session)
+        session.add(ApplicationSetting(key="financial-operation", value="committed"))
+        session.commit()
+
+        def fail_check_in(*args: object, **kwargs: object) -> None:
+            del args, kwargs
+            raise RuntimeError("synthetic observation failure")
+
+        monkeypatch.setattr(
+            "paycheck_map.goal_observation.ensure_goal_check_in_result", fail_check_in
+        )
+        result = coordinate_goal_observation(
+            session,
+            trigger=GoalCheckInTrigger.POST_PAYROLL,
+            observed_on=date(2026, 8, 10),
+            operation_state=CompletedOperationState.COMPLETE,
+            source_updates=(
+                SourceCurrentnessUpdate(
+                    source_key="payroll",
+                    state="complete",
+                    evidence_ref="payroll_rebuild:synthetic",
+                ),
+            ),
+        )
+        assert result.status == "unavailable"
+        assert result.retryable is True
+        assert session.get(ApplicationSetting, "financial-operation") is not None
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 0
 
 
 def test_caller_transaction_boundary_success_unchanged_and_rollback(
@@ -719,6 +875,9 @@ def test_caller_transaction_boundary_success_unchanged_and_rollback(
         assert unchanged.check_in_id == first.check_in_id
 
         session.add(ApplicationSetting(key="caller-failed", value="rolling-back"))
+        goal = primary_goal(session)
+        assert goal is not None
+        goal.target_amount = Decimal("14001.00")
         rolled_back = ensure_goal_check_in(
             session,
             trigger=GoalCheckInTrigger.POST_IMPORT,
@@ -1232,6 +1391,44 @@ def test_read_apis_are_typed_explicit_and_never_create_check_ins(
         assert provenance["source_fingerprint"]
         assert "original_filename" not in str(provenance)
         assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 0
+
+
+def test_backfill_api_is_explicit_idempotent_and_accepts_no_browser_telemetry(
+    migrated_engine: Engine,
+) -> None:
+    with Session(migrated_engine, expire_on_commit=False) as session:
+        _seed(session)
+
+        def override_session() -> Iterator[Session]:
+            yield session
+
+        app.dependency_overrides[get_session] = override_session
+        try:
+
+            async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport, base_url="http://test.local"
+                ) as client:
+                    created = await client.post("/api/v2/goals/check-ins/backfill")
+                    unchanged = await client.post("/api/v2/goals/check-ins/backfill")
+                    rejected_telemetry = await client.post(
+                        "/api/v2/goals/check-ins/backfill",
+                        json={"opened_at": "2026-08-10T12:00:00Z"},
+                    )
+                    return created, unchanged, rejected_telemetry
+
+            created, unchanged, rejected_telemetry = asyncio.run(exercise())
+        finally:
+            app.dependency_overrides.clear()
+        assert created.status_code == 200
+        assert created.json()["status"] == "created"
+        assert unchanged.status_code == 200
+        assert unchanged.json()["status"] == "unchanged"
+        assert rejected_telemetry.status_code == 200
+        assert rejected_telemetry.json()["status"] == "unchanged"
+        assert "opened_at" not in rejected_telemetry.text
+        assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
 
 
 def test_api_goal_edit_and_selection_conflicts(migrated_engine: Engine) -> None:

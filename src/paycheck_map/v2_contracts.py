@@ -376,6 +376,13 @@ class GoalCheckIn(ContractModel):
     source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     effective_observation_date: date
     position: GoalPosition
+    trigger: Literal[
+        "post_refresh",
+        "post_import",
+        "post_payroll",
+        "load_backfill",
+        "synthetic_test",
+    ]
     created_at: datetime
     contract_version: Literal["money-map-v2-contract-v1"] = CONTRACT_VERSION
 
@@ -415,15 +422,42 @@ class GoalCheckInState(ContractModel):
         return self
 
 
+class GoalObservationResult(ContractModel):
+    """Sanitized result of an explicit post-operation observation command."""
+
+    status: Literal["created", "unchanged", "no_primary", "not_current", "unavailable"]
+    trigger: Literal["post_refresh", "post_import", "post_payroll", "load_backfill"]
+    check_in: GoalCheckIn | None = None
+    retryable: bool = False
+    message: str = Field(min_length=1, max_length=240)
+
+    @model_validator(mode="after")
+    def match_observation_result(self) -> Self:
+        accepted = self.status in {"created", "unchanged"}
+        if accepted != (self.check_in is not None):
+            raise ValueError("Accepted observation results require accepted check-in data")
+        if self.status == "created" and self.retryable:
+            raise ValueError("A created observation cannot require retry")
+        if self.status in {"not_current", "unavailable"} and not self.retryable:
+            raise ValueError("An unavailable current observation must remain retryable")
+        return self
+
+
 class GoalCheckInTimelinePage(ContractModel):
     state: Literal["available", "no_primary"]
     check_ins: tuple[GoalCheckIn, ...] = ()
+    comparisons: tuple[GoalComparison, ...] = ()
     next_cursor: str | None = None
 
     @model_validator(mode="after")
     def require_empty_no_primary_page(self) -> Self:
-        if self.state == "no_primary" and (self.check_ins or self.next_cursor is not None):
+        if self.state == "no_primary" and (
+            self.check_ins or self.comparisons or self.next_cursor is not None
+        ):
             raise ValueError("A no-primary timeline must be empty")
+        check_in_ids = {item.check_in_id for item in self.check_ins}
+        if any(item.current_check_in_id not in check_in_ids for item in self.comparisons):
+            raise ValueError("Timeline comparisons must belong to a returned current check-in")
         return self
 
 
@@ -540,6 +574,9 @@ class GoalComparisonState(ContractModel):
         elif self.comparison is not None or self.reason is None:
             raise ValueError("Unavailable comparison states require only a reason")
         return self
+
+
+GoalCheckInTimelinePage.model_rebuild()
 
 
 class GoalMilestoneKind(StrEnum):

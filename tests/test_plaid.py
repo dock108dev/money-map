@@ -8,11 +8,14 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from paycheck_map.goal_operations import sync_connection_with_goal_observation
 from paycheck_map.keychain import MemorySecretStore
 from paycheck_map.models import (
     Account,
     AccountTransaction,
     BalanceSnapshot,
+    GoalCheckIn,
+    GoalProgram,
     ImportArtifact,
     InvestmentHolding,
     InvestmentValueBridge,
@@ -237,6 +240,15 @@ class FailingFidelityPlaidClient(FakeFidelityPlaidClient):
         raise PlaidAPIError(code="NETWORK_ERROR", message="Provider is temporarily unavailable")
 
 
+class ChangedSofiPlaidClient(FakeSofiPlaidClient):
+    def accounts_balance_get(self, access_token: str) -> JsonObject:
+        response = super().accounts_balance_get(access_token)
+        account = dict(_sofi_account())
+        account["balances"] = {"current": 5100, "available": 4900}
+        response["accounts"] = [account]
+        return response
+
+
 def _sofi_account() -> JsonObject:
     return {
         "account_id": "acct-sofi",
@@ -270,6 +282,38 @@ def _configured_store() -> MemorySecretStore:
         store=store,
     )
     return store
+
+
+def _add_primary_goal(session: Session) -> None:
+    session.add(
+        GoalProgram(
+            public_key="goal_synthetic_refresh",
+            source_life_goal_id=None,
+            name="Synthetic refresh goal",
+            target_date=date(2027, 8, 10),
+            target_amount=Decimal("10000.00"),
+            protected_cash_floor=Decimal("1000.00"),
+            reserved_amount=Decimal("500.00"),
+            is_primary=True,
+            status="active",
+            tracking_mode="explicit_reservation",
+            reservation_policy="exclusive_primary_goal",
+            field_provenance={
+                field: {
+                    "evidence": "user_entered",
+                    "source_refs": [f"synthetic:goal:{field}"],
+                }
+                for field in (
+                    "target_amount",
+                    "protected_cash_floor",
+                    "reserved_amount",
+                )
+            },
+            contract_version="money-map-v2-contract-v1",
+            migration_version="0009_goal_persistence",
+        )
+    )
+    session.commit()
 
 
 def test_plaid_client_uses_headers_without_putting_secrets_in_payload() -> None:
@@ -532,6 +576,74 @@ def test_global_refresh_updates_all_connections_and_appends_one_snapshot_per_day
     assert repeated["succeeded"] == 2
     assert session.scalar(select(func.count(BalanceSnapshot.id))) == initial_snapshots + 2
     assert session.scalar(select(func.count(AccountTransaction.id))) == initial_transactions
+
+
+def test_goal_observation_counts_for_global_partial_and_individual_refreshes(
+    migrated_session: Session,
+) -> None:
+    session = migrated_session
+    store, sofi_client, fidelity_client, sofi_id, fidelity_id = _connect_synthetic_items(session)
+    _add_primary_goal(session)
+    observed = datetime(2026, 8, 11, 16, tzinfo=UTC)
+
+    first = sync_all_connections(
+        session,
+        store=store,
+        now=observed,
+        clients={sofi_id: sofi_client, fidelity_id: fidelity_client},
+    )
+    assert first["goal_observation"]["status"] == "created"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+    repeated = sync_all_connections(
+        session,
+        store=store,
+        now=observed,
+        clients={sofi_id: sofi_client, fidelity_id: fidelity_client},
+    )
+    assert repeated["goal_observation"]["status"] == "unchanged"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+    changed = sync_all_connections(
+        session,
+        store=store,
+        now=observed,
+        clients={sofi_id: ChangedSofiPlaidClient(), fidelity_id: fidelity_client},
+    )
+    assert changed["status"] == "complete"
+    assert changed["goal_observation"]["status"] == "created"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 2
+
+    next_day = observed + timedelta(days=1)
+    partial = sync_all_connections(
+        session,
+        store=store,
+        now=next_day,
+        clients={sofi_id: ChangedSofiPlaidClient(), fidelity_id: FailingFidelityPlaidClient()},
+    )
+    assert partial["status"] == "partial"
+    assert partial["goal_observation"]["status"] == "not_current"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 2
+
+    with pytest.raises(PlaidAPIError):
+        sync_connection_with_goal_observation(
+            session,
+            fidelity_id,
+            observed_on=next_day.date(),
+            store=store,
+            client=FailingFidelityPlaidClient(),
+        )
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 2
+
+    _connection, recovered = sync_connection_with_goal_observation(
+        session,
+        fidelity_id,
+        observed_on=next_day.date(),
+        store=store,
+        client=fidelity_client,
+    )
+    assert recovered.status == "created"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 3
 
 
 def test_global_refresh_records_truthful_sequential_operation_times(session: Session) -> None:

@@ -58,6 +58,11 @@ This actual-calendar convention automatically uses 29 days for February in a lea
 Contract vectors cover month boundaries, same-month targets, same-day targets, expired
 targets, leap day, and cent rounding.
 
+The observation date is a live calculation input, not financial evidence. A later caller date
+may change funding months and required pace without changing the source fingerprint or creating
+a financial-change check-in. A persisted check-in retains the pace calculated on its original
+Eastern business observation date; the current Goals card uses the live position read.
+
 ## Comparison contract
 
 A comparison uses two immutable check-ins with different source fingerprints, ordered

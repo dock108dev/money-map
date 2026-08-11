@@ -13,6 +13,13 @@ from .balances import add_manual_value_observation
 from .config import settings
 from .db import get_session
 from .forecasting import ScenarioInput, build_forecast, ensure_baseline
+from .goal_observation import load_backfill_goal_observation
+from .goal_operations import (
+    exchange_token_with_goal_observation,
+    import_inbox_with_goal_observation,
+    regenerate_payroll_with_goal_observation,
+    sync_connection_with_goal_observation,
+)
 from .goal_service import (
     GoalValidationError,
     IneligibleGoalError,
@@ -29,7 +36,7 @@ from .goal_service import (
     primary_goal_state,
     select_primary_goal,
 )
-from .ingestion import import_private_inbox, rollback_import_batch
+from .ingestion import rollback_import_batch
 from .keychain import SecretStore, SecretStoreError, keychain
 from .life_plan import (
     LifeGoalInput,
@@ -52,22 +59,21 @@ from .life_plan import (
     upsert_profile,
 )
 from .models import LifeGoal, LifeScenario, ManualCorrection, PayrollStatement
-from .payroll import RECEIVED_END, RECEIVED_START, generate_payroll_schedule
+from .payroll import RECEIVED_END, RECEIVED_START
 from .plaid_client import PlaidAPIError
 from .plaid_service import (
     clear_plaid_configuration,
     configure_plaid,
     create_plaid_link_session,
     create_plaid_update_session,
-    exchange_plaid_public_token,
     plaid_configuration_status,
     plaid_status,
     revoke_plaid_connection,
-    sync_plaid_connection,
 )
 from .reconciliation import reconcile_all
 from .refresh import (
     RefreshAlreadyRunningError,
+    local_business_date,
     refresh_guard,
     refresh_status,
     set_auto_refresh_enabled,
@@ -98,6 +104,7 @@ from .v2_contracts import (
     GoalComparisonState,
     GoalEditRequest,
     GoalMilestoneState,
+    GoalObservationResult,
     GoalPositionState,
     GoalProgramView,
     GoalProvenanceState,
@@ -256,8 +263,16 @@ def get_v2_goal_check_ins(
     return GoalCheckInTimelinePage(
         state="available",
         check_ins=result.check_ins,
+        comparisons=result.comparisons,
         next_cursor=result.next_cursor,
     )
+
+
+@router.post("/v2/goals/check-ins/backfill")
+def post_v2_goal_check_in_backfill(
+    session: Session = Depends(get_session),
+) -> GoalObservationResult:
+    return load_backfill_goal_observation(session, observed_on=local_business_date())
 
 
 @router.get("/v2/goals/comparison")
@@ -567,13 +582,18 @@ def get_payroll_reconciliation(session: Session = Depends(get_session)) -> dict[
 @router.post("/payroll/regenerate")
 def regenerate_payroll(session: Session = Depends(get_session)) -> dict[str, Any]:
     try:
-        result = generate_payroll_schedule(session)
-        reconcile_all(session)
-        session.commit()
+        result, observation = regenerate_payroll_with_goal_observation(
+            session,
+            observed_on=local_business_date(),
+        )
     except ValueError as exc:
         session.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {**result, "reconciliation": payroll_reconciliation(session)}
+    return {
+        **result,
+        "reconciliation": payroll_reconciliation(session),
+        "goal_observation": observation.model_dump(mode="json"),
+    }
 
 
 @router.get("/payroll/{entry_id}")
@@ -619,13 +639,17 @@ def get_imports(session: Session = Depends(get_session)) -> list[dict[str, Any]]
 
 @router.post("/imports/scan")
 def scan_inbox(session: Session = Depends(get_session)) -> dict[str, Any]:
-    outcome = import_private_inbox(session)
+    outcome, observation = import_inbox_with_goal_observation(
+        session,
+        observed_on=local_business_date(),
+    )
     return {
         "batch_id": outcome.batch_id,
         "discovered": outcome.discovered,
         "imported": outcome.imported,
         "duplicates": outcome.duplicates,
         "errors": outcome.errors,
+        "goal_observation": observation.model_dump(mode="json"),
     }
 
 
@@ -796,16 +820,18 @@ def exchange_link_token(
     store: SecretStore = Depends(get_secret_store),
 ) -> dict[str, Any]:
     try:
-        connection = exchange_plaid_public_token(
+        connection, observation = exchange_token_with_goal_observation(
             session,
             link_session_id=payload.session_id,
             public_token=payload.public_token.get_secret_value(),
+            observed_on=local_business_date(),
             store=store,
         )
         return {
             "connection_id": connection.id,
             "status": connection.status,
             "target": connection.target,
+            "goal_observation": observation.model_dump(mode="json"),
         }
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -826,11 +852,17 @@ def sync_connection(
 ) -> dict[str, Any]:
     try:
         with refresh_guard():
-            connection = sync_plaid_connection(session, connection_id, store=store)
+            connection, observation = sync_connection_with_goal_observation(
+                session,
+                connection_id,
+                observed_on=local_business_date(),
+                store=store,
+            )
         return {
             "connection_id": connection.id,
             "status": connection.status,
             "last_synced_at": connection.last_synced_at,
+            "goal_observation": observation.model_dump(mode="json"),
         }
     except RefreshAlreadyRunningError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -8,6 +8,7 @@ import type {
   GoalComparisonState,
   GoalMilestoneKind,
   GoalMilestoneState,
+  GoalObservationResult,
   GoalPosition,
   GoalPositionState,
   GoalProgramView,
@@ -159,19 +160,30 @@ export const checkIn: GoalCheckIn = {
   source_fingerprint: goalHash,
   effective_observation_date: "2026-08-10",
   position: goalPosition,
+  trigger: "post_refresh",
   created_at: "2026-08-10T12:00:00Z",
   contract_version: "money-map-v2-contract-v1",
+};
+
+export const unchangedObservation: GoalObservationResult = {
+  status: "unchanged",
+  trigger: "load_backfill",
+  check_in: checkIn,
+  retryable: false,
+  message: "The current financial evidence already has a saved observation.",
 };
 
 export const historyPage: GoalCheckInTimelinePage = {
   state: "available",
   check_ins: [checkIn],
+  comparisons: [],
   next_cursor: "older-cursor",
 };
 
 export const olderHistoryPage: GoalCheckInTimelinePage = {
   state: "available",
   check_ins: [{ ...checkIn, check_in_id: "older-check-in", effective_observation_date: "2026-07-10" }],
+  comparisons: [],
   next_cursor: null,
 };
 

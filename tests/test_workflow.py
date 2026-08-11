@@ -9,12 +9,15 @@ from sqlalchemy.orm import Session
 
 from paycheck_map.config import Settings
 from paycheck_map.forecasting import ScenarioInput, build_forecast, ensure_baseline
+from paycheck_map.goal_operations import import_inbox_with_goal_observation
 from paycheck_map.ingestion import import_private_inbox, rollback_import_batch
 from paycheck_map.models import (
     Account,
     AccountBalancePoint,
     AccountTransaction,
     ForecastScenario,
+    GoalCheckIn,
+    GoalProgram,
     ImportArtifact,
     InvestmentValueBridge,
     PayrollLineItem,
@@ -30,6 +33,76 @@ from paycheck_map.services import (
     overview,
     timeline,
 )
+
+
+def _add_primary_goal(session: Session) -> None:
+    session.add(
+        GoalProgram(
+            public_key="goal_synthetic_import",
+            source_life_goal_id=None,
+            name="Synthetic import goal",
+            target_date=date(2027, 8, 10),
+            target_amount=Decimal("12000.00"),
+            protected_cash_floor=Decimal("2000.00"),
+            reserved_amount=Decimal("1000.00"),
+            is_primary=True,
+            status="active",
+            tracking_mode="explicit_reservation",
+            reservation_policy="exclusive_primary_goal",
+            field_provenance={
+                field: {
+                    "evidence": "user_entered",
+                    "source_refs": [f"synthetic:goal:{field}"],
+                }
+                for field in (
+                    "target_amount",
+                    "protected_cash_floor",
+                    "reserved_amount",
+                )
+            },
+            contract_version="money-map-v2-contract-v1",
+            migration_version="0009_goal_persistence",
+        )
+    )
+    session.commit()
+
+
+def test_manual_import_goal_observation_clean_duplicate_and_error(
+    migrated_session: Session,
+    runtime_settings: Settings,
+    populated_inbox: Path,
+) -> None:
+    session = migrated_session
+    del populated_inbox
+    _add_primary_goal(session)
+    first, first_observation = import_inbox_with_goal_observation(
+        session,
+        observed_on=date(2026, 8, 10),
+        runtime_settings=runtime_settings,
+    )
+    assert first.imported == 4 and not first.errors
+    assert first_observation.status == "created"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+    duplicate, duplicate_observation = import_inbox_with_goal_observation(
+        session,
+        observed_on=date(2026, 8, 11),
+        runtime_settings=runtime_settings,
+    )
+    assert duplicate.imported == 0 and duplicate.duplicates == 4
+    assert duplicate_observation.status == "unchanged"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+    invalid = runtime_settings.inbox_dir / "synthetic-invalid.csv"
+    invalid.write_text("not,a,supported,ledger\n", encoding="utf-8")
+    partial, partial_observation = import_inbox_with_goal_observation(
+        session,
+        observed_on=date(2026, 8, 12),
+        runtime_settings=runtime_settings,
+    )
+    assert partial.errors
+    assert partial_observation.status == "not_current"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
 
 
 def test_import_reconcile_forecast_report_and_rollback(

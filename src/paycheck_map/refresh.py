@@ -11,6 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .forecasting import ensure_baseline
+from .goal_observation import (
+    CompletedOperationState,
+    SourceCurrentnessUpdate,
+    coordinate_goal_observation,
+    operation_evidence_ref,
+    plaid_source_key,
+)
+from .goal_service import GoalCheckInTrigger
 from .keychain import SecretStore, SecretStoreError, keychain
 from .models import ApplicationSetting, PlaidConnection, PlaidSyncRun
 from .plaid_client import PlaidAPIError, PlaidClient
@@ -154,6 +162,12 @@ def sync_all_connections(
             if not status_before["automatic_refresh_due"]:
                 freshness = refresh_status(session, now=started, in_progress=False)
                 finished = _clock_timestamp(operation_clock, not_before=started)
+                observation = coordinate_goal_observation(
+                    session,
+                    trigger=GoalCheckInTrigger.POST_REFRESH,
+                    observed_on=business_date,
+                    operation_state=CompletedOperationState.SKIPPED,
+                )
                 return {
                     "status": "skipped",
                     "reason": "already_current_or_attempted",
@@ -164,6 +178,7 @@ def sync_all_connections(
                     "failed": 0,
                     "connections": [],
                     "freshness": freshness,
+                    "goal_observation": observation.model_dump(mode="json"),
                 }
             _set_setting(session, AUTO_ATTEMPT_KEY, business_date.isoformat())
             session.commit()
@@ -176,6 +191,7 @@ def sync_all_connections(
             )
         )
         results: list[dict[str, Any]] = []
+        currentness_updates: list[SourceCurrentnessUpdate] = []
         succeeded = 0
         last_event = started
         for connection_id in connection_ids:
@@ -237,6 +253,21 @@ def sync_all_connections(
                         "message": None,
                     }
                 )
+                currentness_updates.append(
+                    SourceCurrentnessUpdate(
+                        source_key=plaid_source_key(connection_id),
+                        state="complete",
+                        evidence_ref=(
+                            operation_evidence_ref(
+                                "plaid_sync_run",
+                                current_run.id,
+                                current_run.finished_at,
+                            )
+                            if current_run is not None
+                            else operation_evidence_ref("plaid_sync_attempt", connection_id)
+                        ),
+                    )
+                )
                 succeeded += 1
             except Exception as exc:  # connection failures are isolated and safely summarized
                 code, message = _safe_failure(exc)
@@ -282,12 +313,37 @@ def sync_all_connections(
                         "message": message,
                     }
                 )
+                currentness_updates.append(
+                    SourceCurrentnessUpdate(
+                        source_key=plaid_source_key(connection_id),
+                        state="failed",
+                        evidence_ref=(
+                            operation_evidence_ref(
+                                "plaid_sync_run",
+                                current_run.id,
+                                current_run.finished_at,
+                            )
+                            if current_run is not None
+                            else operation_evidence_ref("plaid_sync_attempt", connection_id)
+                        ),
+                    )
+                )
 
         if succeeded:
             with suppress(ValueError):
                 ensure_baseline(session)
         finished = _clock_timestamp(operation_clock, not_before=last_event)
         failed = len(connection_ids) - succeeded
+        operation_state = (
+            CompletedOperationState.COMPLETE if failed == 0 else CompletedOperationState.PARTIAL
+        )
+        observation = coordinate_goal_observation(
+            session,
+            trigger=GoalCheckInTrigger.POST_REFRESH,
+            observed_on=business_date,
+            operation_state=operation_state,
+            source_updates=tuple(currentness_updates),
+        )
         return {
             "status": "complete" if failed == 0 else "partial",
             "started_at": started,
@@ -297,4 +353,5 @@ def sync_all_connections(
             "failed": failed,
             "connections": results,
             "freshness": refresh_status(session, now=finished, in_progress=False),
+            "goal_observation": observation.model_dump(mode="json"),
         }

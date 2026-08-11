@@ -6,10 +6,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from alembic.config import Config
 from reportlab.pdfgen import canvas
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from alembic import command
 from paycheck_map.config import Settings
 from paycheck_map.db import make_engine
 from paycheck_map.models import Base
@@ -124,6 +126,21 @@ def db_engine(runtime_settings: Settings) -> Iterator[Engine]:
 def session(db_engine: Engine) -> Iterator[Session]:
     with Session(db_engine, expire_on_commit=False) as db_session:
         yield db_session
+
+
+@pytest.fixture
+def migrated_session(runtime_settings: Settings) -> Iterator[Session]:
+    """Synthetic runtime explicitly upgraded through 0009 for v2 operation tests."""
+
+    runtime_settings.ensure_private_dirs()
+    config = Config()
+    config.set_main_option("script_location", str(PROJECT_ROOT / "alembic"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{runtime_settings.database_path}")
+    command.upgrade(config, "0009_goal_persistence")
+    engine = make_engine(runtime_settings)
+    with Session(engine, expire_on_commit=False) as db_session:
+        yield db_session
+    engine.dispose()
 
 
 @pytest.fixture

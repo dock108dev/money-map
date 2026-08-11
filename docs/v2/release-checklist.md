@@ -76,13 +76,40 @@ credential, or real balance enters the repository.
 
 ## Slice 4 — update integration and timeline
 
-- [ ] Repeated unchanged refresh/open/import produces no duplicate check-in.
-- [ ] One changed successful synthetic update produces exactly one comparable check-in.
-- [ ] Partial and failed refreshes remain visible and cannot create a successful-current
-  check-in.
-- [ ] Manual import and read-only Plaid paths use the same post-operation service.
-- [ ] Timeline contains distinct financial observations, not browser-open telemetry.
-- [ ] Verify no provider call is needed by synthetic CI.
+- [x] Source fingerprints use financial/configuration evidence dates rather than the caller's
+  observation date. Identical evidence on a later day remains source-equivalent while the live
+  required pace can advance independently.
+- [x] One shared post-operation coordinator serves global and individual read-only Plaid,
+  manual import, payroll rebuild, and explicit load backfill. It returns only `created`,
+  `unchanged`, `no_primary`, `not_current`, or retryable `unavailable` contracts.
+- [x] Repeated unchanged complete refresh/open/import/payroll operations write zero additional
+  check-ins. One changed complete operation writes one check-in; a global refresh never writes
+  once per connection.
+- [x] Partial, failed, and skipped operations write zero successful-current check-ins. Persisted
+  per-source currentness prevents load backfill from laundering a preceding failure, and a later
+  complete operation for that source restores eligibility.
+- [x] Check-in persistence has its own transaction boundary. An injected insertion failure
+  preserved already committed financial evidence, rolled back only the observation, and returned
+  a visible retryable result without converting provider success into provider failure.
+- [x] Every Goals GET remains write-free. `POST /api/v2/goals/check-ins/backfill` is the sole
+  explicit load command and sends no browser timestamp, telemetry, filename, account identifier,
+  merchant detail, credential, or raw provider payload.
+- [x] “Since last financial change” compares the latest two distinct persisted fingerprints.
+  The recent timeline retains cursor pagination and the 25-row render cap, with compressed safe
+  summaries and expandable exact evidence/components including unexplained residual.
+- [x] Synthetic Alembic-`0009` coverage passed for unchanged/changed/partial/failed global and
+  individual refresh, import, payroll, repeated/concurrent backfill, no-primary, independent
+  observation rollback, exact comparison reconciliation, read purity, and timestamp invariants.
+- [x] Isolated browser validation on alternate ports passed at 1440×900, 1024×768, and 390×844
+  for first/unchanged backfill, positive/negative/zero comparison, not-current, retryable
+  observation failure, no-primary, and compressed/expanded timeline. It found no horizontal
+  overflow, clipped money, console warning/error, heading/live-region issue, or Goals-surface
+  Retirement/Life Lab leakage; ignored evidence is under
+  `.local/v2-slice4-browser-20260810/screenshots/`.
+- [x] `uv run paycheck-map verify` passed 135 backend tests with one intentionally opt-in skip,
+  63 frontend tests, formatting, Ruff, strict mypy, TypeScript, production build, and privacy
+  scan. Standalone private-data, lock, diff, and frontend-build gates passed without a provider
+  call, Keychain access, credential, or owner-database migration/write.
 
 ## Slice 5 — Retirement and Lab separation
 

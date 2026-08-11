@@ -9,6 +9,7 @@ import {
   noCandidatesState,
   positionState,
   primaryState,
+  unchangedObservation,
 } from "./goals/fixtures";
 
 const json = (value: unknown) =>
@@ -112,6 +113,7 @@ function workingFetch(refreshDue = false, connectionCount = 1) {
           ? [{ connection_id: 1, institution: "Bank", status: "complete", accounts: 10, transactions: 0, holdings: 0, balance_snapshot_date: "2026-07-31", started_at: "2026-07-31T15:00:00Z", finished_at: "2026-07-31T15:00:01Z", last_synced_at: "2026-07-31T15:00:01Z", error_code: null, message: null }]
           : [],
         freshness: plaid(false, connectionCount).refresh,
+        goal_observation: { ...unchangedObservation, trigger: "post_refresh" },
         automatic: init?.body,
       });
     }
@@ -122,6 +124,7 @@ function workingFetch(refreshDue = false, connectionCount = 1) {
     if (url === "/api/plaid/status") return json(plaid(refreshDue, connectionCount));
     if (url === "/api/payroll") return json({ period: { start: "2025-01-01", end: "2026-07-29" }, count: 0, statement_count: 0, calculated_count: 0, totals: {}, rows: [] });
     if (url === "/api/v2/goals/primary") return json(primaryState);
+    if (url === "/api/v2/goals/check-ins/backfill") return json(unchangedObservation);
     if (url === "/api/v2/goals/position") return json(positionState);
     if (url === "/api/v2/goals/check-ins/latest") return json(latestState);
     if (url === "/api/v2/goals/comparison") return json(comparisonState("250.00"));

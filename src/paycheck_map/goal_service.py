@@ -103,6 +103,7 @@ class GoalValidationError(GoalServiceError):
 class GoalCheckInTrigger(StrEnum):
     POST_REFRESH = "post_refresh"
     POST_IMPORT = "post_import"
+    POST_PAYROLL = "post_payroll"
     LOAD_BACKFILL = "load_backfill"
     SYNTHETIC_TEST = "synthetic_test"
 
@@ -124,7 +125,14 @@ class GoalComparisonResult:
 @dataclass(frozen=True)
 class GoalTimelinePage:
     check_ins: tuple[GoalCheckIn, ...]
+    comparisons: tuple[GoalComparison, ...]
     next_cursor: str | None
+
+
+@dataclass(frozen=True)
+class EnsuredGoalCheckIn:
+    check_in: GoalCheckIn
+    created: bool
 
 
 def primary_goal(session: Session) -> GoalProgram | None:
@@ -206,14 +214,14 @@ def calculate_goal_position(
     observed_on: date,
 ) -> CalculatedGoalPosition:
     records: list[FingerprintSourceRecord] = []
-    account_evidence = _account_position_evidence(session, observed_on=observed_on)
+    account_evidence = _account_position_evidence(session)
     records.extend(account_evidence.records)
 
     payroll_money, payroll_record = _payroll_evidence(session)
     if payroll_record is not None:
         records.append(payroll_record)
 
-    outflow_money, outflow_record = _recurring_outflow_evidence(session, observed_on=observed_on)
+    outflow_money, outflow_record = _recurring_outflow_evidence(session)
     if outflow_record is not None:
         records.append(outflow_record)
 
@@ -222,7 +230,7 @@ def calculate_goal_position(
         program.protected_cash_floor, _program_refs(program, "protected_cash_floor")
     )
     reserved = _entered_money(program.reserved_amount, _program_refs(program, "reserved_amount"))
-    goal_record = _goal_configuration_record(program, observed_on=observed_on)
+    goal_record = _goal_configuration_record(program)
     records.append(goal_record)
 
     accessible_now = _derived_sum(
@@ -312,7 +320,7 @@ class _AccountPositionEvidence:
     records: tuple[FingerprintSourceRecord, ...]
 
 
-def _account_position_evidence(session: Session, *, observed_on: date) -> _AccountPositionEvidence:
+def _account_position_evidence(session: Session) -> _AccountPositionEvidence:
     pairs = list(
         session.execute(select(Account, Institution).join(Institution).order_by(Account.id))
     )
@@ -410,7 +418,7 @@ def _account_position_evidence(session: Session, *, observed_on: date) -> _Accou
                 kind=SourceRecordKind.INVESTMENT_ACCESS,
                 record_identity=inventory_ref,
                 record_hash=inventory_hash,
-                effective_date=observed_on,
+                effective_date=date(1970, 1, 1),
                 money_facts=(
                     _source_fact("accessible_investments", ZERO, EvidenceClass.OBSERVED),
                     _source_fact("retirement_assets_excluded", ZERO, EvidenceClass.OBSERVED),
@@ -444,7 +452,7 @@ def _account_position_evidence(session: Session, *, observed_on: date) -> _Accou
                 kind=SourceRecordKind.BALANCE,
                 record_identity=inventory_ref,
                 record_hash=_canonical_hash({"kind": "debt_account_inventory", "ids": []}),
-                effective_date=observed_on,
+                effective_date=date(1970, 1, 1),
                 money_facts=(_source_fact("tracked_debt", ZERO, EvidenceClass.OBSERVED),),
             )
         )
@@ -543,7 +551,7 @@ def _payroll_evidence(
 
 
 def _recurring_outflow_evidence(
-    session: Session, *, observed_on: date
+    session: Session,
 ) -> tuple[EvidencedMoney, FingerprintSourceRecord | None]:
     cash_accounts = list(
         session.scalars(
@@ -608,7 +616,6 @@ def _recurring_outflow_evidence(
         coverage_refs.extend(f"balance_snapshot:{row.id}" for row in snapshots)
         coverage_refs.extend(f"balance_point:{row.id}:{row.fingerprint}" for row in points)
     complete_months = set.intersection(*complete_by_account) if complete_by_account else set()
-    complete_months.discard((observed_on.year, observed_on.month))
     if not complete_months:
         return _unavailable_money("No complete observed cash months establish outflow"), None
 
@@ -666,9 +673,8 @@ def _recurring_outflow_evidence(
     return _observed_money(monthly, (ref,)), record
 
 
-def _goal_configuration_record(
-    program: GoalProgram, *, observed_on: date
-) -> FingerprintSourceRecord:
+def _goal_configuration_record(program: GoalProgram) -> FingerprintSourceRecord:
+    effective_date = _aware_utc(program.updated_at).date()
     configuration_hash = _canonical_hash(
         {
             "goal_program_id": program.public_key,
@@ -680,14 +686,14 @@ def _goal_configuration_record(
                 field: _program_refs(program, field)
                 for field in ("target_amount", "protected_cash_floor", "reserved_amount")
             },
-            "effective_observation_date": observed_on.isoformat(),
+            "configuration_effective_date": effective_date.isoformat(),
         }
     )
     return FingerprintSourceRecord(
         kind=SourceRecordKind.GOAL_CONFIGURATION,
-        record_identity=f"goal_configuration:{program.public_key}:{observed_on.isoformat()}",
+        record_identity=f"goal_configuration:{program.public_key}",
         record_hash=configuration_hash,
-        effective_date=observed_on,
+        effective_date=effective_date,
         money_facts=(
             _source_fact("goal_target", program.target_amount, EvidenceClass.USER_ENTERED),
             _source_fact(
@@ -712,6 +718,21 @@ def ensure_goal_check_in(
     constraint, rather than only a preflight read, converges concurrent callers.
     """
 
+    return ensure_goal_check_in_result(
+        session,
+        trigger=trigger,
+        effective_observation_date=effective_observation_date,
+    ).check_in
+
+
+def ensure_goal_check_in_result(
+    session: Session,
+    *,
+    trigger: GoalCheckInTrigger,
+    effective_observation_date: date,
+) -> EnsuredGoalCheckIn:
+    """Return the accepted check-in and whether this transaction inserted it."""
+
     calculated = calculate_primary_goal_position(session, observed_on=effective_observation_date)
     if calculated is None:
         raise GoalValidationError("A primary goal is required before creating a check-in")
@@ -721,7 +742,7 @@ def ensure_goal_check_in(
     identity = check_in_identity(program.public_key, calculated.source_fingerprint)
     existing = _stored_check_in(session, identity)
     if existing is not None:
-        return serialize_check_in(existing)
+        return EnsuredGoalCheckIn(check_in=serialize_check_in(existing), created=False)
 
     row = _stored_check_in_row(
         program=program,
@@ -739,8 +760,8 @@ def ensure_goal_check_in(
         existing = _stored_check_in(session, identity)
         if existing is None:
             raise
-        return serialize_check_in(existing)
-    return serialize_check_in(row)
+        return EnsuredGoalCheckIn(check_in=serialize_check_in(existing), created=False)
+    return EnsuredGoalCheckIn(check_in=serialize_check_in(row), created=True)
 
 
 def _stored_check_in_row(
@@ -830,6 +851,7 @@ def serialize_check_in(row: StoredGoalCheckIn) -> GoalCheckIn:
         source_fingerprint=row.source_fingerprint,
         effective_observation_date=row.effective_observation_date,
         position=GoalPosition.model_validate(row.canonical_position_payload),
+        trigger=cast(Any, row.trigger),
         created_at=_aware_utc(row.created_at),
     )
 
@@ -866,6 +888,13 @@ def check_in_timeline(
     next_cursor = _encode_cursor(page_rows[-1]) if has_more and page_rows else None
     return GoalTimelinePage(
         check_ins=tuple(serialize_check_in(row) for row in page_rows),
+        comparisons=tuple(
+            result.comparison
+            for index, row in enumerate(page_rows)
+            if index + 1 < len(rows)
+            for result in (_comparison_between(session, previous=rows[index + 1], current=row),)
+            if result.comparison is not None
+        ),
         next_cursor=next_cursor,
     )
 
@@ -878,6 +907,16 @@ def latest_comparison(session: Session, *, program: GoalProgram) -> GoalComparis
             reason="At least two distinct persisted check-ins are required",
         )
     current, previous = rows[0], rows[1]
+    return _comparison_between(session, previous=previous, current=current)
+
+
+def _comparison_between(
+    session: Session,
+    *,
+    previous: StoredGoalCheckIn,
+    current: StoredGoalCheckIn,
+) -> GoalComparisonResult:
+    program = current.goal_program
     direct_fields = (
         (ComparisonComponentKind.ACCESSIBLE_NOW, "accessible_now"),
         (ComparisonComponentKind.ACCESSIBLE_CASH, "accessible_cash"),

@@ -5,6 +5,7 @@ import type {
   GoalCandidateList,
   GoalComparisonState,
   GoalMilestoneState,
+  GoalObservationResult,
   GoalPositionState,
   PrimaryGoalState,
 } from "../v2-contracts";
@@ -28,6 +29,7 @@ import {
   primaryState,
   provenanceState,
   unavailableComparisonState,
+  unchangedObservation,
 } from "./fixtures";
 
 const json = (value: unknown, status = 200) =>
@@ -45,6 +47,8 @@ interface FetchOptions {
   failures?: Record<string, { status: number; detail: string }>;
   patchStatus?: number;
   putStatus?: number;
+  backfill?: GoalObservationResult;
+  history?: typeof historyPage;
 }
 
 function goalsFetch(options: FetchOptions = {}) {
@@ -59,6 +63,9 @@ function goalsFetch(options: FetchOptions = {}) {
     if (url.startsWith("/api/v2/goals/goal_") && init?.method === "PATCH") {
       return options.patchStatus ? json({ detail: "Goal changed" }, options.patchStatus) : json(goalProgram);
     }
+    if (url === "/api/v2/goals/check-ins/backfill" && init?.method === "POST") {
+      return json(options.backfill ?? unchangedObservation);
+    }
     if (url === "/api/v2/goals/primary") return json(options.primary ?? primaryState);
     if (url === "/api/v2/goals/position") return json(options.position ?? positionState);
     if (url === "/api/v2/goals/check-ins/latest") return json(latestState);
@@ -67,7 +74,7 @@ function goalsFetch(options: FetchOptions = {}) {
     if (url === "/api/v2/goals/candidates") return json(options.candidates ?? noCandidatesState);
     if (url.startsWith("/api/v2/goals/check-ins?")) {
       historyCalls += 1;
-      return json(historyCalls === 1 ? historyPage : olderHistoryPage);
+      return json(historyCalls === 1 ? (options.history ?? historyPage) : olderHistoryPage);
     }
     if (url === "/api/v2/goals/provenance") return json(provenanceState);
     return json({ detail: "Not found" }, 404);
@@ -114,6 +121,7 @@ describe("Goals first answer", () => {
     expect(screen.getByLabelText("Above protected floor: $4,500.00")).toBeInTheDocument();
     expect(screen.getByLabelText("Required monthly pace: $1,000.00")).toBeInTheDocument();
     expect(screen.getByText("Accessible capital increased by $250.00 since Jul 10.")).toBeInTheDocument();
+    expect(screen.getByText("Since last financial change")).toBeInTheDocument();
     expect(screen.getByText("Fund this goal at $1,000.00 per month.")).toBeInTheDocument();
     expect(screen.getByText("Observed Aug 10, 2026")).toBeInTheDocument();
     expect(screen.queryByText(/saved for/i)).not.toBeInTheDocument();
@@ -179,6 +187,49 @@ describe("Goals first answer", () => {
     expect(screen.getByLabelText("Above protected floor: $4,500.00")).toBeInTheDocument();
     expect(screen.getAllByText("Comparison unavailable: Comparison evidence is offline.")).not.toHaveLength(0);
   });
+
+  it.each([
+    ["created", "A new financial-change observation was saved."],
+    ["unchanged", "The current financial evidence already has a saved observation."],
+  ] as const)("renders the %s observation result", async (status, expected) => {
+    await renderOrdinary({
+      backfill: {
+        ...unchangedObservation,
+        status,
+        message: expected,
+      },
+    });
+    expect(screen.getByText(expected)).toHaveAttribute("data-observation-status", status);
+  });
+
+  it("keeps the prior goal visible when source currentness blocks a check-in", async () => {
+    await renderOrdinary({
+      backfill: {
+        status: "not_current",
+        trigger: "load_backfill",
+        check_in: null,
+        retryable: true,
+        message: "No new goal observation was saved because one or more financial sources are not current. Retry Update data.",
+      },
+    });
+    expect(screen.getByRole("heading", { name: goalProgram.name })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("No new goal observation was saved");
+    expect(screen.getByRole("alert")).toHaveTextContent("Retry Update data");
+  });
+
+  it("keeps the prior goal visible when the backfill command itself fails", async () => {
+    await renderOrdinary({
+      failures: {
+        "/api/v2/goals/check-ins/backfill": {
+          status: 503,
+          detail: "Observation persistence is unavailable",
+        },
+      },
+    });
+    expect(screen.getByRole("heading", { name: goalProgram.name })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("No new goal observation was saved");
+    expect(screen.getByRole("alert")).toHaveTextContent("Use Update data to retry");
+  });
 });
 
 describe("Goal selection and editing", () => {
@@ -199,6 +250,9 @@ describe("Goal selection and editing", () => {
     render(<GoalsView reloadVersion={0} />);
     expect(await screen.findByRole("heading", { name: "No goal is ready to select." })).toBeInTheDocument();
     expect(fetch.mock.calls.some(([input]) => String(input).includes("life-plan"))).toBe(false);
+    expect(fetch.mock.calls.some(([input]) =>
+      String(input) === "/api/v2/goals/check-ins/backfill",
+    )).toBe(false);
   });
 
   it("selects a candidate with its edit token and reloads the complete goal surface", async () => {
@@ -239,7 +293,7 @@ describe("Goal selection and editing", () => {
     expect(screen.getByRole("heading", { name: candidateProgram.name })).toBeInTheDocument();
   });
 
-  it("submits exact edit strings, confirms compactly, and reloads reads without creating a check-in", async () => {
+  it("submits exact edit strings, confirms compactly, and reloads through the explicit backfill command", async () => {
     const fetch = await renderOrdinary();
     fireEvent.click(screen.getByRole("button", { name: "Edit goal" }));
     fireEvent.change(screen.getByLabelText("Goal name"), { target: { value: "Revised quiet place" } });
@@ -256,7 +310,9 @@ describe("Goal selection and editing", () => {
       reserved_for_goal: "2400.00",
     }));
     expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/goals/position").length).toBeGreaterThan(1);
-    expect(fetch.mock.calls.some(([input, init]) => init?.method === "POST" || /ensure|create|backfill/i.test(String(input)))).toBe(false);
+    expect(fetch.mock.calls.some(([input, init]) =>
+      init?.method === "POST" && String(input) === "/api/v2/goals/check-ins/backfill",
+    )).toBe(true);
   });
 
   it("associates local validation errors and does not submit an invalid reservation", async () => {
@@ -297,15 +353,29 @@ describe("Goal selection and editing", () => {
 describe("Progressive evidence", () => {
   it("loads cursor-bounded history only when opened and appends an older page", async () => {
     const fetch = await renderOrdinary();
-    expect(screen.queryByText("Accessible $7,500.00")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText("Check-in history"));
-    expect(await screen.findByText("Accessible $7,500.00")).toBeInTheDocument();
+    expect(screen.queryByText("Accessible first saved observation")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Financial change timeline"));
+    expect(await screen.findByText("Accessible first saved observation")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Load older check-ins" }));
     expect(await screen.findByText("Jul 10, 2026")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       "/api/v2/goals/check-ins?limit=5&cursor=older-cursor",
       expect.any(Object),
     );
+  });
+
+  it("never renders more than 25 timeline entries", async () => {
+    const many = Array.from({ length: 30 }, (_, index) => ({
+      ...checkIn,
+      check_in_id: `check-in-${index}`,
+      effective_observation_date: `2026-07-${String((index % 28) + 1).padStart(2, "0")}`,
+    }));
+    await renderOrdinary({
+      history: { state: "available", check_ins: many, comparisons: [], next_cursor: null },
+    });
+    fireEvent.click(screen.getByText("Financial change timeline"));
+    await screen.findAllByText("Accessible first saved observation");
+    expect(document.querySelectorAll(".goal-timeline > li")).toHaveLength(25);
   });
 
   it("keeps provenance closed by default and displays only sanitized source evidence", async () => {

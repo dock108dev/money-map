@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  backfillGoalCheckIn,
   editGoal,
   GoalApiError,
   loadGoalCandidates,
@@ -24,6 +25,7 @@ import {
   positionState,
   primaryState,
   provenanceState,
+  unchangedObservation,
 } from "./fixtures";
 
 const json = (value: unknown, status = 200) =>
@@ -66,6 +68,21 @@ describe("Goals API", () => {
     expect(calls.map((call) => call.path)).toEqual(expect.arrayContaining(Object.keys(responses)));
     expect(calls.every((call) => call.method === undefined || call.method === "GET")).toBe(true);
     expect(calls.some((call) => /ensure|create|backfill/i.test(call.path))).toBe(false);
+  });
+
+  it("uses one explicit typed command for load backfill", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      json(unchangedObservation),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await expect(backfillGoalCheckIn()).resolves.toEqual(unchangedObservation);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v2/goals/check-ins/backfill",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const call = fetch.mock.calls[0];
+    expect(call?.[1]?.body).toBeUndefined();
+    expect(String(call?.[0])).not.toMatch(/[?&](opened|timestamp|telemetry|observed_on)=/i);
   });
 
   it("preserves exact decimal strings and accepted stale-write tokens", async () => {

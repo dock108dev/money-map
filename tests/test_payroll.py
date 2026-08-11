@@ -3,13 +3,17 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from paycheck_map.analytics import payroll_allocation_summary
+from paycheck_map.goal_operations import regenerate_payroll_with_goal_observation
 from paycheck_map.models import (
     Account,
     AccountTransaction,
+    GoalCheckIn,
+    GoalProgram,
     ImportArtifact,
     ImportBatch,
     Institution,
@@ -27,6 +31,39 @@ from paycheck_map.payroll import (
 )
 from paycheck_map.reconciliation import reconcile_all
 from paycheck_map.services import accounts_dashboard, payroll_history
+
+
+def _add_primary_goal(session: Session) -> None:
+    session.add(
+        GoalProgram(
+            public_key="goal_synthetic_payroll",
+            source_life_goal_id=None,
+            name="Synthetic payroll goal",
+            target_date=date(2027, 8, 10),
+            target_amount=Decimal("12000.00"),
+            protected_cash_floor=Decimal("2000.00"),
+            reserved_amount=Decimal("1000.00"),
+            is_primary=True,
+            status="active",
+            tracking_mode="explicit_reservation",
+            reservation_policy="exclusive_primary_goal",
+            field_provenance={
+                field: {
+                    "evidence": "user_entered",
+                    "source_refs": [f"synthetic:goal:{field}"],
+                }
+                for field in (
+                    "target_amount",
+                    "protected_cash_floor",
+                    "reserved_amount",
+                )
+            },
+            contract_version="money-map-v2-contract-v1",
+            migration_version="0009_goal_persistence",
+        )
+    )
+    session.commit()
+
 
 CHECKPOINTS = [
     (
@@ -243,6 +280,47 @@ def test_generation_is_idempotent_and_uses_integer_cents(session: Session) -> No
     )
     for value in session.scalars(select(PayrollScheduleEntry.net_payment)):
         assert value == value.quantize(Decimal("0.01"))
+
+
+def test_payroll_rebuild_goal_observation_unchanged_changed_and_failed(
+    migrated_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = migrated_session
+    _add_complete_checkpoints(session)
+    _add_primary_goal(session)
+
+    _first, first_observation = regenerate_payroll_with_goal_observation(
+        session, observed_on=date(2026, 8, 10)
+    )
+    assert first_observation.status == "created"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+    _second, unchanged = regenerate_payroll_with_goal_observation(
+        session, observed_on=date(2026, 8, 11)
+    )
+    assert unchanged.status == "unchanged"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 1
+
+    latest_statement = session.scalar(
+        select(PayrollStatement).order_by(PayrollStatement.payment_date.desc()).limit(1)
+    )
+    assert latest_statement is not None
+    latest_statement.job_title = "Synthetic changed payroll fact"
+    session.commit()
+    _changed_result, changed = regenerate_payroll_with_goal_observation(
+        session, observed_on=date(2026, 8, 11)
+    )
+    assert changed.status == "created"
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 2
+
+    def fail_rebuild(_session: Session) -> dict[str, object]:
+        raise ValueError("synthetic rebuild failure")
+
+    monkeypatch.setattr("paycheck_map.goal_operations.generate_payroll_schedule", fail_rebuild)
+    with pytest.raises(ValueError, match="synthetic rebuild failure"):
+        regenerate_payroll_with_goal_observation(session, observed_on=date(2026, 8, 12))
+    assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 2
 
 
 def test_date_ranges_and_normalized_deposit_splits(session: Session) -> None:

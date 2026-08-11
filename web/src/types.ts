@@ -1,3 +1,5 @@
+import type { GoalObservationResult } from "./v2-contracts";
+
 export type Money = string | null;
 
 export interface Overview {
@@ -379,6 +381,7 @@ export interface PlaidRefreshResult {
     message: string | null;
   }>;
   freshness: PlaidStatus["refresh"];
+  goal_observation: GoalObservationResult;
 }
 
 export interface AccountHolding {

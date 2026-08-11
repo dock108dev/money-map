@@ -12,9 +12,11 @@ import type {
   GoalCandidateList,
   GoalCheckInState,
   GoalCheckInTimelinePage,
+  GoalComparison,
   GoalComparisonState,
   GoalEditRequest,
   GoalMilestoneState,
+  GoalObservationResult,
   GoalPosition,
   GoalPositionState,
   GoalProgramView,
@@ -22,6 +24,7 @@ import type {
   PrimaryGoalState,
 } from "../v2-contracts";
 import {
+  backfillGoalCheckIn,
   editGoal,
   GoalApiError,
   loadGoalCandidates,
@@ -59,13 +62,6 @@ interface EditErrors {
   reservedForGoal?: string;
 }
 
-const moneyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 function errorMessage(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
 }
@@ -76,7 +72,12 @@ function briefReason(value: string | null | undefined, fallback: string): string
 }
 
 function formatMoney(value: string | null | undefined): string {
-  return value === null || value === undefined ? "Unavailable" : moneyFormatter.format(Number(value));
+  if (value === null || value === undefined) return "Unavailable";
+  const match = /^(-?)(\d+)\.(\d{2})$/.exec(value);
+  if (!match) return "Unavailable";
+  const [, sign, dollars, cents] = match;
+  const grouped = dollars.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${sign ? "−" : ""}$${grouped}.${cents}`;
 }
 
 function formatDate(value: string): string {
@@ -95,6 +96,12 @@ function formatShortDate(value: string): string {
   return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function formatSavedAt(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Saved locally";
+  return `Saved ${parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
 function decimalSign(value: string): -1 | 0 | 1 {
   if (/^-0\.00$/.test(value) || /^0\.00$/.test(value)) return 0;
   return value.startsWith("-") ? -1 : 1;
@@ -102,6 +109,29 @@ function decimalSign(value: string): -1 | 0 | 1 {
 
 function absoluteDecimal(value: ExactDecimalString): ExactDecimalString {
   return (value.startsWith("-") ? value.slice(1) : value) as ExactDecimalString;
+}
+
+function formatMovement(value: string | null | undefined): string {
+  if (!value) return "Unavailable";
+  const sign = decimalSign(value);
+  if (sign === 0) return "$0.00";
+  const amount = formatMoney(absoluteDecimal(value as ExactDecimalString));
+  return `${sign > 0 ? "+" : "−"}${amount}`;
+}
+
+function comparisonAmount(
+  comparison: GoalComparison | undefined,
+  component: GoalComparison["components"][number]["component"],
+): string | null {
+  return comparison?.components.find((item) => item.component === component)?.change.amount ?? null;
+}
+
+function triggerLabel(trigger: GoalCheckInTimelinePage["check_ins"][number]["trigger"]): string {
+  if (trigger === "post_refresh") return "Account update";
+  if (trigger === "post_import") return "Manual import";
+  if (trigger === "post_payroll") return "Payroll rebuild";
+  if (trigger === "load_backfill") return "Eligible load backfill";
+  return "Synthetic validation";
 }
 
 export function verdictSentence(state: GoalComparisonState | null, failure?: string): string {
@@ -458,6 +488,8 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
   const [latestState, setLatestState] = useState<GoalCheckInState | null>(null);
   const [comparisonState, setComparisonState] = useState<GoalComparisonState | null>(null);
   const [milestoneState, setMilestoneState] = useState<GoalMilestoneState | null>(null);
+  const [observationState, setObservationState] = useState<GoalObservationResult | null>(null);
+  const [observationError, setObservationError] = useState("");
   const [detailErrors, setDetailErrors] = useState<DetailErrors>({});
   const [candidates, setCandidates] = useState<GoalCandidateList | null>(null);
   const [candidateError, setCandidateError] = useState("");
@@ -483,31 +515,45 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     const sequence = ++loadSequence.current;
     setBusy(true);
     setPageError("");
+    let nextPrimary: PrimaryGoalState;
+    try {
+      nextPrimary = await loadPrimaryGoal();
+    } catch (reason) {
+      if (sequence !== loadSequence.current) return;
+      setPageError(errorMessage(reason, "The primary goal could not load."));
+      setBusy(false);
+      return;
+    }
+    if (sequence !== loadSequence.current) return;
+    setPrimaryState(nextPrimary);
+    setObservationState(null);
+    setObservationError("");
+    if (nextPrimary.state === "primary") {
+      try {
+        const observation = await backfillGoalCheckIn();
+        if (sequence === loadSequence.current) setObservationState(observation);
+      } catch (reason) {
+        if (sequence === loadSequence.current) {
+          setObservationError(errorMessage(reason, "The goal observation could not be saved."));
+        }
+      }
+    }
     const results = await Promise.allSettled([
-      loadPrimaryGoal(),
       loadGoalPosition(),
       loadLatestGoalCheckIn(),
       loadGoalComparison(),
       loadGoalMilestone(),
     ] as const);
     if (sequence !== loadSequence.current) return;
-    const primaryResult = results[0];
-    if (primaryResult.status === "rejected") {
-      setPageError(errorMessage(primaryResult.reason, "The primary goal could not load."));
-      setBusy(false);
-      return;
-    }
-    const nextPrimary = primaryResult.value;
-    setPrimaryState(nextPrimary);
-    setPositionState(resultValue(results[1]));
-    setLatestState(resultValue(results[2]));
-    setComparisonState(resultValue(results[3]));
-    setMilestoneState(resultValue(results[4]));
+    setPositionState(resultValue(results[0]));
+    setLatestState(resultValue(results[1]));
+    setComparisonState(resultValue(results[2]));
+    setMilestoneState(resultValue(results[3]));
     setDetailErrors({
-      position: resultError(results[1], "The current position could not load."),
-      latest: resultError(results[2], "The latest check-in could not load."),
-      comparison: resultError(results[3], "The comparison could not load."),
-      milestone: resultError(results[4], "The milestone could not load."),
+      position: resultError(results[0], "The current position could not load."),
+      latest: resultError(results[1], "The latest check-in could not load."),
+      comparison: resultError(results[2], "The comparison could not load."),
+      milestone: resultError(results[3], "The milestone could not load."),
     });
     setCandidates(null);
     setCandidateError("");
@@ -576,8 +622,26 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     try {
       const page = await loadGoalCheckIns(cursor);
       setHistory((current) => {
-        if (!cursor || !current) return page;
-        return { ...page, check_ins: [...current.check_ins, ...page.check_ins].slice(0, 25) };
+        if (!cursor || !current) {
+          const checkIns = page.check_ins.slice(0, 25);
+          const retained = new Set(checkIns.map((item) => item.check_in_id));
+          return {
+            ...page,
+            check_ins: checkIns,
+            comparisons: page.comparisons.filter((item) =>
+              retained.has(item.current_check_in_id),
+            ),
+          };
+        }
+        const checkIns = [...current.check_ins, ...page.check_ins].slice(0, 25);
+        const retained = new Set(checkIns.map((item) => item.check_in_id));
+        return {
+          ...page,
+          check_ins: checkIns,
+          comparisons: [...current.comparisons, ...page.comparisons].filter((item) =>
+            retained.has(item.current_check_in_id),
+          ),
+        };
       });
     } catch (reason) {
       setHistoryError(errorMessage(reason, "Check-in history could not load."));
@@ -700,6 +764,17 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     <div className="goals-view view-stack" aria-busy={busy} data-reduced-motion={reducedMotion}>
       <header className="goals-page-heading"><span className="eyebrow">Money Map</span><h1>Goals</h1></header>
       {message && <p className="goal-status-message" role="status">{message}</p>}
+      {(observationError || observationState) && (
+        <p
+          className={`goal-currentness goal-currentness-${observationError ? "unavailable" : observationState?.status}`}
+          role={observationError || observationState?.retryable ? "alert" : "status"}
+          data-observation-status={observationError ? "unavailable" : observationState?.status}
+        >
+          {observationError
+            ? `${observationError} No new goal observation was saved. Use Update data to retry.`
+            : observationState?.message}
+        </p>
+      )}
       <section className="goal-primary-card panel" aria-labelledby="primary-goal-title">
         <div className="goal-primary-heading">
           <div>
@@ -709,7 +784,10 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
           </div>
           <span className="goal-observation">{observation}</span>
         </div>
-        <p className="goal-verdict">{verdictSentence(comparisonState, detailErrors.comparison)}</p>
+        <div className="goal-comparison-summary">
+          <span>Since last financial change</span>
+          <p className="goal-verdict">{verdictSentence(comparisonState, detailErrors.comparison)}</p>
+        </div>
         <div className="goal-metrics" aria-label="Primary goal metrics">
           <GoalMetric label="Explicitly reserved" value={formatMoney(reserved)} />
           <GoalMetric label="Above protected floor" value={formatMoney(available)} />
@@ -753,20 +831,61 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
             if (event.currentTarget.open && !history && !historyBusy) void loadHistory();
           }}
         >
-          <summary>Check-in history</summary>
+          <summary>Financial change timeline</summary>
           <div className="goal-detail-body">
             {detailErrors.latest && <p className="goal-detail-error">{detailErrors.latest}</p>}
             {historyError && <p className="goal-detail-error">{historyError}</p>}
             {history?.check_ins.length === 0 && <p className="goal-detail-message">No saved check-ins exist yet.</p>}
             {history && history.check_ins.length > 0 && (
               <ol className="goal-timeline">
-                {history.check_ins.map((checkIn) => (
-                  <li key={checkIn.check_in_id}>
-                    <strong>{formatDate(checkIn.effective_observation_date)}</strong>
-                    <span>Accessible {formatMoney(checkIn.position.accessible_now.amount)}</span>
-                    <span>Reserved {formatMoney(checkIn.position.reserved_for_goal.amount)}</span>
-                  </li>
-                ))}
+                {history.check_ins.map((checkIn) => {
+                  const comparison = history.comparisons.find(
+                    (item) => item.current_check_in_id === checkIn.check_in_id,
+                  );
+                  return (
+                    <li key={checkIn.check_in_id}>
+                      <details className="goal-timeline-entry">
+                        <summary>
+                          <strong>{formatDate(checkIn.effective_observation_date)}</strong>
+                          <span>
+                            Accessible {comparison
+                              ? formatMovement(comparisonAmount(comparison, "accessible_now"))
+                              : "first saved observation"}
+                          </span>
+                          <span>
+                            Goal {comparison
+                              ? formatMovement(comparisonAmount(comparison, "goal_target"))
+                              : formatMoney(checkIn.position.goal_target.amount)}
+                            {" · "}Reserved {comparison
+                              ? formatMovement(comparisonAmount(comparison, "reserved_for_goal"))
+                              : formatMoney(checkIn.position.reserved_for_goal.amount)}
+                          </span>
+                          <small>{triggerLabel(checkIn.trigger)} · {formatSavedAt(checkIn.created_at)}</small>
+                        </summary>
+                        <div className="goal-timeline-evidence">
+                          <dl className="goal-evidence-grid">
+                            <div><dt>Accessible cash</dt><dd>{formatMoney(checkIn.position.accessible_cash.amount)}</dd></div>
+                            <div><dt>Accessible investments</dt><dd>{formatMoney(checkIn.position.accessible_investments.amount)}</dd></div>
+                            <div><dt>Tracked debt</dt><dd>{formatMoney(checkIn.position.tracked_debt.amount)}</dd></div>
+                            <div><dt>Goal target</dt><dd>{formatMoney(checkIn.position.goal_target.amount)}</dd></div>
+                            <div><dt>Protected floor</dt><dd>{formatMoney(checkIn.position.protected_cash_floor.amount)}</dd></div>
+                            <div><dt>Reservation</dt><dd>{formatMoney(checkIn.position.reserved_for_goal.amount)}</dd></div>
+                          </dl>
+                          {comparison && (
+                            <dl className="goal-component-list" aria-label={`Comparison components for ${formatDate(checkIn.effective_observation_date)}`}>
+                              {comparison.components.map((component) => (
+                                <div key={component.component}>
+                                  <dt>{component.component.replaceAll("_", " ")}</dt>
+                                  <dd>{formatMovement(component.change.amount)}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )}
+                        </div>
+                      </details>
+                    </li>
+                  );
+                })}
               </ol>
             )}
             {history?.next_cursor && history.check_ins.length < 25 && (

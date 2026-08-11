@@ -22,6 +22,9 @@ The fingerprint contains:
    - exact unformatted protected cash floor;
    - exact unformatted reserved amount; and
    - evidence class and stable source references for each monetary configuration value.
+   The configuration source record uses the persisted configuration change date (for example,
+   the goal program's stable `updated_at` evidence), never the caller's requested observation
+   date.
 3. Every source record required for the position:
    - source kind (`balance`, `investment_access`, `payroll`, `recurring_outflow`, or
      `goal_configuration`);
@@ -71,6 +74,12 @@ The following never enter fingerprint material:
 Effective observation dates are included because they describe financial evidence. A
 check-in `created_at` is excluded because it describes persistence timing.
 
+The caller's requested observation date is also excluded from fingerprint material. It may
+change live calendar-derived values such as remaining funding months and required pace, but
+passage of time is not a financial change. Source-record dates come only from persisted source
+evidence or stable configuration evidence. Stable empty-inventory records use a versioned fixed
+effective date rather than the day a browser or command happened to request the calculation.
+
 ## Duplicate and change semantics
 
 - Equal canonical material means equal source fingerprint and equal deterministic check-in
@@ -80,5 +89,7 @@ check-in `created_at` is excluded because it describes persistence timing.
   fingerprint.
 - A display-copy edit, request retry, unchanged refresh, or reordered input collection does
   not produce a different fingerprint.
+- The same financial/configuration state requested on a later date has the same fingerprint
+  even when its live required pace differs.
 - Fingerprint equality proves source equivalence under this version; it does not prove that
   a provider is current or that omitted source coverage is sufficient.

@@ -111,6 +111,12 @@ export interface GoalCheckIn {
   source_fingerprint: string;
   effective_observation_date: string;
   position: GoalPosition;
+  trigger:
+    | "post_refresh"
+    | "post_import"
+    | "post_payroll"
+    | "load_backfill"
+    | "synthetic_test";
   created_at: string;
   contract_version: "money-map-v2-contract-v1";
 }
@@ -122,8 +128,17 @@ export type GoalCheckInState =
 export interface GoalCheckInTimelinePage {
   state: "available" | "no_primary";
   check_ins: GoalCheckIn[];
+  comparisons: GoalComparison[];
   next_cursor: string | null;
 }
+
+export type GoalObservationResult = {
+  status: "created" | "unchanged" | "no_primary" | "not_current" | "unavailable";
+  trigger: "post_refresh" | "post_import" | "post_payroll" | "load_backfill";
+  check_in: GoalCheckIn | null;
+  retryable: boolean;
+  message: string;
+};
 
 export type ComparisonComponentKind =
   | "accessible_now"

@@ -15,10 +15,13 @@ import uvicorn
 
 from .config import settings
 from .db import SessionLocal, initialize_database
-from .ingestion import import_private_inbox, rollback_import_batch
-from .payroll import generate_payroll_schedule, schedule_validation
-from .reconciliation import reconcile_all
-from .refresh import refresh_status, sync_all_connections
+from .goal_operations import (
+    import_inbox_with_goal_observation,
+    regenerate_payroll_with_goal_observation,
+)
+from .ingestion import rollback_import_batch
+from .payroll import schedule_validation
+from .refresh import local_business_date, refresh_status, sync_all_connections
 from .reporting import generate_trailing_report
 
 DATABASE_INITIALIZING_COMMANDS = frozenset(
@@ -177,13 +180,18 @@ def main() -> None:
         uvicorn.run("paycheck_map.app:app", host=settings.host, port=settings.port, reload=False)
     elif arguments.command == "import":
         with SessionLocal() as session:
-            outcome = import_private_inbox(session)
+            outcome, observation = import_inbox_with_goal_observation(
+                session,
+                observed_on=local_business_date(),
+            )
         print(
             f"Batch {outcome.batch_id}: {outcome.imported} imported, "
             f"{outcome.duplicates} duplicates, {len(outcome.errors)} errors"
         )
         for error in outcome.errors:
             print(f"  {error['filename']}: {error['message']}")
+        if observation.status in {"not_current", "unavailable"}:
+            print(f"Goal observation: {observation.message}")
     elif arguments.command == "rollback":
         with SessionLocal() as session:
             if not rollback_import_batch(session, arguments.batch_id):
@@ -200,13 +208,16 @@ def main() -> None:
         print(f"Restore complete; previous database saved at {safety_backup}")
     elif arguments.command == "payroll-regenerate":
         with SessionLocal() as session:
-            result = generate_payroll_schedule(session)
-            reconcile_all(session)
-            session.commit()
+            result, observation = regenerate_payroll_with_goal_observation(
+                session,
+                observed_on=local_business_date(),
+            )
         print(
             f"Payroll complete: {result['rows']} rows "
             f"({result['statement_rows']} statements, {result['calculated_rows']} calculated)"
         )
+        if observation.status in {"not_current", "unavailable"}:
+            print(f"Goal observation: {observation.message}")
     elif arguments.command == "payroll-status":
         with SessionLocal() as session:
             checks = schedule_validation(session)
@@ -237,6 +248,9 @@ def main() -> None:
                     f"Account update complete: {result['succeeded']} succeeded, "
                     f"{result['failed']} failed"
                 )
+                observation = result["goal_observation"]
+                if observation["status"] in {"not_current", "unavailable"}:
+                    print(f"Goal observation: {observation['message']}")
                 if result["failed"]:
                     raise SystemExit("One or more connections need attention")
     elif arguments.command == "verify":

@@ -6,6 +6,7 @@ import type {
   GoalComparisonState,
   GoalEditRequest,
   GoalMilestoneState,
+  GoalObservationResult,
   GoalPositionState,
   GoalProgramView,
   GoalProvenanceState,
@@ -59,6 +60,10 @@ export function loadGoalPosition(): Promise<GoalPositionState> {
 
 export function loadLatestGoalCheckIn(): Promise<GoalCheckInState> {
   return goalRequest("/api/v2/goals/check-ins/latest");
+}
+
+export function backfillGoalCheckIn(): Promise<GoalObservationResult> {
+  return goalWrite("/api/v2/goals/check-ins/backfill", { method: "POST" });
 }
 
 export function loadGoalCheckIns(cursor?: string): Promise<GoalCheckInTimelinePage> {
