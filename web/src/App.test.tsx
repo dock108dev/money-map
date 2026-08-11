@@ -11,6 +11,16 @@ import {
   primaryState,
   unchangedObservation,
 } from "./goals/fixtures";
+import { goalProgram } from "./goals/fixtures";
+import {
+  labResult,
+  labSeed,
+  legacySnapshot,
+  retirementProfile,
+  retirementRun,
+  retirementSnapshot,
+  retirementStartingPoint,
+} from "./retirement/test-fixtures";
 
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -130,6 +140,14 @@ function workingFetch(refreshDue = false, connectionCount = 1) {
     if (url === "/api/v2/goals/comparison") return json(comparisonState("250.00"));
     if (url === "/api/v2/goals/milestone") return json(milestoneState());
     if (url === "/api/v2/goals/candidates") return json(noCandidatesState);
+    if (url === "/api/v2/retirement/profile") return json(retirementProfile);
+    if (url === "/api/v2/retirement/starting-point") return json(retirementStartingPoint);
+    if (url === "/api/v2/retirement/operational-goals") return json([goalProgram]);
+    if (url === "/api/v2/retirement/project") return json(retirementRun());
+    if (url === "/api/v2/retirement/snapshots") return json([retirementSnapshot]);
+    if (url === "/api/v2/lab/snapshots") return json([legacySnapshot]);
+    if (url === "/api/v2/lab/experiments") return json(labSeed("blank"));
+    if (url === "/api/v2/lab/experiments/project") return json(labResult(labSeed("blank")));
     if (url === "/api/life-plan/profile") return json(null);
     if (url === "/api/life-plan/goals" || url === "/api/life-plan/scenarios") return json([]);
     if (url === "/api/life-plan/starting-point") return json({
@@ -219,7 +237,8 @@ describe("application states", () => {
     fireEvent.click(await screen.findByRole("button", { name: "◇ Wealth" }));
     expect(await screen.findByRole("heading", { name: "Wealth" })).toBeInTheDocument();
     expect(screen.getByText("$33,014.92")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "◎ Plan" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "◎ Retirement" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "⌁ Lab" })).toBeInTheDocument();
   });
 
   it("makes the lazy Goals feature the default and keeps Overview one click away", async () => {
@@ -243,14 +262,23 @@ describe("application states", () => {
     expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
   });
 
-  it("loads Life Lab only after Plan is opened", async () => {
+  it("loads Retirement and Lab as distinct lazy routes without cross-surface rendering", async () => {
     const fetch = workingFetch(false, 2);
     vi.stubGlobal("fetch", fetch);
     render(<App />);
-    const plan = await screen.findByRole("button", { name: "◎ Plan" });
-    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/life-plan"))).toBe(false);
-    fireEvent.click(plan);
-    expect(await screen.findByRole("heading", { name: "Set up Life Lab" })).toBeInTheDocument();
-    expect(fetch.mock.calls.some(([input]) => String(input) === "/api/life-plan/starting-point")).toBe(true);
+    const retirement = await screen.findByRole("button", { name: "◎ Retirement" });
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/retirement"))).toBe(false);
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/lab"))).toBe(false);
+    fireEvent.click(retirement);
+    expect(await screen.findByRole("heading", { name: "Retirement" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Life Lab" })).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/retirement/project")).toBe(true);
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/lab"))).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "⌁ Lab" }));
+    expect(await screen.findByRole("heading", { name: "Life Lab" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Retirement" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Start blank/ })).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/lab/snapshots")).toBe(true);
   });
 });

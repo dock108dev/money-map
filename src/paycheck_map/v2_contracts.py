@@ -381,6 +381,7 @@ class GoalCheckIn(ContractModel):
         "post_import",
         "post_payroll",
         "load_backfill",
+        "lab_promotion",
         "synthetic_test",
     ]
     created_at: datetime
@@ -426,7 +427,9 @@ class GoalObservationResult(ContractModel):
     """Sanitized result of an explicit post-operation observation command."""
 
     status: Literal["created", "unchanged", "no_primary", "not_current", "unavailable"]
-    trigger: Literal["post_refresh", "post_import", "post_payroll", "load_backfill"]
+    trigger: Literal[
+        "post_refresh", "post_import", "post_payroll", "load_backfill", "lab_promotion"
+    ]
     check_in: GoalCheckIn | None = None
     retryable: bool = False
     message: str = Field(min_length=1, max_length=240)
@@ -679,12 +682,152 @@ def contract_milestone(position: GoalPosition, position_fingerprint: str) -> Goa
     )
 
 
+class RetirementPath(StrEnum):
+    MIDDLE = "middle"
+    ROUGH = "rough"
+    EARLY_CRASH = "early_crash"
+
+
+class PlanningSnapshotContext(StrEnum):
+    RETIREMENT_DEFAULT = "retirement_default"
+    RETIREMENT_WITH_GOAL = "retirement_with_goal"
+    LAB_BLANK = "lab_blank"
+    LAB_CURRENT_GOAL = "lab_current_goal"
+    LAB_RETIREMENT_RESULT = "lab_retirement_result"
+    LEGACY_COMBINED = "legacy_combined"
+
+
+class RetirementProfileView(ContractModel):
+    profile_id: int = Field(ge=1)
+    birth_date: date
+    state: str = Field(min_length=2, max_length=2)
+    plan_through_age: int = Field(ge=40, le=120)
+    current_monthly_outflow: EvidencedMoney
+    retirement_essential_monthly_spend: EvidencedMoney
+    retirement_flexible_monthly_spend: EvidencedMoney
+    protected_cash_floor: EvidencedMoney
+    retirement_tax_haircut_pct: Decimal = Field(ge=0, le=60)
+    work_optional_ages: tuple[int, ...] = Field(min_length=1, max_length=8)
+    notes: str = Field(default="", max_length=500)
+    edit_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    updated_at: datetime
+
+    @field_validator("retirement_tax_haircut_pct", mode="before")
+    @classmethod
+    def parse_exact_rate(cls, value: object) -> Decimal:
+        if isinstance(value, (float, bool)):
+            raise ValueError("Retirement rates must not pass through binary float or bool")
+        return Decimal(str(value)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+    @field_serializer("retirement_tax_haircut_pct")
+    def serialize_rate(self, value: Decimal) -> str:
+        return format(value, ".4f")
+
+    @model_validator(mode="after")
+    def validate_profile(self) -> Self:
+        for name, value in (
+            ("current_monthly_outflow", self.current_monthly_outflow),
+            (
+                "retirement_essential_monthly_spend",
+                self.retirement_essential_monthly_spend,
+            ),
+            (
+                "retirement_flexible_monthly_spend",
+                self.retirement_flexible_monthly_spend,
+            ),
+            ("protected_cash_floor", self.protected_cash_floor),
+        ):
+            _require_evidence(value, EvidenceClass.USER_ENTERED, name)
+            if _required_amount(value, name) < ZERO:
+                raise ValueError("Retirement profile money cannot be negative")
+        if self.state != self.state.upper() or not self.state.isalpha():
+            raise ValueError("Retirement state must be an uppercase postal abbreviation")
+        if tuple(sorted(set(self.work_optional_ages))) != self.work_optional_ages:
+            raise ValueError("Work-optional ages must be unique and sorted")
+        if any(age <= 18 or age >= self.plan_through_age for age in self.work_optional_ages):
+            raise ValueError("Work-optional ages must precede the plan-through age")
+        if self.updated_at.tzinfo is None or self.updated_at.utcoffset() is None:
+            raise ValueError("Retirement profile update time must be timezone-aware")
+        return self
+
+
+class RetirementProfileEditRequest(ContractModel):
+    expected_edit_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    birth_date: date | None = None
+    state: str | None = Field(default=None, min_length=2, max_length=2)
+    plan_through_age: int | None = Field(default=None, ge=40, le=120)
+    current_monthly_outflow: Decimal | None = None
+    retirement_essential_monthly_spend: Decimal | None = None
+    retirement_flexible_monthly_spend: Decimal | None = None
+    protected_cash_floor: Decimal | None = None
+    retirement_tax_haircut_pct: Decimal | None = None
+    work_optional_ages: tuple[int, ...] | None = Field(default=None, min_length=1, max_length=8)
+    notes: str | None = Field(default=None, max_length=500)
+
+    @field_validator(
+        "current_monthly_outflow",
+        "retirement_essential_monthly_spend",
+        "retirement_flexible_monthly_spend",
+        "protected_cash_floor",
+        mode="before",
+    )
+    @classmethod
+    def parse_optional_money(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Retirement money inputs must be exact decimal strings")
+        try:
+            parsed = money(Decimal(value))
+        except InvalidOperation as exc:
+            raise ValueError("Retirement money inputs must be valid finite decimals") from exc
+        if parsed < ZERO:
+            raise ValueError("Retirement money inputs cannot be negative")
+        return parsed
+
+    @field_validator("retirement_tax_haircut_pct", mode="before")
+    @classmethod
+    def parse_optional_rate(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Retirement rates must be exact decimal strings")
+        parsed = Decimal(value).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        if parsed < ZERO or parsed > Decimal("60"):
+            raise ValueError("Retirement tax haircut must be between 0 and 60")
+        return parsed
+
+    @field_serializer(
+        "current_monthly_outflow",
+        "retirement_essential_monthly_spend",
+        "retirement_flexible_monthly_spend",
+        "protected_cash_floor",
+    )
+    def serialize_optional_money(self, value: Decimal | None) -> str | None:
+        return None if value is None else format(value, ".2f")
+
+    @field_serializer("retirement_tax_haircut_pct")
+    def serialize_optional_rate(self, value: Decimal | None) -> str | None:
+        return None if value is None else format(value, ".4f")
+
+    @model_validator(mode="after")
+    def require_change(self) -> Self:
+        if all(
+            value is None for name, value in self.__dict__.items() if name != "expected_edit_token"
+        ):
+            raise ValueError("A Retirement edit must change at least one supported field")
+        return self
+
+
 class RetirementGoalInclusion(ContractModel):
     goal_program_id: str = Field(pattern=r"^goal_[a-z0-9_]+$")
+    name: str = Field(min_length=1, max_length=120)
+    target_date: date
     goal_source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     target_amount: EvidencedMoney
     reserved_for_goal: EvidencedMoney
     remaining_target: EvidencedMoney
+    evidence_refs: tuple[str, ...] = Field(min_length=1)
     selection: Literal["explicit"] = "explicit"
 
     @model_validator(mode="after")
@@ -704,6 +847,8 @@ class RetirementGoalInclusion(ContractModel):
 
 class RetirementRunSelection(ContractModel):
     run_selection_id: str = Field(pattern=r"^retirement_[a-z0-9_]+$")
+    work_optional_age: int = Field(ge=18, le=110)
+    path: RetirementPath
     include_operational_goal: bool = False
     included_goal: RetirementGoalInclusion | None = None
     goal_default_policy: Literal["excluded"] = "excluded"
@@ -714,6 +859,54 @@ class RetirementRunSelection(ContractModel):
         if self.include_operational_goal != (self.included_goal is not None):
             raise ValueError("Goal inclusion flag and explicit goal snapshot must agree")
         return self
+
+
+class RetirementProjectionRequest(ContractModel):
+    work_optional_age: int = Field(ge=18, le=110)
+    path: RetirementPath = RetirementPath.MIDDLE
+    goal_program_id: str | None = Field(default=None, pattern=r"^goal_[a-z0-9_]+$")
+
+
+class RetirementProjectionResult(ContractModel):
+    run_selection: RetirementRunSelection
+    run_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    profile: RetirementProfileView
+    snapshot_context: Literal["retirement_default", "retirement_with_goal"]
+    bridge_verdict: Literal[
+        "works", "works_essentials_only", "shortfall", "insufficient_accessible_bridge"
+    ]
+    accessible_assets_at_work_stop: Decimal
+    retirement_assets_at_work_stop: Decimal
+    end_spendable_assets: Decimal
+    required_money_runway_months: int | None = Field(default=None, ge=0)
+    warnings: tuple[str, ...]
+    selected_result: dict[str, object]
+    projection: dict[str, object]
+
+    @field_validator(
+        "accessible_assets_at_work_stop",
+        "retirement_assets_at_work_stop",
+        "end_spendable_assets",
+        mode="before",
+    )
+    @classmethod
+    def parse_result_money(cls, value: object) -> Decimal:
+        if isinstance(value, (float, bool)):
+            raise ValueError("Projection money must not pass through binary float or bool")
+        return money(Decimal(str(value)))
+
+    @field_serializer(
+        "accessible_assets_at_work_stop",
+        "retirement_assets_at_work_stop",
+        "end_spendable_assets",
+    )
+    def serialize_result_money(self, value: Decimal) -> str:
+        return format(value, ".2f")
+
+
+class RetirementSnapshotSaveRequest(ContractModel):
+    name: str = Field(min_length=1, max_length=120)
+    run: RetirementProjectionResult
 
 
 class LabExperimentSeedKind(StrEnum):
@@ -727,6 +920,9 @@ class LifeLabExperimentSeed(ContractModel):
     seed_kind: LabExperimentSeedKind
     source_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     seeded_money: dict[str, EvidencedMoney] = Field(default_factory=dict)
+    source_label: str | None = Field(default=None, max_length=160)
+    draft: dict[str, object]
+    experiment_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     edit_scope: Literal["isolated_draft"] = "isolated_draft"
     goal_mutation: Literal[False] = False
     retirement_mutation: Literal[False] = False
@@ -734,11 +930,48 @@ class LifeLabExperimentSeed(ContractModel):
     @model_validator(mode="after")
     def validate_seed_origin(self) -> Self:
         if self.seed_kind is LabExperimentSeedKind.BLANK:
-            if self.source_fingerprint is not None or self.seeded_money:
+            if self.source_fingerprint is not None or self.seeded_money or self.source_label:
                 raise ValueError("A blank experiment cannot claim copied source values")
-        elif self.source_fingerprint is None or not self.seeded_money:
+        elif self.source_fingerprint is None or not self.seeded_money or not self.source_label:
             raise ValueError("A sourced experiment requires a fingerprint and copied values")
         return self
+
+
+class LifeLabExperimentCreateRequest(ContractModel):
+    seed_kind: LabExperimentSeedKind
+    retirement_snapshot_id: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_seed_reference(self) -> Self:
+        requires_snapshot = self.seed_kind is LabExperimentSeedKind.RETIREMENT_RESULT
+        if requires_snapshot != (self.retirement_snapshot_id is not None):
+            raise ValueError("A retirement-result seed requires exactly one Retirement snapshot")
+        return self
+
+
+class LifeLabExperimentProjectRequest(ContractModel):
+    experiment_id: str = Field(pattern=r"^lab_[a-z0-9_]+$")
+    expected_experiment_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    draft: dict[str, object]
+
+
+class LifeLabExperimentResult(ContractModel):
+    experiment_id: str = Field(pattern=r"^lab_[a-z0-9_]+$")
+    experiment_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    seed_kind: LabExperimentSeedKind
+    snapshot_context: Literal["lab_blank", "lab_current_goal", "lab_retirement_result"]
+    draft: dict[str, object]
+    projection: dict[str, object]
+    reverse_solver: dict[str, object]
+    snapshot_context_evidence: dict[str, object]
+    edit_scope: Literal["isolated_draft"] = "isolated_draft"
+    goal_mutation: Literal[False] = False
+    retirement_mutation: Literal[False] = False
+
+
+class LifeLabSnapshotSaveRequest(ContractModel):
+    name: str = Field(min_length=1, max_length=120)
+    result: LifeLabExperimentResult
 
 
 class PromotionTarget(StrEnum):
@@ -750,13 +983,45 @@ class PromotionField(StrEnum):
     GOAL_TARGET = "goal_target"
     RESERVED_FOR_GOAL = "reserved_for_goal"
     PROTECTED_CASH_FLOOR = "protected_cash_floor"
-    RETIREMENT_MONTHLY_SPEND = "retirement_monthly_spend"
+    RETIREMENT_ESSENTIAL_MONTHLY_SPEND = "retirement_essential_monthly_spend"
+    RETIREMENT_FLEXIBLE_MONTHLY_SPEND = "retirement_flexible_monthly_spend"
+
+
+class LifeLabPromotionCandidate(ContractModel):
+    field: PromotionField
+    after: Decimal
+
+    @field_validator("after", mode="before")
+    @classmethod
+    def parse_candidate_money(cls, value: object) -> Decimal:
+        if not isinstance(value, str):
+            raise ValueError("Promotion money must be an exact decimal string")
+        parsed = money(Decimal(value))
+        if parsed < ZERO:
+            raise ValueError("Promotion money cannot be negative")
+        return parsed
+
+    @field_serializer("after")
+    def serialize_candidate_money(self, value: Decimal) -> str:
+        return format(value, ".2f")
+
+
+class LifeLabPromotionPreviewRequest(ContractModel):
+    experiment_id: str = Field(pattern=r"^lab_[a-z0-9_]+$")
+    expected_experiment_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    draft: dict[str, object]
+    target_surface: PromotionTarget
+    target_id: str
+    changes: tuple[LifeLabPromotionCandidate, ...] = Field(min_length=1)
 
 
 class LifeLabPromotionChange(ContractModel):
     field: PromotionField
+    stored_target_field: str = Field(pattern=r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
     before: EvidencedMoney
     after: EvidencedMoney
+    source_provenance: tuple[str, ...] = Field(min_length=1)
+    target_provenance: tuple[str, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
     def require_visible_change(self) -> Self:
@@ -766,9 +1031,12 @@ class LifeLabPromotionChange(ContractModel):
 
 
 class LifeLabPromotionPreview(ContractModel):
+    preview_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     experiment_id: str = Field(pattern=r"^lab_[a-z0-9_]+$")
     experiment_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     target_surface: PromotionTarget
+    target_id: str
+    target_stale_write_token: str = Field(pattern=r"^[0-9a-f]{64}$")
     changes: tuple[LifeLabPromotionChange, ...] = Field(min_length=1)
     state: Literal["preview_only"] = "preview_only"
     requires_explicit_confirmation: Literal[True] = True
@@ -786,11 +1054,34 @@ class LifeLabPromotionPreview(ContractModel):
         }
         if self.target_surface is PromotionTarget.GOALS and not set(fields) <= goal_fields:
             raise ValueError("Goal promotion preview contains an unsupported field")
-        if self.target_surface is PromotionTarget.RETIREMENT and fields != [
-            PromotionField.RETIREMENT_MONTHLY_SPEND
-        ]:
+        retirement_fields = {
+            PromotionField.RETIREMENT_ESSENTIAL_MONTHLY_SPEND,
+            PromotionField.RETIREMENT_FLEXIBLE_MONTHLY_SPEND,
+        }
+        if (
+            self.target_surface is PromotionTarget.RETIREMENT
+            and not set(fields) <= retirement_fields
+        ):
             raise ValueError("Retirement promotion preview contains an unsupported field")
         return self
+
+
+class LifeLabPromotionConfirmationRequest(ContractModel):
+    preview: LifeLabPromotionPreview
+    draft: dict[str, object]
+
+
+class LifeLabPromotionApplied(ContractModel):
+    preview_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    experiment_id: str = Field(pattern=r"^lab_[a-z0-9_]+$")
+    experiment_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    target_surface: PromotionTarget
+    target_id: str
+    changes: tuple[LifeLabPromotionChange, ...] = Field(min_length=1)
+    target_stale_write_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    goal_observation: GoalObservationResult | None = None
+    state: Literal["applied"] = "applied"
+    applied: Literal[True] = True
 
 
 class SourceRecordKind(StrEnum):

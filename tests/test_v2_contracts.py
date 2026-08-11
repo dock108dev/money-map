@@ -29,6 +29,7 @@ from paycheck_map.v2_contracts import (
     PromotionField,
     PromotionTarget,
     RetirementGoalInclusion,
+    RetirementPath,
     RetirementRunSelection,
     SourceFingerprintMaterial,
     SourceMoneyFact,
@@ -328,6 +329,8 @@ def test_comparison_requires_distinct_sources_and_forbids_causal_copy() -> None:
 def test_retirement_goal_inclusion_is_explicit_and_never_mutates_goals() -> None:
     inclusion = RetirementGoalInclusion(
         goal_program_id="goal_home",
+        name="Synthetic home reserve",
+        target_date=date(2027, 8, 9),
         goal_source_fingerprint=FINGERPRINT_A,
         target_amount=entered("14000.00", "goal:target"),
         reserved_for_goal=entered("2000.00", "goal:reserved"),
@@ -337,10 +340,17 @@ def test_retirement_goal_inclusion_is_explicit_and_never_mutates_goals() -> None
             "goal:target",
             "goal:reserved",
         ),
+        evidence_refs=("goal:reserved", "goal:target"),
     )
-    omitted = RetirementRunSelection(run_selection_id="retirement_baseline")
+    omitted = RetirementRunSelection(
+        run_selection_id="retirement_baseline",
+        work_optional_age=50,
+        path=RetirementPath.MIDDLE,
+    )
     included = RetirementRunSelection(
         run_selection_id="retirement_with_goal",
+        work_optional_age=50,
+        path=RetirementPath.MIDDLE,
         include_operational_goal=True,
         included_goal=inclusion,
     )
@@ -349,7 +359,12 @@ def test_retirement_goal_inclusion_is_explicit_and_never_mutates_goals() -> None
     assert included.included_goal is not None
     assert included.operational_goal_mutation is False
     with pytest.raises(ValidationError, match="must agree"):
-        RetirementRunSelection(run_selection_id="retirement_invalid", include_operational_goal=True)
+        RetirementRunSelection(
+            run_selection_id="retirement_invalid",
+            work_optional_age=50,
+            path=RetirementPath.MIDDLE,
+            include_operational_goal=True,
+        )
 
 
 def test_lab_seed_is_isolated_and_promotion_is_only_a_reviewable_preview() -> None:
@@ -358,16 +373,25 @@ def test_lab_seed_is_isolated_and_promotion_is_only_a_reviewable_preview() -> No
         seed_kind=LabExperimentSeedKind.CURRENT_GOAL,
         source_fingerprint=FINGERPRINT_A,
         seeded_money={"goal_target": entered("14000.00", "goal:target")},
+        source_label="Synthetic home reserve",
+        draft={"mission": {"target_amount": "14000.00"}},
+        experiment_fingerprint=FINGERPRINT_B,
     )
     preview = LifeLabPromotionPreview(
+        preview_id="c" * 64,
         experiment_id=seed.experiment_id,
         experiment_fingerprint=FINGERPRINT_B,
         target_surface=PromotionTarget.GOALS,
+        target_id="goal_home",
+        target_stale_write_token=FINGERPRINT_A,
         changes=(
             LifeLabPromotionChange(
                 field=PromotionField.GOAL_TARGET,
+                stored_target_field="goal_programs.target_amount",
                 before=entered("14000.00", "goal:target"),
                 after=entered("15000.00", "lab:goal_target"),
+                source_provenance=("lab:goal_target",),
+                target_provenance=("goal:target",),
             ),
         ),
     )
@@ -383,6 +407,9 @@ def test_lab_seed_is_isolated_and_promotion_is_only_a_reviewable_preview() -> No
             seed_kind=LabExperimentSeedKind.BLANK,
             source_fingerprint=FINGERPRINT_A,
             seeded_money={"goal_target": entered("14000.00", "goal:target")},
+            source_label="Invalid copied source",
+            draft={"mission": {"target_amount": "14000.00"}},
+            experiment_fingerprint=FINGERPRINT_B,
         )
 
 

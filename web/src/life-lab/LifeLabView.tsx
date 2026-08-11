@@ -1,236 +1,357 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { LifeProjection, PathResult } from "./life-lab-types";
+import type {
+  ExactDecimalString,
+  LabExperimentSeedKind,
+  LifeLabExperimentResult,
+  LifeLabExperimentSeed,
+  LifeLabPromotionApplied,
+  LifeLabPromotionPreview,
+  PromotionField,
+  PromotionTarget,
+} from "../v2-contracts";
+import type { PlanningSnapshot } from "../retirement/api";
+import { loadRetirementSnapshots } from "../retirement/api";
 import {
-  addLifeGoal,
-  deleteLifeGoal,
-  loadLifeGoals,
-  loadLifeProfile,
-  loadLifeScenarios,
-  loadLifeStartingPoint,
-  projectLifePlan,
-  saveLifeGoal,
-  saveLifeProfile,
-  saveLifeScenario,
+  confirmLabPromotion,
+  createLabExperiment,
+  loadLabSnapshots,
+  loadPrimaryPromotionGoal,
+  loadRetirementPromotionProfile,
+  openLabSnapshot,
+  previewLabPromotion,
+  projectLabExperiment,
+  saveLabSnapshot,
 } from "./api";
 import { DriveCalculator } from "./DriveCalculator";
-import { GoalEditor } from "./GoalEditor";
-import { LifeProfileForm } from "./LifeProfileForm";
-import type {
-  LifeGoal,
-  LifeGoalInput,
-  LifePlanProfile,
-  LifePlanProfileInput,
-  LifeProjection,
-  LifeStartingPoint,
-  PathResult,
-  SavedLifeScenario,
-} from "./life-lab-types";
-import { ProjectionChart } from "./ProjectionChart";
-import { ProjectionTable } from "./ProjectionTable";
 import "./life-lab.css";
 
-function currency(value: string | null | undefined, digits = 0) {
-  if (value === null || value === undefined) return "Not solved";
+function currency(value: unknown) {
+  if (value === null || value === undefined || value === "") return "Not solved";
   return Number(value).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: digits,
+    maximumFractionDigits: 0,
   });
 }
 
-function statusCopy(path: PathResult) {
-  if (path.status === "works") return { label: "Works", detail: "Essential and flexible life stays funded.", tone: "works" };
-  if (path.status === "works_essentials_only") return { label: "Essentials hold", detail: "Optional spending or goals run short.", tone: "essentials" };
-  if (path.status === "insufficient_accessible_bridge") return { label: "Bridge breaks", detail: "Retirement money exists, but accessible money runs out first.", tone: "bridge" };
-  return { label: "Shortfall", detail: "Required spending cannot remain funded through the plan.", tone: "shortfall" };
+function fingerprintLabel(value: string | null) {
+  return value ? `${value.slice(0, 12)}…${value.slice(-8)}` : "No copied source";
 }
 
-function monthDistance(start: string, end: string | null) {
-  if (!end) return null;
-  const from = new Date(`${start}T12:00:00`);
-  const to = new Date(`${end}T12:00:00`);
-  return Math.max(0, (to.getFullYear() - from.getFullYear()) * 12 + to.getMonth() - from.getMonth());
+function missionOf(draft: Record<string, unknown>) {
+  return draft.mission as Record<string, string | number>;
 }
 
-function LoadingPlan() {
+function PromotionDialog({
+  preview,
+  busy,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  preview: LifeLabPromotionPreview;
+  busy: boolean;
+  error: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const first = dialog?.querySelector<HTMLButtonElement>("button");
+    first?.focus();
+  }, []);
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const buttons = Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+    if (buttons.length === 0) return;
+    const first = buttons[0];
+    const last = buttons.at(-1) ?? first;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
   return (
-    <div className="life-loading panel">
-      <span className="loading-mark">M</span>
-      <div><strong>Building the life paths…</strong><small>Balances stay on this device.</small></div>
+    <div className="lab-dialog-backdrop" role="presentation">
+      <div ref={dialogRef} className="lab-dialog" role="dialog" aria-modal="true" aria-labelledby="lab-confirm-title" aria-describedby="lab-confirm-description" onKeyDown={onKeyDown}>
+        <span className="eyebrow">Explicit boundary crossing</span>
+        <h2 id="lab-confirm-title">Confirm this exact promotion?</h2>
+        <p id="lab-confirm-description">Only the stored fields in this diff will change. The experiment remains preserved if confirmation fails.</p>
+        <dl className="lab-confirm-diff">
+          {preview.changes.map((change) => <div key={change.field}><dt><code>{change.stored_target_field}</code></dt><dd><span>{currency(change.before.amount)}</span><b>→</b><strong>{currency(change.after.amount)}</strong></dd></div>)}
+        </dl>
+        {error && <p className="lab-promotion-error" role="alert">{error}</p>}
+        <div className="lab-dialog-actions"><button className="secondary-button" onClick={onCancel}>Cancel</button><button className="primary-button" disabled={busy} onClick={onConfirm}>{busy ? "Confirming…" : "Confirm promotion"}</button></div>
+      </div>
     </div>
   );
 }
 
 export default function LifeLabView() {
-  const [profile, setProfile] = useState<LifePlanProfile | null>(null);
-  const [startingPoint, setStartingPoint] = useState<LifeStartingPoint | null>(null);
-  const [goals, setGoals] = useState<LifeGoal[]>([]);
-  const [scenarios, setScenarios] = useState<SavedLifeScenario[]>([]);
-  const [projection, setProjection] = useState<LifeProjection | null>(null);
-  const [selectedAge, setSelectedAge] = useState<number | null>(null);
-  const [selectedPath, setSelectedPath] = useState<PathResult["path_key"]>("middle");
-  const [display, setDisplay] = useState<"chart" | "table">("chart");
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [scenarioName, setScenarioName] = useState("");
-  const [busy, setBusy] = useState(true);
+  const [seed, setSeed] = useState<LifeLabExperimentSeed | null>(null);
+  const [result, setResult] = useState<LifeLabExperimentResult | null>(null);
+  const [snapshots, setSnapshots] = useState<PlanningSnapshot[]>([]);
+  const [retirementSnapshots, setRetirementSnapshots] = useState<PlanningSnapshot[]>([]);
+  const [retirementSnapshotId, setRetirementSnapshotId] = useState("");
+  const [openedSnapshot, setOpenedSnapshot] = useState<PlanningSnapshot | null>(null);
+  const [snapshotName, setSnapshotName] = useState("");
+  const [currentGoal, setCurrentGoal] = useState<{ goal_program_id: string; name: string } | null>(null);
+  const [retirementTargetId, setRetirementTargetId] = useState<string | null>(null);
+  const [promotionSurface, setPromotionSurface] = useState<PromotionTarget>("goals");
+  const [promotionField, setPromotionField] = useState<PromotionField>("goal_target");
+  const [promotionValue, setPromotionValue] = useState("0.00");
+  const [preview, setPreview] = useState<LifeLabPromotionPreview | null>(null);
+  const [applied, setApplied] = useState<LifeLabPromotionApplied | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [promotionError, setPromotionError] = useState("");
   const [message, setMessage] = useState("");
+  const confirmTriggerRef = useRef<HTMLButtonElement>(null);
 
-  const calculate = useCallback(async (ages?: number[]) => {
-    const next = await projectLifePlan(ages);
-    setProjection(next);
-    setProfile(next.profile);
-    setGoals(next.goals);
-    setSelectedAge((current) => current && next.results.some((row) => row.target_age === current) ? current : next.results[0]?.target_age ?? null);
-    return next;
+  useEffect(() => {
+    void Promise.all([
+      loadLabSnapshots(),
+      loadRetirementSnapshots(),
+      loadPrimaryPromotionGoal(),
+      loadRetirementPromotionProfile(),
+    ]).then(([nextSnapshots, nextRetirementSnapshots, goalState, retirementProfile]) => {
+      setSnapshots(nextSnapshots);
+      setRetirementSnapshots(nextRetirementSnapshots);
+      setCurrentGoal(goalState.goal);
+      setRetirementTargetId(retirementProfile ? `retirement_profile_${retirementProfile.profile_id}` : null);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Lab evidence could not load."));
   }, []);
 
-  const load = useCallback(async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const [nextProfile, nextStart, nextGoals, nextScenarios] = await Promise.all([
-        loadLifeProfile(),
-        loadLifeStartingPoint(),
-        loadLifeGoals(),
-        loadLifeScenarios(),
-      ]);
-      setProfile(nextProfile);
-      setStartingPoint(nextStart);
-      setGoals(nextGoals);
-      setScenarios(nextScenarios);
-      if (nextProfile) await calculate(nextProfile.target_ages);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Life Lab could not load.");
-    } finally {
-      setBusy(false);
-    }
-  }, [calculate]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const mutate = async (action: () => Promise<unknown>, success: string) => {
+  const begin = async (kind: LabExperimentSeedKind) => {
     setBusy(true);
     setError("");
     setMessage("");
+    setOpenedSnapshot(null);
     try {
-      await action();
-      const [nextGoals, nextScenarios] = await Promise.all([loadLifeGoals(), loadLifeScenarios()]);
-      setGoals(nextGoals);
-      setScenarios(nextScenarios);
-      if (profile) await calculate(profile.target_ages);
-      setMessage(success);
+      const nextSeed = await createLabExperiment({
+        seed_kind: kind,
+        retirement_snapshot_id: kind === "retirement_result" ? Number(retirementSnapshotId) : null,
+      });
+      const nextResult = await projectLabExperiment({
+        experiment_id: nextSeed.experiment_id,
+        expected_experiment_fingerprint: nextSeed.experiment_fingerprint,
+        draft: nextSeed.draft,
+      });
+      setSeed(nextSeed);
+      setResult(nextResult);
+      setPromotionValue(String((nextResult.draft.promotable_values as Record<string, string>)?.goal_target ?? missionOf(nextResult.draft).target_amount ?? "0.00"));
+      setDirty(false);
+      setPreview(null);
+      setApplied(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The plan could not be updated.");
+      setError(reason instanceof Error ? reason.message : "The isolated experiment could not start.");
     } finally {
       setBusy(false);
     }
   };
 
-  const saveProfile = async (payload: LifePlanProfileInput) => {
+  const updateMission = (field: string, value: string | number) => {
+    if (!result) return;
+    const draft = structuredClone(result.draft);
+    const mission = missionOf(draft);
+    mission[field] = value;
+    draft.mission = mission;
+    setResult({ ...result, draft });
+    setDirty(true);
+    setPreview(null);
+    setApplied(null);
+  };
+
+  const recalculate = async (draft = result?.draft) => {
+    if (!result || !draft) return null;
     setBusy(true);
     setError("");
     try {
-      const next = await saveLifeProfile(payload);
-      setProfile(next);
-      setEditingProfile(false);
-      await calculate(next.target_ages);
-      setMessage("Plan assumptions updated.");
+      const next = await projectLabExperiment({
+        experiment_id: result.experiment_id,
+        expected_experiment_fingerprint: result.experiment_fingerprint,
+        draft,
+      });
+      setResult(next);
+      setDirty(false);
+      return next;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The plan could not be saved.");
+      setError(reason instanceof Error ? reason.message : "The isolated draft could not be projected.");
+      return null;
     } finally {
       setBusy(false);
     }
   };
 
-  const target = projection?.results.find((row) => row.target_age === selectedAge) ?? null;
-  const path = target?.paths.find((row) => row.path_key === selectedPath) ?? null;
-  const pathStatus = path ? statusCopy(path) : null;
-  const runway = path ? monthDistance(path.work_stop_month, path.first_shortfall_month) : null;
-  const impacts = selectedAge && projection ? projection.goal_impacts[String(selectedAge)] ?? [] : [];
-  const benchmarkRows = useMemo(() => {
-    const thresholds = projection?.benchmarks.thresholds ?? {};
-    return [
-      ["top_50", "Top 50% threshold"],
-      ["top_25", "Top 25% threshold"],
-      ["top_10", "Top 10% threshold"],
-      ["top_5", "Top 5% threshold"],
-      ["top_1", "Top 1% threshold"],
-    ].map(([key, label]) => ({ key, label, amount: thresholds[key]?.normalized_amount }));
-  }, [projection]);
+  const saveExperiment = async () => {
+    if (!result) return;
+    setBusy(true);
+    setError("");
+    try {
+      const accepted = dirty ? await recalculate() : result;
+      if (!accepted) return;
+      const name = snapshotName.trim() || `${accepted.seed_kind.replace("_", " ")} experiment`;
+      await saveLabSnapshot(name, accepted);
+      setSnapshots(await loadLabSnapshots());
+      setSnapshotName("");
+      setMessage("Reproducible experiment snapshot saved. Goals and Retirement were unchanged.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The experiment snapshot could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  if (!startingPoint && busy) return <LoadingPlan />;
-  if (!startingPoint) return <div className="notice"><span className="notice-mark">!</span><div><strong>Life Lab could not start.</strong><p>{error}</p><button className="secondary-button" onClick={() => void load()}>Try again</button></div></div>;
-  if (!profile) {
+  const preparePreview = async () => {
+    if (!result) return;
+    setBusy(true);
+    setPromotionError("");
+    setApplied(null);
+    try {
+      const draft = structuredClone(result.draft);
+      const values = (draft.promotable_values as Record<string, string> | undefined) ?? {};
+      values[promotionField] = promotionValue;
+      draft.promotable_values = values;
+      const projected = await projectLabExperiment({
+        experiment_id: result.experiment_id,
+        expected_experiment_fingerprint: result.experiment_fingerprint,
+        draft,
+      });
+      setResult(projected);
+      setDirty(false);
+      const targetId = promotionSurface === "goals" ? currentGoal?.goal_program_id : retirementTargetId;
+      if (!targetId) throw new Error(`A ${promotionSurface === "goals" ? "current Goal" : "Retirement profile"} is required for promotion.`);
+      const nextPreview = await previewLabPromotion({
+        experiment_id: projected.experiment_id,
+        expected_experiment_fingerprint: projected.experiment_fingerprint,
+        draft: projected.draft,
+        target_surface: promotionSurface,
+        target_id: targetId,
+        changes: [{ field: promotionField, after: promotionValue as ExactDecimalString }],
+      });
+      setPreview(nextPreview);
+    } catch (reason) {
+      setPromotionError(reason instanceof Error ? reason.message : "Promotion preview could not be created.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmPromotion = async () => {
+    if (!preview || !result) return;
+    setBusy(true);
+    setPromotionError("");
+    try {
+      const next = await confirmLabPromotion({ preview, draft: result.draft });
+      setApplied(next);
+      setConfirmOpen(false);
+      setMessage(`Promotion applied to ${next.target_surface}. Only the previewed field changed.`);
+      setPreview(null);
+      confirmTriggerRef.current?.focus();
+    } catch (reason) {
+      setPromotionError(reason instanceof Error ? reason.message : "Promotion confirmation failed. The experiment is preserved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const promotionFields = promotionSurface === "goals"
+    ? [
+        ["goal_target", "Goal target"],
+        ["reserved_for_goal", "Reserved for goal"],
+        ["protected_cash_floor", "Protected cash floor"],
+      ] as const
+    : [
+        ["retirement_essential_monthly_spend", "Retirement essential monthly spend"],
+        ["retirement_flexible_monthly_spend", "Retirement flexible monthly spend"],
+      ] as const;
+
+  const projection = result?.projection as unknown as LifeProjection | undefined;
+  const selected = result?.reverse_solver.selected_result as unknown as PathResult | undefined;
+  const mission = result ? missionOf(result.draft) : null;
+  const benchmarkRows = useMemo(() => Object.entries(projection?.benchmarks.thresholds ?? {}), [projection]);
+
+  if (!seed || !result || !mission) {
     return (
-      <div className="view-stack life-lab">
-        <header className="page-heading life-hero"><div><span className="eyebrow">Plan · Life Lab</span><h1>Turn the numbers into a life.</h1><p>Try any work-optional age, protect the splurges that matter, and see exactly where accessible money—not total net worth—becomes the constraint.</p></div></header>
-        {error && <div className="error-banner">{error}</div>}
-        <LifeProfileForm profile={null} startingPoint={startingPoint} busy={busy} onSave={(payload) => void saveProfile(payload)} />
+      <div className="view-stack life-lab isolated-lab">
+        <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1>Life Lab</h1><p>Explore what an extreme or alternative path would mathematically require.</p></div></header>
+        {error && <div className="error-banner" role="alert">{error}</div>}
+        <section className="panel lab-seed-chooser" aria-labelledby="lab-seed-heading">
+          <span className="eyebrow">Choose the boundary first</span>
+          <h2 id="lab-seed-heading">How should this isolated experiment begin?</h2>
+          <p>No persistent state is copied until you choose a seed. Draft edits never save back automatically.</p>
+          <div className="lab-seed-options">
+            <button disabled={busy} onClick={() => void begin("blank")}><strong>Start blank</strong><span>Use explicit zero/default inputs and no source provenance.</span></button>
+            <button disabled={busy || !currentGoal} onClick={() => void begin("current_goal")}><strong>Start from current goal</strong><span>{currentGoal ? `Copy ${currentGoal.name} once.` : "No primary Goal is available."}</span></button>
+            <div className="lab-retirement-seed"><label>Retirement result<select aria-label="Retirement result seed" value={retirementSnapshotId} onChange={(event) => setRetirementSnapshotId(event.target.value)}><option value="">Choose a saved run</option>{retirementSnapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name} · age {snapshot.target_age}</option>)}</select></label><button disabled={busy || !retirementSnapshotId} onClick={() => void begin("retirement_result")}><strong>Start from retirement result</strong><span>Copy one immutable saved run once.</span></button></div>
+          </div>
+        </section>
+        <details className="panel lab-legacy-on-entry"><summary>Stored experiment and legacy evidence</summary><div className="scenario-list">{snapshots.length === 0 ? <p>No stored evidence yet.</p> : snapshots.filter((snapshot) => !snapshot.snapshot_context.startsWith("retirement_")).map((snapshot) => <button key={snapshot.id} onClick={() => void openLabSnapshot(snapshot.id).then(setOpenedSnapshot)}><strong>{snapshot.name}</strong><span>{snapshot.context_label}</span></button>)}</div>{openedSnapshot && <article><h2>{openedSnapshot.name}</h2><p>{openedSnapshot.context_label}. Stored inputs, result, warnings, and {openedSnapshot.periods.length} monthly rows are shown without rerunning current inputs.</p><code>{openedSnapshot.source_fingerprint}</code></article>}</details>
       </div>
     );
   }
 
   return (
-    <div className="view-stack life-lab">
-      <header className="page-heading life-hero">
-        <div><span className="eyebrow">Plan · Life Lab</span><h1>What would it take?</h1><p>Deterministic paths in today’s dollars. No probability theater—just visible assumptions, accessible-money constraints, and concrete levers.</p></div>
-        <button className="secondary-button" onClick={() => setEditingProfile(true)}>Edit assumptions</button>
-      </header>
+    <div className="view-stack life-lab isolated-lab">
+      <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1>Life Lab</h1><p>Reverse-solve an alternative path inside an isolated draft.</p></div><button className="secondary-button" onClick={() => { setSeed(null); setResult(null); setPreview(null); }}>Choose another seed</button></header>
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      {message && <div className="life-message" role="status">{message}</div>}
 
-      {error && <div className="error-banner">{error}</div>}
-      {message && <div className="life-message">{message}</div>}
-      {editingProfile && <LifeProfileForm profile={profile} startingPoint={startingPoint} busy={busy} onSave={(payload) => void saveProfile(payload)} onCancel={() => setEditingProfile(false)} />}
-
-      <section className="metric-grid life-start-grid" aria-label="Observed starting point">
-        <article className="metric-card green"><span className="eyebrow">Accessible now</span><strong>{currency(startingPoint.accessible_total)}</strong><small>Cash plus confirmed sellable investments</small></article>
-        <article className="metric-card"><span className="eyebrow">Retirement</span><strong>{currency(startingPoint.pretax_retirement)}</strong><small>Shown separately until age 59½</small></article>
-        <article className="metric-card"><span className="eyebrow">Current outflow</span><strong>{currency(profile.current_monthly_outflow)}/mo</strong><small>User-entered; observed suggestion was {currency(startingPoint.observed_monthly_outflow)}</small></article>
-        <article className="metric-card ink"><span className="eyebrow">Salary baseline</span><strong>{startingPoint.payroll ? currency(startingPoint.payroll.annual_salary) : "Unavailable"}</strong><small>{startingPoint.payroll ? `Observed ${startingPoint.payroll.payment_date}` : "Add completed payroll"}</small></article>
+      <section className="panel lab-source-evidence" aria-labelledby="lab-source-heading">
+        <div><span className="eyebrow">Copied once · isolated draft</span><h2 id="lab-source-heading">{seed.source_label ?? "Blank experiment"}</h2><p>{seed.seed_kind === "blank" ? "No Goal or Retirement money was copied." : "Later source edits do not alter this experiment."}</p></div>
+        <code title={seed.source_fingerprint ?? "No copied source fingerprint"}>{fingerprintLabel(seed.source_fingerprint)}</code>
       </section>
 
-      {busy && !projection ? <LoadingPlan /> : projection && target && path && pathStatus ? (
+      <section className="panel lab-mission-editor" aria-labelledby="lab-mission-heading">
+        <header><div><span className="eyebrow">Isolated experiment fields</span><h2 id="lab-mission-heading">Dated mission</h2></div><span className="provenance-chip assumed">goal_mutation=false · retirement_mutation=false</span></header>
+        <div className="lab-mission-fields">
+          <label>Mission capital<input aria-label="Isolated mission capital" type="number" min="0" step="0.01" value={String(mission.target_amount)} onChange={(event) => updateMission("target_amount", event.target.value)} /></label>
+          <label>Mission deadline<input aria-label="Isolated mission deadline" type="date" value={String(mission.target_date).slice(0, 10)} onChange={(event) => updateMission("target_date", event.target.value)} /></label>
+          <label>Work-optional age<input aria-label="Isolated work-optional age" type="number" min="18" max="110" value={Number(mission.selected_age)} onChange={(event) => updateMission("selected_age", Number(event.target.value))} /></label>
+          <label>Deterministic path<select aria-label="Isolated deterministic path" value={String(mission.path)} onChange={(event) => updateMission("path", event.target.value)}><option value="middle">Middle</option><option value="rough">Rough</option><option value="early_crash">Early crash</option></select></label>
+          <button className="primary-button" disabled={busy} onClick={() => void recalculate()}>{busy ? "Recalculating…" : dirty ? "Recalculate changed draft" : "Recalculate draft"}</button>
+        </div>
+        <p className="lab-fingerprint">Experiment fingerprint <code>{fingerprintLabel(result.experiment_fingerprint)}</code>{dirty && <strong> · draft changed locally</strong>}</p>
+      </section>
+
+      {selected && projection && (
         <>
-          <section className="panel life-control-panel">
-            <div className="life-control-row">
-              <div><span className="eyebrow">Make work optional at</span><div className="age-pills">{projection.results.map((row) => <button key={row.target_age} className={selectedAge === row.target_age ? "active" : ""} onClick={() => setSelectedAge(row.target_age)}>Age {row.target_age}</button>)}</div></div>
-              <div><span className="eyebrow">Read the path</span><div className="path-pills">{target.paths.map((row) => <button key={row.path_key} className={selectedPath === row.path_key ? "active" : ""} onClick={() => setSelectedPath(row.path_key)}>{row.path_label}</button>)}</div></div>
-            </div>
-            <div className={`life-verdict ${pathStatus.tone}`}>
-              <div><span className="eyebrow">Age {selectedAge} · {path.path_label}</span><h2>{pathStatus.label}</h2><p>{pathStatus.detail}</p></div>
-              <div className="verdict-metrics">
-                <span><small>Accessible at work stop</small><strong>{currency(path.work_stop_assets.accessible_total ?? path.work_stop_assets.accessible_investments)}</strong></span>
-                <span><small>End spendable assets</small><strong>{currency(path.end_assets.total_spendable)}</strong></span>
-                <span><small>Required-money runway</small><strong>{runway === null ? "Through plan" : `${runway} months`}</strong></span>
-              </div>
-            </div>
-            {path.status === "insufficient_accessible_bridge" && <div className="bridge-callout"><strong>{currency(path.work_stop_assets.pretax_retirement)} is sitting in retirement at work stop.</strong><span>Life Lab does not assume a 401(k) loan or early-withdrawal exception. It marks the month your accessible bridge breaks so that any borrowing or tax strategy stays an explicit decision.</span></div>}
-          </section>
-
-          <section className="panel projection-panel">
-            <header className="life-section-heading"><div><span className="eyebrow">Today’s dollars · age {selectedAge}</span><h2>All three paths</h2></div><div className="display-toggle"><button className={display === "chart" ? "active" : ""} onClick={() => setDisplay("chart")}>Chart</button><button className={display === "table" ? "active" : ""} onClick={() => setDisplay("table")}>Table</button></div></header>
-            {display === "chart" ? <ProjectionChart paths={target.paths} /> : <ProjectionTable path={path} />}
-          </section>
-
-          <DriveCalculator projection={projection} path={path} goals={goals} startingPoint={startingPoint} />
-
-          <GoalEditor goals={goals} impacts={impacts} busy={busy} onAdd={(payload: LifeGoalInput) => void mutate(() => addLifeGoal(payload), "Goal added.")} onUpdate={(id, payload) => void mutate(() => saveLifeGoal(id, payload), "Goal updated.")} onDelete={(id) => void mutate(() => deleteLifeGoal(id), "Goal deleted.")} />
-
-          <details className="panel income-context-panel">
-            <summary>{projection.benchmarks.state_name ?? profile.state} income context</summary>
-            {projection.benchmarks.available ? <div className="benchmark-list">{benchmarkRows.map((row) => <div key={row.key} className={projection.benchmarks.current_income_context === row.key ? "current" : ""}><span>{row.label}</span><strong>{currency(row.amount)}</strong></div>)}</div> : <div className="life-empty">Benchmark unavailable for this state.</div>}
-            <p className="benchmark-note">{projection.benchmarks.warning} Source: IRS {projection.benchmarks.source_year} state AGI thresholds, normalized to {projection.benchmarks.normalized_dollar_basis}. This is context, not a spending prescription.</p>
-          </details>
-
-          <section className="panel scenario-panel">
-            <header className="life-section-heading"><div><span className="eyebrow">Reproducible snapshots</span><h2>Save a path before assumptions move</h2></div></header>
-            <div className="scenario-save"><input aria-label="Scenario name" value={scenarioName} onChange={(event) => setScenarioName(event.target.value)} placeholder={`Age ${target.target_age} · ${path.path_label}`} maxLength={120} /><button className="primary-button" disabled={busy} onClick={() => { const name = scenarioName.trim() || `Age ${target.target_age} · ${path.path_label}`; void mutate(() => saveLifeScenario({ name, target_age: target.target_age, path_key: selectedPath }), "Scenario snapshot saved.").then(() => setScenarioName("")); }}>Save this view</button></div>
-            <div className="scenario-list">{scenarios.length === 0 ? <div className="life-empty">No saved scenarios yet.</div> : scenarios.map((scenario) => <article key={scenario.id}><div><strong>{scenario.name}</strong><small>Age {scenario.target_age} · {scenario.path_key.replace("_", " ")} · {new Date(scenario.created_at).toLocaleDateString()}</small></div><span className={scenario.stale ? "stale" : "current"}>{scenario.stale ? "Inputs changed" : scenario.status.replaceAll("_", " ")}</span></article>)}</div>
-          </section>
-
-          <details className="panel assumption-panel"><summary>Assumptions, exclusions, and warnings</summary><div className="assumption-content"><div><h3>Deterministic paths</h3><p>Middle: 4% real. Rough: 2% real. Early crash: 35% loss at work stop, two flat years, then 3% real. Cash earns 0% real.</p><p>Pretax retirement withdrawals receive a {profile.retirement_tax_rate_pct}% visible haircut and are unavailable before age 59½. HSA and restricted assets are not used for ordinary spending.</p></div><div><h3>Not modeled in v0.2</h3><p>{projection.assumptions.omissions.join(", ")}.</p><ul>{projection.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div></div></details>
+          <section className="panel lab-reverse-summary"><span className="eyebrow">Reverse-solved mission capital</span><h2>{currency(result.reverse_solver.mission_capital)} by {String(mission.target_date).slice(0, 10)}</h2><p>Selected result: {selected.status.replaceAll("_", " ")}. This is deterministic arithmetic, not a probability or recommendation.</p></section>
+          <DriveCalculator projection={projection} path={selected} goals={projection.goals} startingPoint={projection.starting_point} />
         </>
-      ) : null}
+      )}
+
+      <details className="panel income-context-panel"><summary>{projection?.benchmarks.state_name ?? "State"} income context and formulas</summary>{projection?.benchmarks.available ? <div className="benchmark-list">{benchmarkRows.map(([key, row]) => <div key={key}><span>{key.replaceAll("_", " ")}</span><strong>{currency(row.normalized_amount)}</strong></div>)}</div> : <div className="life-empty">Benchmark unavailable for this draft.</div>}<p className="benchmark-note">Income thresholds are context only. Compound returns, business value, borrowing capacity, and loan eligibility are not promotable.</p></details>
+
+      <section className="panel lab-promotion-panel" aria-labelledby="lab-promotion-heading">
+        <header><div><span className="eyebrow">Only explicit mutation path</span><h2 id="lab-promotion-heading">Promotion preview</h2></div></header>
+        <div className="lab-promotion-controls">
+          <label>Target surface<select aria-label="Promotion target surface" value={promotionSurface} onChange={(event) => { const surface = event.target.value as PromotionTarget; setPromotionSurface(surface); const field = surface === "goals" ? "goal_target" : "retirement_essential_monthly_spend"; setPromotionField(field); setPreview(null); }}><option value="goals">Goals</option><option value="retirement">Retirement</option></select></label>
+          <label>Exact stored field<select aria-label="Promotion stored field" value={promotionField} onChange={(event) => { setPromotionField(event.target.value as PromotionField); setPreview(null); }}>{promotionFields.map(([field, label]) => <option key={field} value={field}>{label}</option>)}</select></label>
+          <label>Exact promoted value<input aria-label="Promotion exact value" type="number" min="0" step="0.01" value={promotionValue} onChange={(event) => { setPromotionValue(event.target.value); setPreview(null); }} /></label>
+          <button className="secondary-button" disabled={busy} onClick={() => void preparePreview()}>Generate zero-write preview</button>
+        </div>
+        {promotionError && <p className="lab-promotion-error" role="alert">{promotionError}</p>}
+        {preview && <div className="lab-preview"><p><strong>Preview only · applied=false</strong> · target token {fingerprintLabel(preview.target_stale_write_token)}</p><table><thead><tr><th>Stored field</th><th>Before</th><th>After</th></tr></thead><tbody>{preview.changes.map((change) => <tr key={change.field}><td><code>{change.stored_target_field}</code></td><td>{currency(change.before.amount)}</td><td>{currency(change.after.amount)}</td></tr>)}</tbody></table><button ref={confirmTriggerRef} className="primary-button" onClick={() => setConfirmOpen(true)}>Review confirmation</button></div>}
+        {applied && <p className="lab-applied" role="status">Applied to {applied.target_surface}. Observation: {applied.goal_observation?.status ?? "not required"}.</p>}
+      </section>
+
+      <section className="panel scenario-panel"><header className="life-section-heading"><div><span className="eyebrow">Reproducible evidence</span><h2>Experiment snapshots</h2></div></header><div className="scenario-save"><input aria-label="Experiment snapshot name" value={snapshotName} onChange={(event) => setSnapshotName(event.target.value)} placeholder="Name this experiment" maxLength={120} /><button className="primary-button" disabled={busy} onClick={() => void saveExperiment()}>Save experiment</button></div><div className="scenario-list">{snapshots.filter((snapshot) => !snapshot.snapshot_context.startsWith("retirement_")).map((snapshot) => <button key={snapshot.id} onClick={() => void openLabSnapshot(snapshot.id).then(setOpenedSnapshot)}><span><strong>{snapshot.name}</strong><small>{snapshot.context_label} · {new Date(snapshot.created_at).toLocaleDateString()}</small></span><em>{snapshot.stale ? "Inputs changed" : "Open stored evidence"}</em></button>)}</div>{openedSnapshot && <article className="lab-stored-evidence"><h3>{openedSnapshot.name}</h3><p>{openedSnapshot.context_label}. The saved result, warnings, fingerprint, and {openedSnapshot.periods.length} monthly rows are rendered without a current-input rerun.</p><code>{openedSnapshot.source_fingerprint}</code></article>}</section>
+
+      {confirmOpen && preview && <PromotionDialog preview={preview} busy={busy} error={promotionError} onConfirm={() => void confirmPromotion()} onCancel={() => { setConfirmOpen(false); setPromotionError(""); requestAnimationFrame(() => confirmTriggerRef.current?.focus()); }} />}
     </div>
   );
 }

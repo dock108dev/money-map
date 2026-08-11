@@ -26,9 +26,10 @@ import { openPlaidLink } from "./plaid-link";
 import type { DashboardData } from "./types";
 
 const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
+const RetirementView = lazy(() => import("./retirement/RetirementView"));
 const GoalsView = lazy(() => import("./goals/GoalsView"));
 
-type View = "goals" | "overview" | "accounts" | "income" | "activity" | "wealth" | "plan" | "connections" | "review";
+type View = "goals" | "overview" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
 
 const nav: Array<{ id: View; label: string; glyph: string }> = [
   { id: "goals", label: "Goals", glyph: "◉" },
@@ -37,7 +38,8 @@ const nav: Array<{ id: View; label: string; glyph: string }> = [
   { id: "income", label: "Income", glyph: "$" },
   { id: "activity", label: "Activity", glyph: "↕" },
   { id: "wealth", label: "Wealth", glyph: "◇" },
-  { id: "plan", label: "Plan", glyph: "◎" },
+  { id: "retirement", label: "Retirement", glyph: "◎" },
+  { id: "lab", label: "Lab", glyph: "⌁" },
   { id: "connections", label: "Add account", glyph: "+" },
   { id: "review", label: "Review", glyph: "!" },
 ];
@@ -347,8 +349,13 @@ export default function App() {
           {view === "income" && <IncomeView data={data.payroll} />}
           {view === "activity" && <ActivityView data={data.accounts} />}
           {view === "wealth" && <WealthView data={data.wealth} />}
-          {view === "plan" && (
-            <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Life Lab…</p></div>}>
+          {view === "retirement" && (
+            <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Retirement…</p></div>}>
+              <RetirementView />
+            </Suspense>
+          )}
+          {view === "lab" && (
+            <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Lab…</p></div>}>
               <LifeLabView />
             </Suspense>
           )}

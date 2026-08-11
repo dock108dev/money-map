@@ -274,7 +274,7 @@ export function DriveCalculator({
             <NumberField label="Owed now" value={currentLoan} onChange={setCurrentLoan} suffix="$" />
             <NumberField label="Highest balance, prior 12 mo" value={highestPriorLoan} onChange={setHighestPriorLoan} suffix="$" />
           </div>
-          <small>Money Map’s retirement total is not proof that the plan permits a loan or that every dollar is eligible and vested. General-purpose loans are normally limited to five years; leaving the employer can trigger a plan offset or taxable distribution. <a href="https://www.irs.gov/retirement-plans/retirement-plans-faqs-regarding-loans" target="_blank" rel="noreferrer">Current IRS boundary</a>.</small>
+          <small>Arithmetic only; this is not approval, eligibility, advice, or a borrowing action. Money Map’s retirement total is not proof that the plan permits a loan or that every dollar is eligible and vested. General-purpose loans are normally limited to five years; leaving the employer can trigger a plan offset or taxable distribution. <a href="https://www.irs.gov/retirement-plans/retirement-plans-faqs-regarding-loans" target="_blank" rel="noreferrer">Current IRS boundary</a>.</small>
         </article>
       </div>
     </section>

@@ -87,13 +87,18 @@
   },
   "retirement_run_selection": {
     "run_selection_id": "retirement_with_goal",
+    "work_optional_age": 50,
+    "path": "middle",
     "include_operational_goal": true,
     "included_goal": {
       "goal_program_id": "goal_home",
+      "name": "Synthetic home reserve",
+      "target_date": "2027-08-09",
       "goal_source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "target_amount": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal:target"], "derivation": null, "unavailable_reason": null},
       "reserved_for_goal": {"amount": "2000.00", "evidence": "user_entered", "source_refs": ["goal:reserved"], "derivation": null, "unavailable_reason": null},
       "remaining_target": {"amount": "12000.00", "evidence": "derived", "source_refs": ["goal:reserved", "goal:target"], "derivation": "retirement_goal_snapshot", "unavailable_reason": null},
+      "evidence_refs": ["goal:reserved", "goal:target"],
       "selection": "explicit"
     },
     "goal_default_policy": "excluded",
@@ -106,19 +111,28 @@
     "seeded_money": {
       "goal_target": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal:target"], "derivation": null, "unavailable_reason": null}
     },
+    "source_label": "Synthetic home reserve",
+    "draft": {"mission": {"target_amount": "14000.00"}},
+    "experiment_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "edit_scope": "isolated_draft",
     "goal_mutation": false,
     "retirement_mutation": false
   },
   "life_lab_promotion_preview": {
+    "preview_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "experiment_id": "lab_synthetic_goal",
     "experiment_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "target_surface": "goals",
+    "target_id": "goal_home",
+    "target_stale_write_token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "changes": [
       {
         "field": "goal_target",
+        "stored_target_field": "goal_programs.target_amount",
         "before": {"amount": "14000.00", "evidence": "user_entered", "source_refs": ["goal:target"], "derivation": null, "unavailable_reason": null},
-        "after": {"amount": "15000.00", "evidence": "user_entered", "source_refs": ["lab:goal_target"], "derivation": null, "unavailable_reason": null}
+        "after": {"amount": "15000.00", "evidence": "user_entered", "source_refs": ["lab:goal_target"], "derivation": null, "unavailable_reason": null},
+        "source_provenance": ["lab:goal_target"],
+        "target_provenance": ["goal:target"]
       }
     ],
     "state": "preview_only",

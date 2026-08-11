@@ -62,6 +62,8 @@ describe("Money Map v2 frontend contracts", () => {
   it("keeps retirement selection and Lab editing non-mutating", () => {
     const retirement = {
       run_selection_id: "retirement_baseline",
+      work_optional_age: 50,
+      path: "middle",
       include_operational_goal: false,
       included_goal: null,
       goal_default_policy: "excluded",
@@ -72,19 +74,28 @@ describe("Money Map v2 frontend contracts", () => {
       seed_kind: "blank",
       source_fingerprint: null,
       seeded_money: {},
+      source_label: null,
+      draft: { mission: { target_amount: "0.00" } },
+      experiment_fingerprint: "b".repeat(64),
       edit_scope: "isolated_draft",
       goal_mutation: false,
       retirement_mutation: false,
     } satisfies LifeLabExperimentSeed;
     const preview = {
+      preview_id: "c".repeat(64),
       experiment_id: "lab_synthetic",
       experiment_fingerprint: "a".repeat(64),
       target_surface: "goals",
+      target_id: "goal_home",
+      target_stale_write_token: "d".repeat(64),
       changes: [
         {
           field: "goal_target",
+          stored_target_field: "goal_programs.target_amount",
           before: enteredMoney("14000.00", "goal:target"),
           after: enteredMoney("15000.00", "lab:goal_target"),
+          source_provenance: ["lab:goal_target"],
+          target_provenance: ["goal:target"],
         },
       ],
       state: "preview_only",

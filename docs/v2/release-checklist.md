@@ -113,15 +113,35 @@ credential, or real balance enters the repository.
 
 ## Slice 5 — Retirement and Lab separation
 
-- [ ] Retirement excludes operational goals by default and includes only an explicitly named
+- [x] Retirement excludes operational goals by default and includes only an explicitly named
   immutable goal snapshot for a selected run.
-- [ ] Editing Retirement leaves Goals unchanged.
-- [ ] Every Lab seed is isolated; editing a Lab draft leaves Goals and Retirement
+- [x] Editing Retirement leaves Goals unchanged.
+- [x] Every Lab seed is isolated; editing a Lab draft leaves Goals and Retirement
   fingerprints unchanged.
-- [ ] Promotion preview shows exact before/after values and provenance; only an explicit
+- [x] Promotion preview shows exact before/after values and provenance; only an explicit
   confirmed supported promotion mutates its target.
-- [ ] Existing v1.2.1 Life Lab scenarios and monthly rows remain readable and reproducible.
-- [ ] Run cross-surface regression, accessibility, and visual tests.
+- [x] Existing v1.2.1 Life Lab scenarios and monthly rows remain readable and reproducible.
+- [x] The deterministic projection core accepts immutable inputs while the accepted combined
+  v1.2.1 adapter and all existing engine fixtures remain unchanged.
+- [x] No `0010` migration was required. New Retirement and Lab snapshots use the existing
+  `life_scenarios` JSON/period capacity, and narrow profile-provenance metadata uses the existing
+  application-settings domain without rewriting historical `life_*` rows.
+- [x] Cross-surface tests cover default exclusion, named inclusion, seed immutability, draft-only
+  fingerprints, read purity, zero-write preview/stale/unsupported paths, exact-field Goal and
+  Retirement promotion, promotion provenance, post-commit observation failure, and legacy
+  combined-fingerprint staleness.
+- [x] Frontend tests cover distinct lazy routes, all seed kinds, bridge states, chart/table,
+  profile stale conflicts, stored evidence, promotion diff/confirmation focus trap, stale draft
+  preservation, no cross-surface writes, and retained Overview/Accounts/Income/Activity/Wealth/
+  Add account/Review navigation.
+- [x] Isolated browser validation at 1440×900, 1024×768, and 390×844 found and fixed the
+  narrow-desktop verdict overflow, then passed with zero overflow, clipped money, or console
+  warning/error. Primary phone controls are at least 44px, reduced-motion rules are present,
+  and ignored screenshots are under `.local/v2-slice5-browser-20260810/screenshots/`.
+- [x] Final `uv run paycheck-map verify` passed 144 backend tests with one intentionally
+  opt-in skip, 74 frontend tests, formatting, Ruff, strict mypy, TypeScript, production build,
+  and private-data scanning. Standalone private-data, lockfile, diff, and build gates passed;
+  package/API/CLI/frontend versions remain `1.2.1` and the owner database evidence is unchanged.
 
 ## Slice 6 — application-wide concision and polish
 

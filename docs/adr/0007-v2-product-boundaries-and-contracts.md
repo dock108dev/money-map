@@ -103,3 +103,59 @@ Partial and failed states remain retryable and cannot be converted into successf
 observations by a browser load. A later complete operation for the affected source restores
 eligibility. Zero Plaid connections remains a valid manual-only state. Existing Goals GET
 endpoints remain read-only; only the explicit backfill command may request persistence.
+
+## Slice 5 separation and promotion mapping
+
+Slice 5 makes the Retirement and Lab boundaries executable. `LifePlanProfile` retains its
+identifier and exact stored values and is owned by Retirement. A Retirement run is created
+from an immutable projection input, excludes all operational and legacy `life_goals` by
+default, and can include one explicitly selected `GoalProgram` only as a copied target,
+reservation, remaining-target, evidence, and source-fingerprint snapshot. Neither a run nor
+a saved run can mutate its source goal.
+
+Lab experiments are complete isolated drafts. Blank seeds copy no Goal or Retirement money;
+current-goal seeds copy the accepted Goal fingerprint and exact configured values; and
+retirement-result seeds copy one immutable saved Retirement result and its run fingerprint.
+Draft projection and snapshot reads are write-free. Values cross a boundary only through a
+server-generated preview followed by a distinct stale-safe confirmation.
+
+Every supported promotion field maps one-to-one to exactly one persisted target:
+
+| Promotion field | Stored target |
+|---|---|
+| `goal_target` | `goal_programs.target_amount` |
+| `reserved_for_goal` | `goal_programs.reserved_amount` |
+| `protected_cash_floor` | `goal_programs.protected_cash_floor` |
+| `retirement_essential_monthly_spend` | `life_plan_profiles.essential_monthly_spend` |
+| `retirement_flexible_monthly_spend` | `life_plan_profiles.flexible_monthly_spend` |
+
+The former ambiguous `retirement_monthly_spend` field is removed. A single total is never
+split between essential and flexible spending, and confirmation never writes an unpreviewed
+companion field. Speculative returns, compound-sprint rates, business multiples or revenue,
+valuations, loan eligibility or borrowing capacity, and income-ranking thresholds remain
+Lab-only and non-promotable.
+
+Preview recomputes the submitted experiment fingerprint, reads the current target token,
+shows exact before/after values and provenance, and performs zero writes. Confirmation
+recomputes the same material, rejects a changed experiment or target, applies only the shown
+fields in one target transaction, and records the Lab fingerprint in field provenance. Goal
+promotion then requests one idempotent Slice 4 observation after the goal commit; an
+unavailable observation cannot roll back the accepted edit.
+
+The typed runtime surfaces are intentionally separate:
+
+- `/api/v2/retirement/profile`, `/starting-point`, `/operational-goals`, `/project`, and
+  `/snapshots` own durable Retirement assumptions, observed starting evidence, immutable run
+  selection, deterministic results, and stored Retirement evidence. The projection command has
+  no operational-goal mutation capability.
+- `/api/v2/lab/experiments`, `/experiments/project`, `/snapshots`, `/promotions/preview`, and
+  `/promotions/confirm` own explicit seeding, isolated draft arithmetic, stored experiment and
+  legacy evidence, and the sole supported cross-surface mutation boundary.
+
+No `0010_retirement_lab_boundaries` migration is needed. Existing `life_scenarios.input_snapshot`
+and `life_projection_periods` preserve each new explicit context and complete deterministic
+result, while pre-split scenarios retain their original payload, fingerprint, versions, warnings,
+and monthly rows. A pre-split scenario is labeled `Legacy combined plan · v1.2.1 inputs` and is
+compared only with the legacy combined fingerprint. New contexts are `retirement_default`,
+`retirement_with_goal`, `lab_blank`, `lab_current_goal`, and `lab_retirement_result`; opening any
+stored snapshot renders its saved evidence without a current-input rerun.

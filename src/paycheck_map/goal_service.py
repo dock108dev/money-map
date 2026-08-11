@@ -105,6 +105,7 @@ class GoalCheckInTrigger(StrEnum):
     POST_IMPORT = "post_import"
     POST_PAYROLL = "post_payroll"
     LOAD_BACKFILL = "load_backfill"
+    LAB_PROMOTION = "lab_promotion"
     SYNTHETIC_TEST = "synthetic_test"
 
 
@@ -1006,6 +1007,8 @@ def edit_goal(
     *,
     goal_program_id: str,
     request: GoalEditRequest,
+    provenance_origin: str = "v2_owner_edit",
+    provenance_source_ref: str | None = None,
 ) -> GoalProgramView:
     program = session.scalar(
         select(GoalProgram).where(GoalProgram.public_key == goal_program_id).limit(1)
@@ -1058,7 +1061,13 @@ def edit_goal(
     changed_at = utcnow()
     provenance = dict(program.field_provenance)
     for field in changed_fields:
-        provenance[field] = _owner_edit_provenance(program.public_key, field, changed_at)
+        provenance[field] = _owner_edit_provenance(
+            program.public_key,
+            field,
+            changed_at,
+            origin=provenance_origin,
+            source_ref=provenance_source_ref,
+        )
     status = "complete" if reserved >= target else "active"
     if status != program.status:
         changed_fields.add("status")
@@ -1070,7 +1079,7 @@ def edit_goal(
                     *_program_refs_from_mapping(provenance, "reserved_amount"),
                 }
             ),
-            "edit_origin": "v2_owner_edit",
+            "edit_origin": provenance_origin,
         }
     result = session.execute(
         update(GoalProgram)
@@ -1462,15 +1471,24 @@ def _program_refs_from_mapping(provenance: dict[str, Any], field: str) -> tuple[
 
 
 def _owner_edit_provenance(
-    goal_program_id: str, field: str, changed_at: datetime
+    goal_program_id: str,
+    field: str,
+    changed_at: datetime,
+    *,
+    origin: str = "v2_owner_edit",
+    source_ref: str | None = None,
 ) -> dict[str, object]:
+    refs = [
+        source_ref
+        or (
+            f"goal_program:{goal_program_id}:{origin}:{field}:"
+            f"{changed_at.isoformat(timespec='microseconds')}"
+        )
+    ]
     return {
         "evidence": "user_entered",
-        "source_refs": [
-            f"goal_program:{goal_program_id}:v2_owner_edit:{field}:"
-            f"{changed_at.isoformat(timespec='microseconds')}"
-        ],
-        "edit_origin": "v2_owner_edit",
+        "source_refs": refs,
+        "edit_origin": origin,
     }
 
 

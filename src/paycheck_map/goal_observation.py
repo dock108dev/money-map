@@ -180,7 +180,7 @@ def load_backfill_goal_observation(
 
 def _public_trigger(
     trigger: GoalCheckInTrigger,
-) -> Literal["post_refresh", "post_import", "post_payroll", "load_backfill"]:
+) -> Literal["post_refresh", "post_import", "post_payroll", "load_backfill", "lab_promotion"]:
     if trigger is GoalCheckInTrigger.SYNTHETIC_TEST:
         raise ValueError("Synthetic test triggers cannot cross the operation coordinator")
     return trigger.value  # type: ignore[return-value]

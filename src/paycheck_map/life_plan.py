@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -150,6 +151,173 @@ class ScenarioSaveInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     target_age: int = Field(ge=18, le=110)
     path_key: Literal["middle", "rough", "early_crash"] = "middle"
+
+
+@dataclass(frozen=True)
+class ProjectionProfile:
+    """Immutable profile accepted by the deterministic projection core."""
+
+    id: int
+    birth_date: date
+    state: str
+    end_age: int
+    current_monthly_outflow: Decimal
+    essential_monthly_spend: Decimal
+    flexible_monthly_spend: Decimal
+    cash_floor: Decimal
+    retirement_tax_rate_pct: Decimal
+    target_ages: tuple[int, ...]
+    notes: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ProjectionGoal:
+    """Immutable dated cash requirement copied into one projection input."""
+
+    id: int
+    profile_id: int
+    name: str
+    target_date: date
+    target_amount: Decimal
+    reserved_amount: Decimal
+    annual_cost: Decimal
+    priority: Literal["required", "flexible"]
+    enabled: bool
+    notes: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    provenance: str = "user_entered"
+
+
+@dataclass(frozen=True)
+class ProjectionPayroll:
+    annual_salary: Decimal
+    net_per_paycheck: Decimal
+    employee_retirement_per_paycheck: Decimal
+    employer_retirement_per_paycheck: Decimal
+    employee_hsa_per_paycheck: Decimal
+    employer_hsa_per_paycheck: Decimal
+    stock_plan_per_paycheck: Decimal
+
+
+@dataclass(frozen=True)
+class ProjectionStartingPoint:
+    """Immutable observed starting evidence plus its exact serialized response."""
+
+    as_of: date
+    cash: Decimal
+    accessible_investments: Decimal
+    pretax_retirement: Decimal
+    hsa: Decimal
+    restricted_assets: Decimal
+    debt: Decimal
+    payroll: ProjectionPayroll | None
+    payload_json: str
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> ProjectionStartingPoint:
+        payroll_payload = cast(dict[str, Any] | None, payload.get("payroll"))
+        payroll = (
+            ProjectionPayroll(
+                annual_salary=money(Decimal(str(payroll_payload["annual_salary"]))),
+                net_per_paycheck=money(Decimal(str(payroll_payload["net_per_paycheck"]))),
+                employee_retirement_per_paycheck=money(
+                    Decimal(str(payroll_payload["employee_retirement_per_paycheck"]))
+                ),
+                employer_retirement_per_paycheck=money(
+                    Decimal(str(payroll_payload["employer_retirement_per_paycheck"]))
+                ),
+                employee_hsa_per_paycheck=money(
+                    Decimal(str(payroll_payload["employee_hsa_per_paycheck"]))
+                ),
+                employer_hsa_per_paycheck=money(
+                    Decimal(str(payroll_payload["employer_hsa_per_paycheck"]))
+                ),
+                stock_plan_per_paycheck=money(
+                    Decimal(str(payroll_payload["stock_plan_per_paycheck"]))
+                ),
+            )
+            if payroll_payload is not None
+            else None
+        )
+        as_of_value = payload.get("as_of", date.today())
+        as_of = (
+            as_of_value if isinstance(as_of_value, date) else date.fromisoformat(str(as_of_value))
+        )
+        return cls(
+            as_of=as_of,
+            cash=money(Decimal(str(payload.get("cash", ZERO)))),
+            accessible_investments=money(Decimal(str(payload.get("accessible_investments", ZERO)))),
+            pretax_retirement=money(Decimal(str(payload.get("pretax_retirement", ZERO)))),
+            hsa=money(Decimal(str(payload.get("hsa", ZERO)))),
+            restricted_assets=money(Decimal(str(payload.get("restricted_assets", ZERO)))),
+            debt=money(Decimal(str(payload.get("debt", ZERO)))),
+            payroll=payroll,
+            payload_json=json.dumps(_json_safe(payload), sort_keys=True, separators=(",", ":")),
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return cast(dict[str, Any], json.loads(self.payload_json))
+
+
+@dataclass(frozen=True)
+class ProjectionInputs:
+    """Complete immutable boundary for a legacy, Retirement, or Lab run."""
+
+    profile: ProjectionProfile
+    goals: tuple[ProjectionGoal, ...]
+    starting_point: ProjectionStartingPoint
+    input_context: str
+
+
+def projection_profile(profile: LifePlanProfile) -> ProjectionProfile:
+    return ProjectionProfile(
+        id=profile.id,
+        birth_date=profile.birth_date,
+        state=profile.state,
+        end_age=profile.end_age,
+        current_monthly_outflow=money(profile.current_monthly_outflow),
+        essential_monthly_spend=money(profile.essential_monthly_spend),
+        flexible_monthly_spend=money(profile.flexible_monthly_spend),
+        cash_floor=money(profile.cash_floor),
+        retirement_tax_rate_pct=Decimal(profile.retirement_tax_rate_pct),
+        target_ages=tuple(profile.target_ages),
+        notes=profile.notes,
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
+    )
+
+
+def projection_goal(goal: LifeGoal) -> ProjectionGoal:
+    return ProjectionGoal(
+        id=goal.id,
+        profile_id=goal.profile_id,
+        name=goal.name,
+        target_date=goal.target_date,
+        target_amount=money(goal.target_amount),
+        reserved_amount=money(goal.reserved_amount),
+        annual_cost=money(goal.annual_cost),
+        priority=cast(Literal["required", "flexible"], goal.priority),
+        enabled=goal.enabled,
+        notes=goal.notes,
+        created_at=goal.created_at,
+        updated_at=goal.updated_at,
+    )
+
+
+def projection_inputs_from_legacy(
+    profile: LifePlanProfile,
+    goals: list[LifeGoal],
+    start: dict[str, Any],
+) -> ProjectionInputs:
+    return ProjectionInputs(
+        profile=projection_profile(profile),
+        goals=tuple(projection_goal(goal) for goal in goals),
+        starting_point=ProjectionStartingPoint.from_dict(start),
+        input_context="legacy_combined",
+    )
 
 
 def _month_start(value: date) -> date:
@@ -407,6 +575,35 @@ def profile_dict(profile: LifePlanProfile) -> dict[str, Any]:
     }
 
 
+def projection_profile_dict(profile: ProjectionProfile) -> dict[str, Any]:
+    return {
+        "id": profile.id,
+        "birth_date": profile.birth_date,
+        "state": profile.state,
+        "end_age": profile.end_age,
+        "current_monthly_outflow": str(profile.current_monthly_outflow),
+        "essential_monthly_spend": str(profile.essential_monthly_spend),
+        "flexible_monthly_spend": str(profile.flexible_monthly_spend),
+        "cash_floor": str(profile.cash_floor),
+        "retirement_tax_rate_pct": str(profile.retirement_tax_rate_pct),
+        "target_ages": list(profile.target_ages),
+        "notes": profile.notes,
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+        "provenance": {
+            "birth_date": "user_entered",
+            "state": "user_entered",
+            "end_age": "assumed",
+            "current_monthly_outflow": "user_entered",
+            "essential_monthly_spend": "user_entered",
+            "flexible_monthly_spend": "user_entered",
+            "cash_floor": "user_entered",
+            "retirement_tax_rate_pct": "assumed",
+            "target_ages": "user_entered",
+        },
+    }
+
+
 def upsert_profile(session: Session, payload: LifePlanProfileInput) -> LifePlanProfile:
     profile = get_profile(session)
     values = payload.model_dump()
@@ -440,6 +637,24 @@ def goal_dict(goal: LifeGoal) -> dict[str, Any]:
     }
 
 
+def projection_goal_dict(goal: ProjectionGoal) -> dict[str, Any]:
+    return {
+        "id": goal.id,
+        "profile_id": goal.profile_id,
+        "name": goal.name,
+        "target_date": goal.target_date,
+        "target_amount": str(goal.target_amount),
+        "reserved_amount": str(goal.reserved_amount),
+        "annual_cost": str(goal.annual_cost),
+        "priority": goal.priority,
+        "enabled": goal.enabled,
+        "notes": goal.notes,
+        "created_at": goal.created_at,
+        "updated_at": goal.updated_at,
+        "provenance": goal.provenance,
+    }
+
+
 def list_goals(session: Session, profile_id: int) -> list[LifeGoal]:
     return list(
         session.scalars(
@@ -467,7 +682,7 @@ def update_goal(session: Session, goal: LifeGoal, payload: LifeGoalInput) -> Lif
     return goal
 
 
-def _profile_snapshot(profile: LifePlanProfile) -> dict[str, Any]:
+def _profile_snapshot(profile: LifePlanProfile | ProjectionProfile) -> dict[str, Any]:
     return {
         "birth_date": str(profile.birth_date),
         "state": profile.state,
@@ -477,12 +692,12 @@ def _profile_snapshot(profile: LifePlanProfile) -> dict[str, Any]:
         "flexible_monthly_spend": str(profile.flexible_monthly_spend),
         "cash_floor": str(profile.cash_floor),
         "retirement_tax_rate_pct": str(profile.retirement_tax_rate_pct),
-        "target_ages": profile.target_ages,
+        "target_ages": list(profile.target_ages),
         "notes": profile.notes,
     }
 
 
-def _goal_snapshot(goal: LifeGoal) -> dict[str, Any]:
+def _goal_snapshot(goal: LifeGoal | ProjectionGoal) -> dict[str, Any]:
     return {
         "id": goal.id,
         "name": goal.name,
@@ -503,8 +718,8 @@ def _json_safe(value: Any) -> Any:
 
 
 def source_fingerprint(
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
+    profile: LifePlanProfile | ProjectionProfile,
+    goals: list[LifeGoal] | list[ProjectionGoal] | tuple[ProjectionGoal, ...],
     start: dict[str, Any],
     benchmark_version: str,
 ) -> str:
@@ -605,9 +820,9 @@ def _period_dict(period: dict[str, Any]) -> dict[str, Any]:
 
 
 def _simulate(
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
-    start: dict[str, Any],
+    profile: LifePlanProfile | ProjectionProfile,
+    goals: list[LifeGoal] | list[ProjectionGoal] | tuple[ProjectionGoal, ...],
+    start: dict[str, Any] | ProjectionStartingPoint,
     *,
     target_age: int,
     path_key: str,
@@ -620,13 +835,18 @@ def _simulate(
     include_periods: bool = True,
     assessment_start_month: date | None = None,
 ) -> dict[str, Any]:
-    cash = Decimal(str(start["cash"]))
-    accessible = Decimal(str(start["accessible_investments"]))
-    retirement = Decimal(str(start["pretax_retirement"]))
-    hsa = Decimal(str(start["hsa"]))
-    restricted = Decimal(str(start["restricted_assets"]))
-    debt = Decimal(str(start["debt"]))
-    payroll = cast(dict[str, Any] | None, start["payroll"])
+    immutable_start = (
+        start
+        if isinstance(start, ProjectionStartingPoint)
+        else ProjectionStartingPoint.from_dict(start)
+    )
+    cash = immutable_start.cash
+    accessible = immutable_start.accessible_investments
+    retirement = immutable_start.pretax_retirement
+    hsa = immutable_start.hsa
+    restricted = immutable_start.restricted_assets
+    debt = immutable_start.debt
+    payroll = immutable_start.payroll
     if payroll is None:
         monthly_gross = ZERO
         monthly_net = ZERO
@@ -636,33 +856,21 @@ def _simulate(
         employer_hsa = ZERO
         stock_plan = ZERO
     else:
-        monthly_gross = money(Decimal(str(payroll["annual_salary"])) / MONTHS_PER_YEAR)
-        monthly_net = money(
-            Decimal(str(payroll["net_per_paycheck"])) * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR
-        )
+        monthly_gross = money(payroll.annual_salary / MONTHS_PER_YEAR)
+        monthly_net = money(payroll.net_per_paycheck * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR)
         employee_retirement = money(
-            Decimal(str(payroll["employee_retirement_per_paycheck"]))
-            * PAYCHECKS_PER_YEAR
-            / MONTHS_PER_YEAR
+            payroll.employee_retirement_per_paycheck * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR
         )
         employer_retirement = money(
-            Decimal(str(payroll["employer_retirement_per_paycheck"]))
-            * PAYCHECKS_PER_YEAR
-            / MONTHS_PER_YEAR
+            payroll.employer_retirement_per_paycheck * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR
         )
         employee_hsa = money(
-            Decimal(str(payroll["employee_hsa_per_paycheck"]))
-            * PAYCHECKS_PER_YEAR
-            / MONTHS_PER_YEAR
+            payroll.employee_hsa_per_paycheck * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR
         )
         employer_hsa = money(
-            Decimal(str(payroll["employer_hsa_per_paycheck"]))
-            * PAYCHECKS_PER_YEAR
-            / MONTHS_PER_YEAR
+            payroll.employer_hsa_per_paycheck * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR
         )
-        stock_plan = money(
-            Decimal(str(payroll["stock_plan_per_paycheck"])) * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR
-        )
+        stock_plan = money(payroll.stock_plan_per_paycheck * PAYCHECKS_PER_YEAR / MONTHS_PER_YEAR)
 
     enabled_goals = [goal for goal in goals if goal.enabled]
     first_month = _month_start(as_of)
@@ -684,7 +892,7 @@ def _simulate(
 
     def fund_due_goals(
         priority: str,
-        rows: list[LifeGoal],
+        rows: list[LifeGoal | ProjectionGoal],
         age: int,
         current_month: date,
         current_cash: Decimal,
@@ -1064,9 +1272,9 @@ def _minimum_change(
 
 
 def _additional_income_needed(
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
-    start: dict[str, Any],
+    profile: LifePlanProfile | ProjectionProfile,
+    goals: list[LifeGoal] | list[ProjectionGoal] | tuple[ProjectionGoal, ...],
+    start: dict[str, Any] | ProjectionStartingPoint,
     target_age: int,
     path_key: str,
     as_of: date,
@@ -1086,9 +1294,9 @@ def _additional_income_needed(
 
 
 def _retirement_capital_needed(
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
-    start: dict[str, Any],
+    profile: LifePlanProfile | ProjectionProfile,
+    goals: list[LifeGoal] | list[ProjectionGoal] | tuple[ProjectionGoal, ...],
+    start: dict[str, Any] | ProjectionStartingPoint,
     target_age: int,
     path_key: str,
     as_of: date,
@@ -1112,9 +1320,9 @@ def _retirement_capital_needed(
 
 
 def _earliest_viable_age(
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
-    start: dict[str, Any],
+    profile: LifePlanProfile | ProjectionProfile,
+    goals: list[LifeGoal] | list[ProjectionGoal] | tuple[ProjectionGoal, ...],
+    start: dict[str, Any] | ProjectionStartingPoint,
     target_age: int,
     as_of: date,
 ) -> int | None:
@@ -1166,13 +1374,33 @@ def project_life_plan(
     as_of: date | None = None,
 ) -> dict[str, Any]:
     today = as_of or date.today()
+    inputs = projection_inputs_from_legacy(
+        profile,
+        goals,
+        starting_point(session, as_of=today),
+    )
+    return project_projection_inputs(inputs, target_ages=target_ages, as_of=today)
+
+
+def project_projection_inputs(
+    inputs: ProjectionInputs,
+    *,
+    target_ages: list[int] | None = None,
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    """Project one complete immutable input without reading or writing persistence."""
+
+    today = as_of or inputs.starting_point.as_of
+    profile = inputs.profile
+    goals = inputs.goals
     current_age = _age_months(profile.birth_date, today) // 12
-    ages = target_ages or profile.target_ages
+    ages = target_ages or list(profile.target_ages)
     if any(age <= current_age or age >= profile.end_age for age in ages):
         raise ValueError("Target ages must be after the current age and before the end age")
-    start = starting_point(session, as_of=today)
-    payroll = cast(dict[str, Any] | None, start["payroll"])
-    current_income = Decimal(str(payroll["annual_salary"])) if payroll else None
+    start_record = inputs.starting_point
+    start = start_record.as_dict()
+    payroll = start_record.payroll
+    current_income = payroll.annual_salary if payroll else None
     benchmarks = load_benchmarks(profile.state, current_income)
     benchmark_version = str(benchmarks.get("version", "unavailable"))
     fingerprint = source_fingerprint(profile, goals, start, benchmark_version)
@@ -1184,16 +1412,16 @@ def project_life_plan(
             result = _simulate(
                 profile,
                 goals,
-                start,
+                start_record,
                 target_age=age,
                 path_key=path_key,
                 as_of=today,
             )
             additional_income = _additional_income_needed(
-                profile, goals, start, age, path_key, today
+                profile, goals, start_record, age, path_key, today
             )
             retirement_capital = _retirement_capital_needed(
-                profile, goals, start, age, path_key, today
+                profile, goals, start_record, age, path_key, today
             )
             stop_month = cast(date, result["work_stop_month"])
             first_shortfall = cast(date | None, result["first_shortfall_month"])
@@ -1225,19 +1453,19 @@ def project_life_plan(
     for age in ages:
         with_goals = middle_by_age[age]
         impacts: list[dict[str, Any]] = []
-        with_viable = _earliest_viable_age(profile, goals, start, age, today)
+        with_viable = _earliest_viable_age(profile, goals, start_record, age, today)
         for goal in (row for row in goals if row.enabled):
             without = [row for row in goals if row.id != goal.id]
             without_result = _simulate(
                 profile,
                 without,
-                start,
+                start_record,
                 target_age=age,
                 path_key="middle",
                 as_of=today,
                 include_periods=False,
             )
-            without_viable = _earliest_viable_age(profile, without, start, age, today)
+            without_viable = _earliest_viable_age(profile, without, start_record, age, today)
             months_until = max(
                 1,
                 (goal.target_date.year - today.year) * 12 + goal.target_date.month - today.month,
@@ -1287,10 +1515,10 @@ def project_life_plan(
         "source_fingerprint": fingerprint,
         "generated_at": datetime.now(UTC),
         "as_of": today,
-        "profile": profile_dict(profile),
+        "profile": projection_profile_dict(profile),
         "starting_point": start,
         "benchmarks": benchmarks,
-        "goals": [goal_dict(goal) for goal in goals],
+        "goals": [projection_goal_dict(goal) for goal in goals],
         "assumptions": _assumptions(),
         "results": results,
         "goal_impacts": goal_impacts,

@@ -80,6 +80,26 @@ from .refresh import (
     sync_all_connections,
 )
 from .reporting import generate_trailing_report
+from .retirement_lab import (
+    PlanningNotFoundError,
+    PlanningStaleError,
+    PlanningValidationError,
+    confirm_lab_promotion,
+    edit_retirement_profile,
+    eligible_retirement_goals,
+    list_lab_snapshots,
+    list_retirement_snapshots,
+    open_lab_snapshot,
+    open_retirement_snapshot,
+    preview_lab_promotion,
+    project_lab_experiment,
+    retirement_profile_view,
+    retirement_starting_evidence,
+    run_retirement_projection,
+    save_lab_snapshot,
+    save_retirement_snapshot,
+    seed_lab_experiment,
+)
 from .services import (
     account_detail,
     accounts_dashboard,
@@ -108,8 +128,22 @@ from .v2_contracts import (
     GoalPositionState,
     GoalProgramView,
     GoalProvenanceState,
+    LifeLabExperimentCreateRequest,
+    LifeLabExperimentProjectRequest,
+    LifeLabExperimentResult,
+    LifeLabExperimentSeed,
+    LifeLabPromotionApplied,
+    LifeLabPromotionConfirmationRequest,
+    LifeLabPromotionPreview,
+    LifeLabPromotionPreviewRequest,
+    LifeLabSnapshotSaveRequest,
     PrimaryGoalSelectionRequest,
     PrimaryGoalState,
+    RetirementProfileEditRequest,
+    RetirementProfileView,
+    RetirementProjectionRequest,
+    RetirementProjectionResult,
+    RetirementSnapshotSaveRequest,
 )
 
 router = APIRouter(prefix="/api")
@@ -339,6 +373,185 @@ def patch_v2_goal(
         session.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except GoalValidationError as exc:
+        session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/v2/retirement/profile")
+def get_v2_retirement_profile(
+    session: Session = Depends(get_session),
+) -> RetirementProfileView | None:
+    profile = get_profile(session)
+    return retirement_profile_view(session, profile) if profile is not None else None
+
+
+@router.put("/v2/retirement/profile")
+def put_v2_retirement_profile(
+    payload: RetirementProfileEditRequest,
+    session: Session = Depends(get_session),
+) -> RetirementProfileView:
+    try:
+        result = edit_retirement_profile(session, request=payload)
+        session.commit()
+        return result
+    except PlanningNotFoundError as exc:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PlanningStaleError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PlanningValidationError as exc:
+        session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/v2/retirement/starting-point")
+def get_v2_retirement_starting_point(
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    return retirement_starting_evidence(session)
+
+
+@router.get("/v2/retirement/operational-goals")
+def get_v2_retirement_operational_goals(
+    session: Session = Depends(get_session),
+) -> tuple[GoalProgramView, ...]:
+    return eligible_retirement_goals(session)
+
+
+@router.post("/v2/retirement/project")
+def post_v2_retirement_projection(
+    payload: RetirementProjectionRequest,
+    session: Session = Depends(get_session),
+) -> RetirementProjectionResult:
+    try:
+        return run_retirement_projection(session, request=payload)
+    except PlanningNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (PlanningValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/v2/retirement/snapshots")
+def post_v2_retirement_snapshot(
+    payload: RetirementSnapshotSaveRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        result = save_retirement_snapshot(session, name=payload.name, run=payload.run)
+        session.commit()
+        return result
+    except PlanningStaleError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PlanningValidationError as exc:
+        session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/v2/retirement/snapshots")
+def get_v2_retirement_snapshots(
+    session: Session = Depends(get_session),
+) -> list[dict[str, Any]]:
+    return list_retirement_snapshots(session)
+
+
+@router.get("/v2/retirement/snapshots/{snapshot_id}")
+def get_v2_retirement_snapshot(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return open_retirement_snapshot(session, snapshot_id)
+    except PlanningNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/v2/lab/experiments")
+def post_v2_lab_experiment(
+    payload: LifeLabExperimentCreateRequest,
+    session: Session = Depends(get_session),
+) -> LifeLabExperimentSeed:
+    try:
+        return seed_lab_experiment(session, request=payload)
+    except PlanningNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PlanningValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/v2/lab/experiments/project")
+def post_v2_lab_projection(
+    payload: LifeLabExperimentProjectRequest,
+) -> LifeLabExperimentResult:
+    try:
+        return project_lab_experiment(request=payload)
+    except (PlanningValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/v2/lab/snapshots")
+def post_v2_lab_snapshot(
+    payload: LifeLabSnapshotSaveRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        result = save_lab_snapshot(session, name=payload.name, result=payload.result)
+        session.commit()
+        return result
+    except PlanningStaleError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PlanningValidationError as exc:
+        session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/v2/lab/snapshots")
+def get_v2_lab_snapshots(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+    return list_lab_snapshots(session)
+
+
+@router.get("/v2/lab/snapshots/{snapshot_id}")
+def get_v2_lab_snapshot(
+    snapshot_id: int,
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return open_lab_snapshot(session, snapshot_id)
+    except PlanningNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/v2/lab/promotions/preview")
+def post_v2_lab_promotion_preview(
+    payload: LifeLabPromotionPreviewRequest,
+    session: Session = Depends(get_session),
+) -> LifeLabPromotionPreview:
+    try:
+        return preview_lab_promotion(session, request=payload)
+    except PlanningNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PlanningStaleError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PlanningValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/v2/lab/promotions/confirm")
+def post_v2_lab_promotion_confirmation(
+    payload: LifeLabPromotionConfirmationRequest,
+    session: Session = Depends(get_session),
+) -> LifeLabPromotionApplied:
+    try:
+        return confirm_lab_promotion(session, request=payload)
+    except PlanningNotFoundError as exc:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PlanningStaleError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PlanningValidationError as exc:
         session.rollback()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

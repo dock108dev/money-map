@@ -116,6 +116,7 @@ export interface GoalCheckIn {
     | "post_import"
     | "post_payroll"
     | "load_backfill"
+    | "lab_promotion"
     | "synthetic_test";
   created_at: string;
   contract_version: "money-map-v2-contract-v1";
@@ -134,7 +135,7 @@ export interface GoalCheckInTimelinePage {
 
 export type GoalObservationResult = {
   status: "created" | "unchanged" | "no_primary" | "not_current" | "unavailable";
-  trigger: "post_refresh" | "post_import" | "post_payroll" | "load_backfill";
+  trigger: "post_refresh" | "post_import" | "post_payroll" | "load_backfill" | "lab_promotion";
   check_in: GoalCheckIn | null;
   retryable: boolean;
   message: string;
@@ -200,19 +201,93 @@ export type GoalMilestoneState =
 
 export interface RetirementGoalInclusion {
   goal_program_id: string;
+  name: string;
+  target_date: string;
   goal_source_fingerprint: string;
   target_amount: EvidencedMoney;
   reserved_for_goal: EvidencedMoney;
   remaining_target: EvidencedMoney;
+  evidence_refs: string[];
   selection: "explicit";
+}
+
+export type RetirementPath = "middle" | "rough" | "early_crash";
+export type PlanningSnapshotContext =
+  | "retirement_default"
+  | "retirement_with_goal"
+  | "lab_blank"
+  | "lab_current_goal"
+  | "lab_retirement_result"
+  | "legacy_combined";
+
+export interface RetirementProfileView {
+  profile_id: number;
+  birth_date: string;
+  state: string;
+  plan_through_age: number;
+  current_monthly_outflow: EvidencedMoney;
+  retirement_essential_monthly_spend: EvidencedMoney;
+  retirement_flexible_monthly_spend: EvidencedMoney;
+  protected_cash_floor: EvidencedMoney;
+  retirement_tax_haircut_pct: string;
+  work_optional_ages: number[];
+  notes: string;
+  edit_token: string;
+  updated_at: string;
+}
+
+export interface RetirementProfileEditRequest {
+  expected_edit_token: string;
+  birth_date?: string | null;
+  state?: string | null;
+  plan_through_age?: number | null;
+  current_monthly_outflow?: ExactDecimalString | null;
+  retirement_essential_monthly_spend?: ExactDecimalString | null;
+  retirement_flexible_monthly_spend?: ExactDecimalString | null;
+  protected_cash_floor?: ExactDecimalString | null;
+  retirement_tax_haircut_pct?: string | null;
+  work_optional_ages?: number[] | null;
+  notes?: string | null;
 }
 
 export interface RetirementRunSelection {
   run_selection_id: string;
+  work_optional_age: number;
+  path: RetirementPath;
   include_operational_goal: boolean;
   included_goal: RetirementGoalInclusion | null;
   goal_default_policy: "excluded";
   operational_goal_mutation: false;
+}
+
+export interface RetirementProjectionRequest {
+  work_optional_age: number;
+  path: RetirementPath;
+  goal_program_id?: string | null;
+}
+
+export interface RetirementProjectionResult {
+  run_selection: RetirementRunSelection;
+  run_fingerprint: string;
+  profile: RetirementProfileView;
+  snapshot_context: "retirement_default" | "retirement_with_goal";
+  bridge_verdict:
+    | "works"
+    | "works_essentials_only"
+    | "shortfall"
+    | "insufficient_accessible_bridge";
+  accessible_assets_at_work_stop: ExactDecimalString;
+  retirement_assets_at_work_stop: ExactDecimalString;
+  end_spendable_assets: ExactDecimalString;
+  required_money_runway_months: number | null;
+  warnings: string[];
+  selected_result: Record<string, unknown>;
+  projection: Record<string, unknown>;
+}
+
+export interface RetirementSnapshotSaveRequest {
+  name: string;
+  run: RetirementProjectionResult;
 }
 
 export type LabExperimentSeedKind = "blank" | "current_goal" | "retirement_result";
@@ -222,9 +297,42 @@ export interface LifeLabExperimentSeed {
   seed_kind: LabExperimentSeedKind;
   source_fingerprint: string | null;
   seeded_money: Record<string, EvidencedMoney>;
+  source_label: string | null;
+  draft: Record<string, unknown>;
+  experiment_fingerprint: string;
   edit_scope: "isolated_draft";
   goal_mutation: false;
   retirement_mutation: false;
+}
+
+export interface LifeLabExperimentCreateRequest {
+  seed_kind: LabExperimentSeedKind;
+  retirement_snapshot_id?: number | null;
+}
+
+export interface LifeLabExperimentProjectRequest {
+  experiment_id: string;
+  expected_experiment_fingerprint: string;
+  draft: Record<string, unknown>;
+}
+
+export interface LifeLabExperimentResult {
+  experiment_id: string;
+  experiment_fingerprint: string;
+  seed_kind: LabExperimentSeedKind;
+  snapshot_context: "lab_blank" | "lab_current_goal" | "lab_retirement_result";
+  draft: Record<string, unknown>;
+  projection: Record<string, unknown>;
+  reverse_solver: Record<string, unknown>;
+  snapshot_context_evidence: Record<string, unknown>;
+  edit_scope: "isolated_draft";
+  goal_mutation: false;
+  retirement_mutation: false;
+}
+
+export interface LifeLabSnapshotSaveRequest {
+  name: string;
+  result: LifeLabExperimentResult;
 }
 
 export type PromotionTarget = "goals" | "retirement";
@@ -232,22 +340,61 @@ export type PromotionField =
   | "goal_target"
   | "reserved_for_goal"
   | "protected_cash_floor"
-  | "retirement_monthly_spend";
+  | "retirement_essential_monthly_spend"
+  | "retirement_flexible_monthly_spend";
+
+export interface LifeLabPromotionCandidate {
+  field: PromotionField;
+  after: ExactDecimalString;
+}
+
+export interface LifeLabPromotionPreviewRequest {
+  experiment_id: string;
+  expected_experiment_fingerprint: string;
+  draft: Record<string, unknown>;
+  target_surface: PromotionTarget;
+  target_id: string;
+  changes: LifeLabPromotionCandidate[];
+}
 
 export interface LifeLabPromotionChange {
   field: PromotionField;
+  stored_target_field: string;
   before: EvidencedMoney;
   after: EvidencedMoney;
+  source_provenance: string[];
+  target_provenance: string[];
 }
 
 export interface LifeLabPromotionPreview {
+  preview_id: string;
   experiment_id: string;
   experiment_fingerprint: string;
   target_surface: PromotionTarget;
+  target_id: string;
+  target_stale_write_token: string;
   changes: LifeLabPromotionChange[];
   state: "preview_only";
   requires_explicit_confirmation: true;
   applied: false;
+}
+
+export interface LifeLabPromotionConfirmationRequest {
+  preview: LifeLabPromotionPreview;
+  draft: Record<string, unknown>;
+}
+
+export interface LifeLabPromotionApplied {
+  preview_id: string;
+  experiment_id: string;
+  experiment_fingerprint: string;
+  target_surface: PromotionTarget;
+  target_id: string;
+  changes: LifeLabPromotionChange[];
+  target_stale_write_token: string;
+  goal_observation: GoalObservationResult | null;
+  state: "applied";
+  applied: true;
 }
 
 export type SourceRecordKind =
