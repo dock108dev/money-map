@@ -1,0 +1,95 @@
+.modal-open {
+  overflow: hidden;
+}
+
+.focused-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background: rgba(13, 24, 19, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.focused-dialog {
+  width: min(680px, 100%);
+  max-height: calc(100vh - 40px);
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid #d7ddd8;
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  animation: focused-dialog-in 160ms ease-out;
+}
+
+.focused-dialog-boundary {
+  border-top: 5px solid #b75a48;
+}
+
+.focused-dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.focused-dialog-heading h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  font-weight: 500;
+}
+
+.focused-dialog-heading p {
+  max-width: 560px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.focused-dialog :is(button, input, select, textarea, summary, a):focus-visible {
+  outline: 3px solid rgba(31, 114, 89, 0.35);
+  outline-offset: 3px;
+}
+
+@keyframes focused-dialog-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .focused-dialog-backdrop {
+    padding: 0;
+    align-items: end;
+  }
+
+  .focused-dialog {
+    width: 100%;
+    max-height: 94vh;
+    padding: 22px 18px;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .focused-dialog :is(button, input, select, textarea) {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focused-dialog {
+    animation: none;
+  }
+}
+
+@media print {
+  .focused-dialog-backdrop {
+    display: none !important;
+  }
+}

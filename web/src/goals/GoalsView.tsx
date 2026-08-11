@@ -23,6 +23,7 @@ import type {
   GoalProvenanceState,
   PrimaryGoalState,
 } from "../v2-contracts";
+import { FocusedDialog } from "../FocusedDialog";
 import {
   backfillGoalCheckIn,
   editGoal,
@@ -295,43 +296,6 @@ function GoalEditDialog({
   const [submitError, setSubmitError] = useState("");
   const [conflict, setConflict] = useState(false);
   const [busy, setBusy] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    const previous = invoker.current;
-    const dialog = dialogRef.current;
-    const first = dialog?.querySelector<HTMLElement>("input");
-    first?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !dialog) return;
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-      const firstFocusable = focusable[0];
-      const lastFocusable = focusable.at(-1);
-      if (event.shiftKey && document.activeElement === firstFocusable) {
-        event.preventDefault();
-        lastFocusable?.focus();
-      } else if (!event.shiftKey && document.activeElement === lastFocusable) {
-        event.preventDefault();
-        firstFocusable?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      previous?.focus();
-    };
-  }, [invoker]);
 
   const update = (field: keyof EditDraft, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -369,22 +333,19 @@ function GoalEditDialog({
   };
 
   return (
-    <div className="goal-dialog-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div
-        className="goal-dialog"
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="goal-edit-title"
-        aria-describedby={submitError ? "goal-edit-error" : undefined}
-      >
-        <button className="icon-button" onClick={onClose} aria-label="Close goal editor">×</button>
+    <FocusedDialog
+      title="Edit goal"
+      description="Update the primary goal without changing its financial evidence."
+      returnFocusRef={invoker}
+      onClose={onClose}
+      className="goal-dialog"
+    >
         <span className="eyebrow">Primary goal</span>
-        <h2 id="goal-edit-title">Edit goal</h2>
         <form onSubmit={(event) => void submit(event)} noValidate>
           <label>
             Goal name
             <input
+              data-autofocus
               autoComplete="off"
               value={draft.name}
               onChange={(event) => update("name", event.target.value)}
@@ -455,8 +416,7 @@ function GoalEditDialog({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </FocusedDialog>
   );
 }
 
@@ -496,6 +456,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
   const [history, setHistory] = useState<GoalCheckInTimelinePage | null>(null);
   const [historyError, setHistoryError] = useState("");
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [provenance, setProvenance] = useState<GoalProvenanceState | null>(null);
   const [provenanceError, setProvenanceError] = useState("");
   const [provenanceBusy, setProvenanceBusy] = useState(false);
@@ -505,6 +466,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
   const [selectionError, setSelectionError] = useState("");
   const [selectionBusy, setSelectionBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [printRequested, setPrintRequested] = useState(false);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const loadSequence = useRef(0);
   const historyOpened = useRef(false);
@@ -606,6 +568,15 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     void reloadCompleteSurface();
   }, [reloadCompleteSurface, reloadVersion]);
 
+  useEffect(() => {
+    if (!printRequested) return;
+    const frame = requestAnimationFrame(() => {
+      window.print();
+      setPrintRequested(false);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [printRequested, provenance, history]);
+
   const loadCandidateDetails = async () => {
     if (candidates) return;
     setCandidateError("");
@@ -621,6 +592,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     setHistoryError("");
     try {
       const page = await loadGoalCheckIns(cursor);
+      if (!cursor) setHistoryExpanded(false);
       setHistory((current) => {
         if (!cursor || !current) {
           const checkIns = page.check_ins.slice(0, 25);
@@ -661,6 +633,14 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     } finally {
       setProvenanceBusy(false);
     }
+  };
+
+  const printEvidence = async () => {
+    await Promise.all([
+      history ? Promise.resolve() : loadHistory(),
+      provenance ? Promise.resolve() : loadProvenance(),
+    ]);
+    setPrintRequested(true);
   };
 
   const choosePrimary = async (candidate: GoalProgramView) => {
@@ -759,12 +739,17 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
   const available = position?.available_above_floor.amount ?? null;
   const pace = position?.required_funding_pace.amount ?? null;
   const observation = position ? `Observed ${formatDate(position.observed_on)}` : "Observation unavailable";
+  const visibleHistory = history?.check_ins.slice(0, historyExpanded ? 25 : 3) ?? [];
+  const showObservation = Boolean(
+    observationError || (observationState && observationState.status !== "unchanged"),
+  );
 
   return (
-    <div className="goals-view view-stack" aria-busy={busy} data-reduced-motion={reducedMotion}>
-      <header className="goals-page-heading"><span className="eyebrow">Money Map</span><h1>Goals</h1></header>
+    <div className="goals-view view-stack" aria-busy={busy} data-reduced-motion={reducedMotion} data-copy-budget="goals-first-viewport">
+      <header className="goals-page-heading"><span className="eyebrow">Money Map</span><h1 data-prose>Goals</h1></header>
+      <p className="print-only print-evidence-header" aria-hidden="true">Goals evidence · {observation}</p>
       {message && <p className="goal-status-message" role="status">{message}</p>}
-      {(observationError || observationState) && (
+      {showObservation && (
         <p
           className={`goal-currentness goal-currentness-${observationError ? "unavailable" : observationState?.status}`}
           role={observationError || observationState?.retryable ? "alert" : "status"}
@@ -772,7 +757,9 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
         >
           {observationError
             ? `${observationError} No new goal observation was saved. Use Update data to retry.`
-            : observationState?.message}
+            : observationState?.status === "created"
+              ? "Financial change saved."
+              : observationState?.message}
         </p>
       )}
       <section className="goal-primary-card panel" aria-labelledby="primary-goal-title">
@@ -786,7 +773,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
         </div>
         <div className="goal-comparison-summary">
           <span>Since last financial change</span>
-          <p className="goal-verdict">{verdictSentence(comparisonState, detailErrors.comparison)}</p>
+          <p className="goal-verdict" data-prose>{verdictSentence(comparisonState, detailErrors.comparison)}</p>
         </div>
         <div className="goal-metrics" aria-label="Primary goal metrics">
           <GoalMetric label="Explicitly reserved" value={formatMoney(reserved)} />
@@ -795,20 +782,24 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
         </div>
         <div className="goal-milestone">
           <span>Binding milestone</span>
-          <strong>{milestoneSentence(milestoneState, detailErrors.milestone)}</strong>
+          <strong data-prose>{milestoneSentence(milestoneState, detailErrors.milestone)}</strong>
         </div>
+        <code className="print-only" aria-hidden="true">Source fingerprint: {positionState?.source_fingerprint ?? "Unavailable"}</code>
       </section>
 
       <section className="goals-disclosures" aria-label="Goal details and actions">
-        <button ref={editButtonRef} className="secondary-button goal-edit-button" onClick={() => setEditing(true)}>
+        <button ref={editButtonRef} className="secondary-button goal-edit-button print-hidden" onClick={() => setEditing(true)}>
           Edit goal
         </button>
-        <details className="goal-detail panel">
+        <button className="secondary-button goal-print-button print-hidden" onClick={() => void printEvidence()}>
+          Print evidence
+        </button>
+        <details className="goal-detail panel" data-print-ready="true">
           <summary>Position and formulas</summary>
           {detailErrors.position && <p className="goal-detail-error">{detailErrors.position}</p>}
           <PositionDetails position={position} />
         </details>
-        <details className="goal-detail panel">
+        <details className="goal-detail panel" data-print-ready="true">
           <summary>Comparison evidence</summary>
           <div className="goal-detail-body">
             {detailErrors.comparison && <p className="goal-detail-error">{detailErrors.comparison}</p>}
@@ -826,6 +817,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
         </details>
         <details
           className="goal-detail panel"
+          data-print-ready={history ? "true" : "false"}
           onToggle={(event) => {
             if (event.currentTarget.open) historyOpened.current = true;
             if (event.currentTarget.open && !history && !historyBusy) void loadHistory();
@@ -837,8 +829,8 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
             {historyError && <p className="goal-detail-error">{historyError}</p>}
             {history?.check_ins.length === 0 && <p className="goal-detail-message">No saved check-ins exist yet.</p>}
             {history && history.check_ins.length > 0 && (
-              <ol className="goal-timeline">
-                {history.check_ins.map((checkIn) => {
+              <ol className="goal-timeline" data-default-visible-count="3">
+                {visibleHistory.map((checkIn) => {
                   const comparison = history.comparisons.find(
                     (item) => item.current_check_in_id === checkIn.check_in_id,
                   );
@@ -888,9 +880,14 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
                 })}
               </ol>
             )}
-            {history?.next_cursor && history.check_ins.length < 25 && (
-              <button className="secondary-button" disabled={historyBusy} onClick={() => void loadHistory(history.next_cursor ?? undefined)}>
-                {historyBusy ? "Loading…" : "Load older check-ins"}
+            {!historyExpanded && history && (history.check_ins.length > 3 || history.next_cursor) && (
+              <button className="secondary-button print-hidden" onClick={() => setHistoryExpanded(true)}>
+                Show older evidence
+              </button>
+            )}
+            {historyExpanded && history?.next_cursor && history.check_ins.length < 25 && (
+              <button className="secondary-button print-hidden" disabled={historyBusy} onClick={() => void loadHistory(history.next_cursor ?? undefined)}>
+                {historyBusy ? "Loading…" : "Load older evidence"}
               </button>
             )}
             {historyBusy && !history && <p className="goal-detail-message">Loading check-ins…</p>}
@@ -898,6 +895,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
         </details>
         <details
           className="goal-detail panel"
+          data-print-ready={provenance ? "true" : "false"}
           onToggle={(event) => {
             if (event.currentTarget.open) provenanceOpened.current = true;
             if (event.currentTarget.open) void loadProvenance();
@@ -929,6 +927,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
         </details>
         <details
           className="goal-detail panel"
+          data-print-ready={candidates ? "true" : "false"}
           onToggle={(event) => {
             if (event.currentTarget.open) candidatesOpened.current = true;
             if (event.currentTarget.open) void loadCandidateDetails();

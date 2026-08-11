@@ -108,19 +108,23 @@ function plaid(refreshDue: boolean, connectionCount = 1) {
   };
 }
 
-function workingFetch(refreshDue = false, connectionCount = 1) {
+function workingFetch(
+  refreshDue = false,
+  connectionCount = 1,
+  options: { issues?: unknown[]; failedConnections?: number } = {},
+) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === "/api/plaid/sync-all") {
       return json({
-        status: "complete",
+        status: options.failedConnections ? "partial" : "complete",
         started_at: "2026-07-31T15:00:00Z",
         finished_at: "2026-07-31T15:00:01Z",
         requested: connectionCount,
-        succeeded: connectionCount,
-        failed: 0,
+        succeeded: Math.max(connectionCount - (options.failedConnections ?? 0), 0),
+        failed: options.failedConnections ?? 0,
         connections: connectionCount
-          ? [{ connection_id: 1, institution: "Bank", status: "complete", accounts: 10, transactions: 0, holdings: 0, balance_snapshot_date: "2026-07-31", started_at: "2026-07-31T15:00:00Z", finished_at: "2026-07-31T15:00:01Z", last_synced_at: "2026-07-31T15:00:01Z", error_code: null, message: null }]
+          ? [{ connection_id: 1, institution: "Bank", status: options.failedConnections ? "failed" : "complete", accounts: options.failedConnections ? 0 : 10, transactions: 0, holdings: 0, balance_snapshot_date: "2026-07-31", started_at: "2026-07-31T15:00:00Z", finished_at: "2026-07-31T15:00:01Z", last_synced_at: options.failedConnections ? null : "2026-07-31T15:00:01Z", error_code: options.failedConnections ? "provider_unavailable" : null, message: options.failedConnections ? "Try again." : null }]
           : [],
         freshness: plaid(false, connectionCount).refresh,
         goal_observation: { ...unchangedObservation, trigger: "post_refresh" },
@@ -130,7 +134,8 @@ function workingFetch(refreshDue = false, connectionCount = 1) {
     if (url === "/api/overview") return json(overview);
     if (url === "/api/accounts") return json(accounts);
     if (url === "/api/wealth") return json(wealth);
-    if (url === "/api/exceptions" || url === "/api/timeline" || url === "/api/scenarios" || url === "/api/imports") return json([]);
+    if (url === "/api/exceptions") return json(options.issues ?? []);
+    if (url === "/api/timeline" || url === "/api/scenarios" || url === "/api/imports") return json([]);
     if (url === "/api/plaid/status") return json(plaid(refreshDue, connectionCount));
     if (url === "/api/payroll") return json({ period: { start: "2025-01-01", end: "2026-07-29" }, count: 0, statement_count: 0, calculated_count: 0, totals: {}, rows: [] });
     if (url === "/api/v2/goals/primary") return json(primaryState);
@@ -231,14 +236,23 @@ describe("application states", () => {
     expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/plaid/sync-all")).toHaveLength(0);
   });
 
+  it("keeps a failed partial update visible as live text", async () => {
+    vi.stubGlobal("fetch", workingFetch(false, 1, { failedConnections: 1 }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Update data" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("1 account connection needs attention");
+    expect(alert).toHaveTextContent("no new goal observation saved");
+  });
+
   it("opens the accessible wealth and Fidelity performance screen", async () => {
     vi.stubGlobal("fetch", workingFetch(false, 2));
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "◇ Wealth" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Wealth" }));
     expect(await screen.findByRole("heading", { name: "Wealth" })).toBeInTheDocument();
     expect(screen.getByText("$33,014.92")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "◎ Retirement" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "⌁ Lab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retirement" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lab" })).toBeInTheDocument();
   });
 
   it("makes the lazy Goals feature the default and keeps Overview one click away", async () => {
@@ -249,10 +263,22 @@ describe("application states", () => {
     const navigation = screen.getByRole("navigation");
     const buttons = Array.from(navigation.querySelectorAll("button"));
     expect(buttons[0]).toHaveTextContent("Goals");
-    expect(screen.getByRole("button", { name: "◉ Goals" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Goals" })).toHaveAttribute("aria-current", "page");
+    expect(navigation).toHaveAttribute("aria-label", "Primary navigation");
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/life-plan"))).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "⌂ Overview" }));
-    expect(await screen.findByText("Net worth")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+  });
+
+  it("keeps the exact visible navigation order and exposes the conditional Review count", async () => {
+    vi.stubGlobal("fetch", workingFetch(false, 2, { issues: [{ id: 1 }, { id: 2 }] }));
+    render(<App />);
+    await screen.findByRole("heading", { name: "Quiet place by the water" });
+    const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(Array.from(navigation.querySelectorAll("button")).map((button) => button.getAttribute("aria-label")?.replace(/, \d+ issues$/u, ""))).toEqual([
+      "Goals", "Overview", "Accounts", "Income", "Activity", "Wealth", "Retirement", "Lab", "Add account", "Review",
+    ]);
+    expect(screen.getByRole("button", { name: "Review, 2 issues" })).toHaveTextContent("Review2");
   });
 
   it("preserves the plaid setup hash route", async () => {
@@ -262,11 +288,28 @@ describe("application states", () => {
     expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
   });
 
+  it("opens closed evidence for print and restores its screen state afterward", async () => {
+    vi.stubGlobal("fetch", workingFetch(false, 2));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
+    await screen.findByRole("heading", { name: "Overview" });
+    const custom = screen.getByText("Custom range").closest("details")!;
+    const evidence = screen.getByText("Detailed period evidence").closest("details")!;
+    expect(custom).not.toHaveAttribute("open");
+    expect(evidence).not.toHaveAttribute("open");
+    window.dispatchEvent(new Event("beforeprint"));
+    expect(custom).toHaveAttribute("open");
+    expect(evidence).toHaveAttribute("open");
+    window.dispatchEvent(new Event("afterprint"));
+    expect(custom).not.toHaveAttribute("open");
+    expect(evidence).not.toHaveAttribute("open");
+  });
+
   it("loads Retirement and Lab as distinct lazy routes without cross-surface rendering", async () => {
     const fetch = workingFetch(false, 2);
     vi.stubGlobal("fetch", fetch);
     render(<App />);
-    const retirement = await screen.findByRole("button", { name: "◎ Retirement" });
+    const retirement = await screen.findByRole("button", { name: "Retirement" });
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/retirement"))).toBe(false);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/lab"))).toBe(false);
     fireEvent.click(retirement);
@@ -275,7 +318,7 @@ describe("application states", () => {
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/retirement/project")).toBe(true);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/lab"))).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "⌁ Lab" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lab" }));
     expect(await screen.findByRole("heading", { name: "Life Lab" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Retirement" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Start blank/ })).toBeInTheDocument();

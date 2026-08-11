@@ -56,6 +56,7 @@ export default function App() {
   const [updateMessage, setUpdateMessage] = useState("");
   const [goalsReloadVersion, setGoalsReloadVersion] = useState(0);
   const autoRefreshStarted = useRef(false);
+  const activeNavButtonRef = useRef<HTMLButtonElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -103,8 +104,35 @@ export default function App() {
   }, [data, runGlobalRefresh]);
 
   useEffect(() => {
+    const revealActiveNavigation = () => {
+      activeNavButtonRef.current?.scrollIntoView?.({ block: "nearest", inline: "center" });
+    };
     window.scrollTo(0, 0);
+    revealActiveNavigation();
+    window.addEventListener("resize", revealActiveNavigation);
+    return () => window.removeEventListener("resize", revealActiveNavigation);
   }, [view]);
+
+  useEffect(() => {
+    const openedForPrint = new Set<HTMLDetailsElement>();
+    const openPrintEvidence = () => {
+      document.querySelectorAll<HTMLDetailsElement>("details").forEach((detail) => {
+        if (detail.open) return;
+        detail.open = true;
+        openedForPrint.add(detail);
+      });
+    };
+    const restoreScreenDisclosures = () => {
+      openedForPrint.forEach((detail) => { detail.open = false; });
+      openedForPrint.clear();
+    };
+    window.addEventListener("beforeprint", openPrintEvidence);
+    window.addEventListener("afterprint", restoreScreenDisclosures);
+    return () => {
+      window.removeEventListener("beforeprint", openPrintEvidence);
+      window.removeEventListener("afterprint", restoreScreenDisclosures);
+    };
+  }, []);
 
   const runPlaidConfiguration = async (payload: {
     environment: "sandbox" | "production";
@@ -267,6 +295,7 @@ export default function App() {
     .sort()
     .at(-1);
   const latestSync = data.plaid.refresh.last_successful_refresh ?? latestConnectionSync;
+  const updateNeedsAttention = /attention|failed|partial|retry|unavailable/i.test(updateMessage);
 
   return (
     <div className="app-shell">
@@ -278,16 +307,19 @@ export default function App() {
             <small>Everything in one place</small>
           </div>
         </div>
-        <nav>
+        <nav aria-label="Primary navigation">
           {nav
             .filter((item) => item.id !== "review" || data.issues.length > 0)
             .map((item) => (
               <button
                 className={view === item.id ? "active" : ""}
                 key={item.id}
+                ref={view === item.id ? activeNavButtonRef : undefined}
+                aria-current={view === item.id ? "page" : undefined}
+                aria-label={item.id === "review" && data.issues.length > 0 ? `Review, ${data.issues.length} issues` : item.label}
                 onClick={() => setView(item.id)}
               >
-                <span>{item.glyph}</span>
+                <span aria-hidden="true">{item.glyph}</span>
                 {item.label}
                 {item.id === "review" && data.issues.length > 0 && <em>{data.issues.length}</em>}
               </button>
@@ -306,13 +338,13 @@ export default function App() {
           <div className="mobile-brand">Money Map</div>
           <div className="refresh-controls">
             <div className="data-state">
-              <span className="privacy-dot" />
-              {updating
+              <span className="privacy-dot" aria-hidden="true" />
+              <span className="data-state-label">{updating
                 ? "Updating…"
                 : latestSync
                   ? `Updated ${new Date(latestSync).toLocaleString()}`
-                  : "Local data"}
-              {updateMessage && <small>{updateMessage}</small>}
+                  : "Local data"}</span>
+              {updateMessage && <small role={updateNeedsAttention ? "alert" : "status"}>{updateMessage}</small>}
             </div>
             <button
               className="refresh-button"
@@ -343,6 +375,7 @@ export default function App() {
               onShowAccounts={() => setView("accounts")}
               onShowActivity={() => setView("activity")}
               onShowIncome={() => setView("income")}
+              onShowWealth={() => setView("wealth")}
             />
           )}
           {view === "accounts" && <AccountsView data={data.accounts} />}

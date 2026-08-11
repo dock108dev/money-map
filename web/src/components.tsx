@@ -20,6 +20,8 @@ import type {
   WealthDashboard,
 } from "./types";
 
+export { default as WealthView } from "./wealth/WealthView";
+
 export const currency = (value: string | null | undefined) => {
   if (value == null) return "—";
   return new Intl.NumberFormat("en-US", {
@@ -124,6 +126,7 @@ export function OverviewView({
   onShowAccounts,
   onShowActivity,
   onShowIncome,
+  onShowWealth,
 }: {
   overview: Overview;
   accounts: AccountsDashboard;
@@ -133,6 +136,7 @@ export function OverviewView({
   onShowAccounts: () => void;
   onShowActivity: () => void;
   onShowIncome: () => void;
+  onShowWealth: () => void;
 }) {
   const baseline = overview.recurring_paycheck;
   const [startDate, setStartDate] = useState(overview.period.start);
@@ -141,16 +145,14 @@ export function OverviewView({
     setStartDate(overview.period.start);
     setEndDate(overview.period.end);
   }, [overview.period.start, overview.period.end]);
-  const visibleAccounts = accounts.accounts
-    .filter((account) => Number(account.current_balance ?? 0) !== 0)
-    .slice(0, 6);
-  const assetTotal = Math.max(Number(accounts.totals.assets ?? 0), 1);
 
   return (
-    <div className="view-stack account-first-view">
-      <section className="net-worth-hero">
+    <div className="view-stack account-first-view" data-copy-budget="overview-hero-summary">
+      <section className="net-worth-hero" aria-labelledby="overview-title">
         <div className="net-worth-copy">
-          <span>Net worth</span>
+          <span>Money Map</span>
+          <h1 id="overview-title" data-prose>Overview</h1>
+          <small>Net worth</small>
           <strong>{currency(accounts.totals.net_worth)}</strong>
           {accounts.as_of && <small>As of {shortDate(accounts.as_of)}</small>}
         </div>
@@ -159,6 +161,7 @@ export function OverviewView({
           <MetricCard label="Debt" value={currency(accounts.totals.debts)} />
         </div>
       </section>
+      <p className="print-only print-evidence-header" aria-hidden="true">Overview evidence · {accounts.as_of ? shortDate(accounts.as_of) : `${shortDate(overview.period.start)}–${shortDate(overview.period.end)}`}</p>
 
       <section className="period-toolbar" aria-label="Overview period">
         <div className="period-presets">
@@ -173,12 +176,14 @@ export function OverviewView({
             </button>
           ))}
         </div>
-        <div className="period-dates">
-          <input type="date" value={startDate} onChange={(event) => setStartDate(event.currentTarget.value)} />
-          <span>to</span>
-          <input type="date" value={endDate} onChange={(event) => setEndDate(event.currentTarget.value)} />
-          <button disabled={busy || startDate > endDate} onClick={() => onPeriodChange(startDate, endDate)}>Apply</button>
-        </div>
+        <details className="custom-range">
+          <summary>Custom range</summary>
+          <div className="period-dates">
+            <label>From<input aria-label="Custom range start" type="date" value={startDate} onChange={(event) => setStartDate(event.currentTarget.value)} /></label>
+            <label>Through<input aria-label="Custom range end" type="date" value={endDate} onChange={(event) => setEndDate(event.currentTarget.value)} /></label>
+            <button disabled={busy || startDate > endDate} onClick={() => onPeriodChange(startDate, endDate)}>Apply</button>
+          </div>
+        </details>
       </section>
 
       <section className="overview-metrics">
@@ -201,85 +206,35 @@ export function OverviewView({
         />
       </section>
 
-      <section className="panel compact-panel income-snapshot">
-        <header className="compact-heading">
-          <div>
-            <h2>Income</h2>
-            <span>{overview.coverage.paychecks_in_period} paychecks</span>
-          </div>
-          <button className="text-button" onClick={onShowIncome}>View paychecks</button>
-        </header>
-        <div className="income-snapshot-metrics">
-          <MetricCard label="Gross" value={currency(overview.totals.gross_compensation)} />
-          <MetricCard label="Taxes" value={currency(overview.totals.taxes)} tone="warm" />
-          <MetricCard label="Your account funding" value={currency(overview.totals.employee_directed_saving)} />
-          <MetricCard label="Employer" value={currency(overview.totals.employer_contributions)} />
-          <MetricCard label="Spendable net" value={currency(overview.totals.net_payments)} tone="green" />
+      <section className="overview-links" aria-label="Money detail views">
+        <button onClick={onShowIncome}><span>Income</span><strong>{overview.coverage.paychecks_in_period} paychecks</strong></button>
+        <button onClick={onShowAccounts}><span>Accounts</span><strong>{accounts.accounts.length} connected</strong></button>
+        <button onClick={onShowActivity}><span>Activity</span><strong>{Math.min(accounts.activity.length, 5)} recent</strong></button>
+        <button onClick={onShowWealth}><span>Wealth</span><strong>Access and performance</strong></button>
+      </section>
+
+      <details className="panel overview-evidence evidence-disclosure">
+        <summary>Detailed period evidence</summary>
+        <div className="overview-evidence-stack">
+          <section className="compact-panel income-snapshot">
+            <header className="compact-heading"><div><h2>Income</h2><span>{overview.coverage.paychecks_in_period} paychecks</span></div></header>
+            <div className="income-snapshot-metrics">
+              <MetricCard label="Gross" value={currency(overview.totals.gross_compensation)} />
+              <MetricCard label="Taxes" value={currency(overview.totals.taxes)} tone="warm" />
+              <MetricCard label="Your account funding" value={currency(overview.totals.employee_directed_saving)} />
+              <MetricCard label="Employer" value={currency(overview.totals.employer_contributions)} />
+              <MetricCard label="Spendable net" value={currency(overview.totals.net_payments)} tone="green" />
+            </div>
+          </section>
+          {baseline && <PaycheckAccountValue paycheck={baseline} />}
+          <FidelityPeriodSnapshot overview={overview} accounts={accounts} />
+          <PaycheckFlow overview={overview} />
+          <section className="compact-panel"><header className="compact-heading"><div><h2>Month by month</h2><span>{timeline.length} months</span></div></header><TimelineRows rows={timeline} /></section>
+          <section className="compact-panel"><header className="compact-heading"><div><h2>Recent activity</h2><span>Five most recent</span></div></header><ActivityRows rows={accounts.activity.slice(0, 5)} /></section>
+          {baseline && <section className="paycheck-strip"><span>Every paycheck</span><strong>{currencyExact(baseline.all_account_value)} to your accounts</strong><small>{currencyExact(baseline.net_payment)} spendable cash · next {shortDate(baseline.next_expected_deposit)}</small></section>}
         </div>
-      </section>
-
-      {baseline && <PaycheckAccountValue paycheck={baseline} />}
-
-      <FidelityPeriodSnapshot overview={overview} accounts={accounts} />
-
-      <PaycheckFlow overview={overview} />
-
-      <section className="panel compact-panel">
-        <header className="compact-heading">
-          <div><h2>Month by month</h2><span>{timeline.length} months</span></div>
-        </header>
-        <TimelineRows rows={timeline} />
-      </section>
-
-      <section className="panel compact-panel">
-        <header className="compact-heading">
-          <div>
-            <h2>Accounts</h2>
-            <span>{accounts.accounts.length} connected</span>
-          </div>
-          <button className="text-button" onClick={onShowAccounts}>View all</button>
-        </header>
-        <div className="account-snapshot-list">
-          {visibleAccounts.map((account) => {
-            const width =
-              account.category === "debt"
-                ? Math.min(100, (Number(account.current_balance ?? 0) / assetTotal) * 100)
-                : Math.min(100, (Number(account.current_balance ?? 0) / assetTotal) * 100);
-            return (
-              <button className="account-snapshot" key={account.id} onClick={onShowAccounts}>
-                <span className={`account-dot category-${account.category}`} />
-                <span className="account-snapshot-name">
-                  <strong>{account.name}</strong>
-                  <small>{account.institution}</small>
-                </span>
-                <span className="account-bar"><i style={{ width: `${Math.max(width, 1)}%` }} /></span>
-                <strong className={account.category === "debt" ? "negative" : ""}>
-                  {currency(account.current_balance)}
-                </strong>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="panel compact-panel">
-        <header className="compact-heading">
-          <div>
-            <h2>Recent activity</h2>
-            <span>Across every account</span>
-          </div>
-          <button className="text-button" onClick={onShowActivity}>View all</button>
-        </header>
-        <ActivityRows rows={accounts.activity.slice(0, 8)} />
-      </section>
-
-      {baseline && (
-        <section className="paycheck-strip">
-          <span>Every paycheck</span>
-          <strong>{currencyExact(baseline.all_account_value)} to your accounts</strong>
-          <small>{currencyExact(baseline.net_payment)} spendable cash · next {shortDate(baseline.next_expected_deposit)}</small>
-        </section>
-      )}
+      </details>
+      <button className="secondary-button overview-print-button print-hidden" onClick={() => window.print()}>Print evidence</button>
     </div>
   );
 }
@@ -554,10 +509,10 @@ export function AccountsView({ data }: { data: AccountsDashboard }) {
 
   return (
     <div className="view-stack account-first-view">
-      <section className="simple-page-heading">
+      <section className="simple-page-heading" data-copy-budget="utility-page-heading">
         <div>
           <span className="eyebrow">{data.accounts.length} accounts</span>
-          <h1>Accounts</h1>
+          <h1 data-prose>Accounts</h1>
         </div>
         <strong>{currency(data.totals.net_worth)} net worth</strong>
       </section>
@@ -600,6 +555,9 @@ export function AccountsView({ data }: { data: AccountsDashboard }) {
           );
         })}
       </div>
+      {data.accounts.length === 0 && (
+        <div className="simple-empty" role="status">No accounts are connected. Add an account to build this view.</div>
+      )}
       {detailBusy && <div className="simple-empty">Loading account…</div>}
       {detailError && <div className="error-banner">{detailError}</div>}
       {selected && detail && (
@@ -799,10 +757,10 @@ export function ActivityView({ data }: { data: AccountsDashboard }) {
   });
   return (
     <div className="view-stack account-first-view">
-      <section className="simple-page-heading">
+      <section className="simple-page-heading" data-copy-budget="utility-page-heading">
         <div>
           <span className="eyebrow">{activityPeriod(data)}</span>
-          <h1>Activity</h1>
+          <h1 data-prose>Activity</h1>
         </div>
         <strong>{rows.length} records</strong>
       </section>
@@ -846,10 +804,10 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
 
   return (
     <div className="view-stack account-first-view">
-      <section className="simple-page-heading income-heading">
+      <section className="simple-page-heading income-heading" data-copy-budget="utility-page-heading">
         <div>
           <span className="eyebrow">Every other Wednesday</span>
-          <h1>Income</h1>
+          <h1 data-prose>Income</h1>
         </div>
         <strong>{rows.length} paychecks</strong>
       </section>
@@ -1095,13 +1053,10 @@ export function ReviewView({
     );
   return (
     <div className="view-stack">
-      <section className="page-heading">
+      <section className="page-heading" data-copy-budget="utility-page-heading">
         <span className="eyebrow">Needs attention</span>
-        <h1>Review</h1>
-        <p>
-          Unexplained differences between observed balances and posted activity appear here.
-          Each item stays open until new data or source evidence resolves it.
-        </p>
+        <h1 data-prose>Review</h1>
+        <p data-prose>Unexplained balance differences stay here until new data or source evidence resolves them.</p>
       </section>
       <div className="review-grid">
         {issues.map((issue) => {
@@ -1352,6 +1307,7 @@ export function ConnectionsView({
   onReport: () => void;
   onAutoRefreshChange: (enabled: boolean) => void;
 }) {
+  const [showOlderImports, setShowOlderImports] = useState(false);
   const configure = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -1365,10 +1321,10 @@ export function ConnectionsView({
 
   return (
     <div className="view-stack account-first-view">
-      <section className="simple-page-heading">
+      <section className="simple-page-heading" data-copy-budget="utility-page-heading">
         <div>
           <span className="eyebrow">Plaid</span>
-          <h1>Add account</h1>
+          <h1 data-prose>Add account</h1>
         </div>
         <strong>{plaid.connections.length} connected</strong>
       </section>
@@ -1443,11 +1399,12 @@ export function ConnectionsView({
       {imports.length > 0 && (
         <section className="panel compact-panel">
           <header className="compact-heading"><div><h2>Recent imports</h2><span>{imports.length} batches</span></div></header>
-          <div className="import-history-compact">
-            {imports.slice(0, 6).map((batch) => (
+          <div className="import-history-compact" data-default-visible-count="5">
+            {imports.slice(0, showOlderImports ? imports.length : 5).map((batch) => (
               <div key={batch.id}><span>Batch {batch.id}</span><strong>{batch.imported} imported</strong><small>{batch.duplicates} already current</small></div>
             ))}
           </div>
+          {!showOlderImports && imports.length > 5 && <button className="secondary-button show-older-button" onClick={() => setShowOlderImports(true)}>Show older evidence</button>}
         </section>
       )}
       {!liveReady && (
@@ -1485,7 +1442,7 @@ export function ConnectionsView({
   );
 }
 
-export function WealthView({ data }: { data: WealthDashboard }) {
+export function WealthReportView({ data }: { data: WealthDashboard }) {
   const [periodKey, setPeriodKey] = useState("observed");
   const selectedPeriod =
     data.fidelity.performance_periods.find((period) => period.key === periodKey) ??

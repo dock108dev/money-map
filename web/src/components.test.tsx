@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -18,6 +18,8 @@ import type {
   PayrollHistory,
   WealthDashboard,
 } from "./types";
+import { COPY_BUDGETS, proseWordCount } from "./copy-budget";
+import { retiredDuplicateCopy } from "./test-fixtures/slice6-state-matrix";
 
 const accountDetail: AccountDetail = {
   id: 2,
@@ -53,7 +55,10 @@ vi.mock("./api", () => ({
   loadAccountDetail: vi.fn(async () => accountDetail),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const overview: Overview = {
   period: { start: "2025-07-01", end: "2026-06-30" },
@@ -571,6 +576,30 @@ describe("account-first views", () => {
     expect(screen.getByText("Restricted")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "1 month" }));
     expect(screen.getByText("Collecting 30 more clean days.")).toBeInTheDocument();
+    const budget = document.querySelector('[data-copy-budget="wealth-hero-result"]');
+    expect(budget).not.toBeNull();
+    expect(proseWordCount(budget!)).toBeLessThanOrEqual(COPY_BUDGETS["wealth-hero-result"]);
+    for (const phrase of retiredDuplicateCopy) expect(document.body).not.toHaveTextContent(phrase);
+  });
+
+  it("keeps available investment performance textual and visible", () => {
+    const available: WealthDashboard = {
+      ...wealth,
+      fidelity: {
+        ...wealth.fidelity,
+        performance_periods: [{
+          ...wealth.fidelity.performance_periods[0],
+          status: "available",
+          investment_result: "2093.98",
+          return_pct: "0.4300",
+          message: "Contribution-adjusted result is available.",
+        }],
+      },
+    };
+    render(<WealthView data={available} />);
+    expect(screen.getByText("Investment result")).toBeInTheDocument();
+    expect(within(screen.getByText("Investment result").closest(".performance-result")!).getByText("+$2,093.98")).toBeInTheDocument();
+    expect(screen.getByText("0.43% after contributions")).toBeInTheDocument();
   });
 
   it("shows the full financial position and quiet paycheck baseline", () => {
@@ -584,6 +613,7 @@ describe("account-first views", () => {
         onShowAccounts={vi.fn()}
         onShowActivity={vi.fn()}
         onShowIncome={vi.fn()}
+        onShowWealth={vi.fn()}
       />,
     );
     expect(screen.getByText("$481,235")).toBeInTheDocument();
@@ -597,6 +627,43 @@ describe("account-first views", () => {
     expect(screen.getByText("Tracking")).toBeInTheDocument();
     expect(screen.queryByText(/unresolved/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/second dated/i)).not.toBeInTheDocument();
+    const budget = document.querySelector('[data-copy-budget="overview-hero-summary"]');
+    expect(budget).not.toBeNull();
+    expect(proseWordCount(budget!)).toBeLessThanOrEqual(COPY_BUDGETS["overview-hero-summary"]);
+  });
+
+  it("limits Overview recent activity to five rows", () => {
+    const manyActivity = Array.from({ length: 7 }, (_, index) => ({
+      ...accounts.activity[0],
+      id: 100 + index,
+      description: `Synthetic activity ${index + 1}`,
+    }));
+    render(<OverviewView overview={overview} accounts={{ ...accounts, activity: manyActivity }} timeline={[]} busy={false} onPeriodChange={vi.fn()} onShowAccounts={vi.fn()} onShowActivity={vi.fn()} onShowIncome={vi.fn()} onShowWealth={vi.fn()} />);
+    fireEvent.click(screen.getByText("Detailed period evidence"));
+    expect(document.querySelectorAll(".overview-evidence .activity-row")).toHaveLength(5);
+  });
+
+  it("shows an explicit empty Accounts state", () => {
+    render(<AccountsView data={{ ...accounts, accounts: [] }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("No accounts are connected");
+    const budget = document.querySelector('[data-copy-budget="utility-page-heading"]');
+    expect(budget).not.toBeNull();
+    expect(proseWordCount(budget!)).toBeLessThanOrEqual(COPY_BUDGETS["utility-page-heading"]);
+  });
+
+  it("prints dated Overview and Wealth evidence with collapsed detail still present", () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    const view = render(<OverviewView overview={overview} accounts={accounts} timeline={[]} busy={false} onPeriodChange={vi.fn()} onShowAccounts={vi.fn()} onShowActivity={vi.fn()} onShowIncome={vi.fn()} onShowWealth={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    expect(print).toHaveBeenCalledOnce();
+    expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Overview evidence · Jul 29");
+    expect(screen.getByText("Detailed period evidence").closest("details")).not.toHaveAttribute("open");
+    view.unmount();
+    render(<WealthView data={wealth} />);
+    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    expect(print).toHaveBeenCalledTimes(2);
+    expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Wealth evidence · Aug 3");
+    expect(screen.getByText("Fidelity evidence and methodology").closest("details")).not.toHaveAttribute("open");
   });
 
   it("shows two SoFi payroll destinations with an exact gross reconciliation", () => {
@@ -630,6 +697,7 @@ describe("account-first views", () => {
         onShowAccounts={vi.fn()}
         onShowActivity={vi.fn()}
         onShowIncome={vi.fn()}
+        onShowWealth={vi.fn()}
       />,
     );
     expect(screen.getByText("SoFi Savings")).toBeInTheDocument();
@@ -692,6 +760,7 @@ describe("account-first views", () => {
     expect(screen.getByText("Account balance does not match its activity.")).toBeInTheDocument();
     expect(screen.getByText("Personal loan")).toBeInTheDocument();
     expect(screen.getByText("Compare the statement.")).toBeInTheDocument();
+    expect(proseWordCount(document.querySelector('[data-copy-budget="utility-page-heading"]')!)).toBeLessThanOrEqual(COPY_BUDGETS["utility-page-heading"]);
     fireEvent.click(screen.getByRole("button", { name: "Update data" }));
     fireEvent.click(screen.getByRole("button", { name: "Open accounts" }));
     expect(onUpdateData).toHaveBeenCalledOnce();
@@ -728,6 +797,22 @@ describe("account-first views", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Update automatically/ }));
     expect(onAutoRefreshChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("button", { name: "Connect SoFi" })).not.toBeInTheDocument();
+  });
+
+  it("shows five recent imports before older evidence is requested", () => {
+    const imports = Array.from({ length: 7 }, (_, index) => ({
+      id: index + 1,
+      created_at: `2026-08-${String(index + 1).padStart(2, "0")}T12:00:00Z`,
+      status: "complete",
+      discovered: 1,
+      imported: 1,
+      duplicates: 0,
+      errors: 0,
+    }));
+    render(<ConnectionsView plaid={plaid} busy={false} message="" onConfigure={vi.fn()} onConnect={vi.fn()} onSync={vi.fn()} onRepair={vi.fn()} onDisconnect={vi.fn()} imports={imports} onImport={vi.fn()} onReport={vi.fn()} onAutoRefreshChange={vi.fn()} />);
+    expect(document.querySelectorAll(".import-history-compact > div")).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "Show older evidence" }));
+    expect(document.querySelectorAll(".import-history-compact > div")).toHaveLength(7);
   });
 
   it("filters completed income and opens concise paycheck details", () => {

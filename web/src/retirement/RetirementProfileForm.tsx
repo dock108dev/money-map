@@ -1,5 +1,6 @@
-import type { FormEvent } from "react";
+import type { FormEvent, RefObject } from "react";
 
+import { FocusedDialog } from "../FocusedDialog";
 import type {
   ExactDecimalString,
   RetirementProfileEditRequest,
@@ -16,12 +17,14 @@ export function RetirementProfileForm({
   error,
   onSave,
   onCancel,
+  returnFocusRef,
 }: {
   profile: RetirementProfileView;
   busy: boolean;
   error: string;
   onSave: (payload: RetirementProfileEditRequest) => void;
   onCancel: () => void;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -46,18 +49,16 @@ export function RetirementProfileForm({
   };
 
   return (
-    <div className="retirement-sheet-backdrop" role="presentation">
-      <section className="retirement-sheet" role="dialog" aria-modal="true" aria-labelledby="retirement-profile-title">
-        <header>
-          <div>
-            <span className="eyebrow">Retirement assumptions</span>
-            <h2 id="retirement-profile-title">Edit the durable profile</h2>
-          </div>
-          <button type="button" className="secondary-button" onClick={onCancel}>Close</button>
-        </header>
+    <FocusedDialog
+      title="Edit Retirement assumptions"
+      description="These durable assumptions affect future Retirement runs only."
+      returnFocusRef={returnFocusRef}
+      onClose={onCancel}
+      className="retirement-sheet"
+    >
         {error && <p id="retirement-form-error" className="retirement-form-error" role="alert">{error}</p>}
         <form aria-label="Retirement profile assumptions" aria-describedby={error ? "retirement-form-error" : undefined} onSubmit={submit} className="retirement-profile-form">
-          <label>Date of birth<input name="birth_date" type="date" defaultValue={profile.birth_date} required /></label>
+          <label>Date of birth<input data-autofocus name="birth_date" type="date" defaultValue={profile.birth_date} required /></label>
           <label>State<input name="state" maxLength={2} defaultValue={profile.state} required /></label>
           <label>Plan through age<input name="plan_through_age" type="number" min="40" max="120" defaultValue={profile.plan_through_age} required /></label>
           <label>Work-optional ages<input name="work_optional_ages" defaultValue={profile.work_optional_ages.join(", ")} required /><small>Comma-separated, after current age and before plan end.</small></label>
@@ -72,7 +73,6 @@ export function RetirementProfileForm({
             <button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save assumptions"}</button>
           </div>
         </form>
-      </section>
-    </div>
+    </FocusedDialog>
   );
 }

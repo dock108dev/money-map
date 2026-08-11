@@ -145,14 +145,25 @@ credential, or real balance enters the repository.
 
 ## Slice 6 — application-wide concision and polish
 
-- [ ] Enforce ordinary-state copy budget and remove repeated explanations.
-- [ ] Test semantic presence of critical evidence and absence of retired duplicate copy.
-- [ ] Visually validate empty, ordinary, attention, failed-refresh, stale, floor-breach,
+- [x] Enforce ordinary-state copy budget and remove repeated explanations.
+- [x] Test semantic presence of critical evidence and absence of retired duplicate copy.
+- [x] Visually validate empty, ordinary, attention, failed-refresh, stale, floor-breach,
   negative-flow, on-pace, complete, and legacy-scenario states.
-- [ ] Validate desktop, narrow desktop, and phone widths; confirm ordinary Goals fits one
+- [x] Validate desktop, narrow desktop, and phone widths; confirm ordinary Goals fits one
   reference desktop viewport.
-- [ ] Confirm no critical limitation depends only on color, hover, or inaccessible controls.
-- [ ] Confirm zero console errors or warnings on tested paths.
+- [x] Confirm no critical limitation depends only on color, hover, or inaccessible controls.
+- [x] Confirm zero console errors or warnings on tested paths.
+- [x] Limit Goals/Retirement/Lab histories to three, imports/activity to five, preserve the
+  Goals cursor and 25-row cap, and retain searchable stored and legacy evidence.
+- [x] Use shared focused dialogs for long edits and promotion preview with initial focus,
+  trap, Escape, focus return, background inertness, associated errors, and retained input.
+- [x] Preserve exact printable evidence by opening disclosures for print, restoring their
+  screen state afterward, excluding transient controls, and visually reviewing a synthetic PDF.
+- [x] Keep package/API/CLI/frontend at `1.2.1`, migration head at `0009`, and the active
+  owner database byte-identical at revision `0008`; no `0010` exists.
+- [x] Pass 144 backend tests with one intentional skip, 91 frontend tests, strict types,
+  formatting/lint, production build with distinct Goals/Retirement/Lab chunks, privacy,
+  lockfile, and diff gates.
 
 ## Slice 7 — release candidate and v2.0.0
 

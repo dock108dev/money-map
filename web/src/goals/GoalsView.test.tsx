@@ -9,6 +9,7 @@ import type {
   GoalPositionState,
   PrimaryGoalState,
 } from "../v2-contracts";
+import { COPY_BUDGETS, proseWordCount } from "../copy-budget";
 import GoalsView, { milestoneSentence, verdictSentence } from "./GoalsView";
 import {
   candidateProgram,
@@ -127,6 +128,9 @@ describe("Goals first answer", () => {
     expect(screen.queryByText(/saved for/i)).not.toBeInTheDocument();
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/goals/provenance")).toBe(false);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/goals/check-ins?"))).toBe(false);
+    const budget = document.querySelector('[data-copy-budget="goals-first-viewport"]');
+    expect(budget).not.toBeNull();
+    expect(proseWordCount(budget!)).toBeLessThanOrEqual(COPY_BUDGETS["goals-first-viewport"]);
   });
 
   it.each([
@@ -188,18 +192,21 @@ describe("Goals first answer", () => {
     expect(screen.getAllByText("Comparison unavailable: Comparison evidence is offline.")).not.toHaveLength(0);
   });
 
-  it.each([
-    ["created", "A new financial-change observation was saved."],
-    ["unchanged", "The current financial evidence already has a saved observation."],
-  ] as const)("renders the %s observation result", async (status, expected) => {
+  it("shows a concise created observation status", async () => {
     await renderOrdinary({
       backfill: {
         ...unchangedObservation,
-        status,
-        message: expected,
+        status: "created",
+        message: "A new financial-change observation was saved.",
       },
     });
-    expect(screen.getByText(expected)).toHaveAttribute("data-observation-status", status);
+    expect(screen.getByText("Financial change saved.")).toHaveAttribute("data-observation-status", "created");
+  });
+
+  it("does not repeat an unchanged observation above the ordinary result", async () => {
+    await renderOrdinary();
+    expect(screen.queryByText("The current financial evidence already has a saved observation.")).not.toBeInTheDocument();
+    expect(document.querySelector('[data-observation-status="unchanged"]')).not.toBeInTheDocument();
   });
 
   it("keeps the prior goal visible when source currentness blocks a check-in", async () => {
@@ -356,7 +363,8 @@ describe("Progressive evidence", () => {
     expect(screen.queryByText("Accessible first saved observation")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Financial change timeline"));
     expect(await screen.findByText("Accessible first saved observation")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Load older check-ins" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show older evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load older evidence" }));
     expect(await screen.findByText("Jul 10, 2026")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       "/api/v2/goals/check-ins?limit=5&cursor=older-cursor",
@@ -375,6 +383,8 @@ describe("Progressive evidence", () => {
     });
     fireEvent.click(screen.getByText("Financial change timeline"));
     await screen.findAllByText("Accessible first saved observation");
+    expect(document.querySelectorAll(".goal-timeline > li")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "Show older evidence" }));
     expect(document.querySelectorAll(".goal-timeline > li")).toHaveLength(25);
   });
 
@@ -421,5 +431,16 @@ describe("Progressive evidence", () => {
     expect(screen.getByLabelText("Primary goal metrics")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit goal" })).toBeInTheDocument();
     expect(screen.getByText("Binding milestone").parentElement).toHaveTextContent("Fund this goal");
+  });
+
+  it("prints dated Goals evidence with bounded history and provenance", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    const fetch = await renderOrdinary();
+    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    await waitFor(() => expect(print).toHaveBeenCalledOnce());
+    expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Goals evidence · Observed Aug 10, 2026");
+    expect(document.querySelector(".goal-primary-card .print-only")).toHaveTextContent(`Source fingerprint: ${goalHash}`);
+    expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/goals/provenance")).toBe(true);
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/goals/check-ins?"))).toBe(true);
   });
 });
