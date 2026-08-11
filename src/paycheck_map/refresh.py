@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .business_time import as_utc as _as_utc
+from .business_time import local_business_date as local_business_date
 from .forecasting import ensure_baseline
 from .goal_observation import (
     CompletedOperationState,
@@ -24,7 +25,6 @@ from .models import ApplicationSetting, PlaidConnection, PlaidSyncRun
 from .plaid_client import PlaidAPIError, PlaidClient
 from .plaid_service import sync_plaid_connection
 
-LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 AUTO_REFRESH_KEY = "plaid.auto_refresh_enabled"
 AUTO_ATTEMPT_KEY = "plaid.last_auto_refresh_attempt_date"
 RETRYABLE_STATUSES = {"active", "temporarily_unavailable"}
@@ -47,10 +47,6 @@ def refresh_guard() -> Iterator[None]:
         _refresh_lock.release()
 
 
-def _as_utc(value: datetime) -> datetime:
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-
-
 def _system_clock() -> datetime:
     return datetime.now(UTC)
 
@@ -59,11 +55,6 @@ def _clock_timestamp(clock: Clock, *, not_before: datetime | None = None) -> dat
     value = _as_utc(clock())
     floor = _as_utc(not_before) if not_before is not None else None
     return floor if floor is not None and value < floor else value
-
-
-def local_business_date(value: datetime | None = None) -> date:
-    instant = value or datetime.now(UTC)
-    return _as_utc(instant).astimezone(LOCAL_TIMEZONE).date()
 
 
 def _setting(session: Session, key: str) -> str | None:

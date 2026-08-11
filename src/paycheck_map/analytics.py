@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .cash_flow_service import CashFlowBucket, aggregate_cash_flow
 from .models import (
     Account,
     AccountBalancePoint,
@@ -159,67 +160,22 @@ def payroll_allocation_summary(
 
 
 def period_cashflow(session: Session, start_date: date, end_date: date) -> dict[str, Any]:
-    matched = transfer_transaction_ids(session)
-    rows = list(
-        session.scalars(
-            select(AccountTransaction)
-            .join(Account)
-            .join(Institution)
-            .where(
-                Institution.kind == "bank",
-                AccountTransaction.posted_date >= start_date,
-                AccountTransaction.posted_date <= end_date,
-            )
-        )
-    )
-    inflows = sum(
-        (
-            row.amount
-            for row in rows
-            if row.amount > ZERO
-            and row.id not in matched
-            and row.role not in {"internal_transfer", "interest"}
-        ),
-        ZERO,
-    )
-    outflows = abs(
-        sum(
-            (
-                row.amount
-                for row in rows
-                if row.amount < ZERO
-                and row.id not in matched
-                and row.role not in {"internal_transfer", "fee"}
-            ),
-            ZERO,
-        )
-    )
-    transfer_in = sum(
-        (row.amount for row in rows if row.amount > ZERO and row.id in matched),
-        ZERO,
-    )
-    transfer_out = abs(
-        sum(
-            (row.amount for row in rows if row.amount < ZERO and row.id in matched),
-            ZERO,
-        )
-    )
-    interest = sum((row.amount for row in rows if row.role == "interest"), ZERO)
-    fees = abs(sum((row.amount for row in rows if row.role == "fee"), ZERO))
+    aggregation = aggregate_cash_flow(session, start_date, end_date)
+    total = aggregation.total
     return {
         "coverage": {
-            "start": min((row.posted_date for row in rows), default=None),
-            "end": max((row.posted_date for row in rows), default=None),
-            "transactions": len(rows),
+            "start": aggregation.observed_start,
+            "end": aggregation.observed_end,
+            "transactions": total.transaction_count,
         },
-        "external_inflows": serialized(inflows),
-        "external_outflows": serialized(outflows),
-        "transfer_in": serialized(transfer_in),
-        "transfer_out": serialized(transfer_out),
-        "interest": serialized(interest),
-        "fees": serialized(fees),
-        "net_external": serialized(inflows - outflows + interest - fees),
-        "matched_transfer_transactions": sum(row.id in matched for row in rows),
+        "external_inflows": serialized(total.external_cash_inflows),
+        "external_outflows": serialized(total.external_cash_outflows),
+        "transfer_in": serialized(total.matched_transfer_in),
+        "transfer_out": serialized(total.matched_transfer_out),
+        "interest": serialized(total.interest_received),
+        "fees": serialized(total.fees_paid),
+        "net_external": serialized(total.net_cash_flow),
+        "matched_transfer_transactions": total.matched_owned_account_count,
     }
 
 
@@ -492,6 +448,7 @@ def account_detail(
 
 
 def monthly_timeline(session: Session, start_date: date, end_date: date) -> list[dict[str, Any]]:
+    cash_flow = aggregate_cash_flow(session, start_date, end_date)
     schedule = list(
         session.scalars(
             select(PayrollScheduleEntry).where(
@@ -536,7 +493,6 @@ def monthly_timeline(session: Session, start_date: date, end_date: date) -> list
             select(ReconciliationResult).where(ReconciliationResult.status == "unreconciled")
         )
     )
-    matched = transfer_transaction_ids(session)
     result: list[dict[str, Any]] = []
     for month in month_sequence(start_date, end_date):
         end = min(month_end(month), end_date)
@@ -550,11 +506,6 @@ def monthly_timeline(session: Session, start_date: date, end_date: date) -> list
         month_transactions = [
             transaction for transaction in transactions if month <= transaction.posted_date <= end
         ]
-        bank = [
-            transaction
-            for transaction in month_transactions
-            if institutions[accounts[transaction.account_id].institution_id].kind == "bank"
-        ]
         investment = [
             transaction
             for transaction in month_transactions
@@ -565,6 +516,7 @@ def monthly_timeline(session: Session, start_date: date, end_date: date) -> list
             for bridge in bridges
             if month <= bridge.period_end <= end and investment_performance_available(bridge)
         ]
+        month_cash_flow = cash_flow.monthly.get(month.strftime("%Y-%m"), CashFlowBucket())
         investment_result = sum(
             (bridge.investment_result for bridge in month_bridges),
             ZERO,
@@ -589,42 +541,9 @@ def monthly_timeline(session: Session, start_date: date, end_date: date) -> list
                 "after_tax": serialized(section_totals["after_tax"]),
                 "employer_contributions": serialized(section_totals["employer"]),
                 "net_pay": serialized(sum((row.net_payment for row in pay), ZERO)),
-                "cash_inflows": serialized(
-                    sum(
-                        (
-                            transaction.amount
-                            for transaction in bank
-                            if transaction.amount > ZERO
-                            and transaction.id not in matched
-                            and transaction.role != "internal_transfer"
-                        ),
-                        ZERO,
-                    )
-                ),
-                "cash_outflows": serialized(
-                    abs(
-                        sum(
-                            (
-                                transaction.amount
-                                for transaction in bank
-                                if transaction.amount < ZERO
-                                and transaction.id not in matched
-                                and transaction.role != "internal_transfer"
-                            ),
-                            ZERO,
-                        )
-                    )
-                ),
-                "transfers": serialized(
-                    sum(
-                        (
-                            abs(transaction.amount)
-                            for transaction in bank
-                            if transaction.id in matched
-                        ),
-                        ZERO,
-                    )
-                ),
+                "cash_inflows": serialized(month_cash_flow.money_in),
+                "cash_outflows": serialized(month_cash_flow.money_out),
+                "transfers": serialized(month_cash_flow.matched_owned_account_amount),
                 "investment_contributions": serialized(
                     sum(
                         (

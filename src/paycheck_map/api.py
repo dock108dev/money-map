@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -11,6 +11,11 @@ from sqlalchemy.orm import Session
 
 from . import __version__
 from .balances import add_manual_value_observation
+from .cash_flow_service import (
+    CashFlowUnavailableError,
+    CashFlowValidationError,
+    build_cash_flow_period_result,
+)
 from .config import settings
 from .db import get_session
 from .forecasting import ScenarioInput, build_forecast, ensure_baseline
@@ -146,6 +151,7 @@ from .v2_contracts import (
     RetirementProjectionResult,
     RetirementSnapshotSaveRequest,
 )
+from .v21_contracts import CashFlowPeriodResult, PeriodKind
 
 router = APIRouter(prefix="/api")
 
@@ -192,6 +198,10 @@ def get_secret_store() -> SecretStore:
     return keychain
 
 
+def _cash_flow_api_now() -> datetime:
+    return datetime.now(UTC)
+
+
 @router.get("/health")
 def health() -> dict[str, str | bool]:
     return {
@@ -219,6 +229,32 @@ def get_overview(
 @router.get("/accounts")
 def get_accounts(session: Session = Depends(get_session)) -> dict[str, Any]:
     return accounts_dashboard(session)
+
+
+@router.get("/v2/cash-flow")
+def get_v2_cash_flow(
+    period_kind: PeriodKind,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    session: Session = Depends(get_session),
+) -> CashFlowPeriodResult:
+    now = _cash_flow_api_now()
+    try:
+        return build_cash_flow_period_result(
+            session,
+            period_kind=period_kind,
+            start_date=start_date,
+            end_date=end_date,
+            as_of_date=local_business_date(now),
+            now=now,
+        )
+    except CashFlowUnavailableError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"state": "unavailable", "reason": str(exc)},
+        ) from exc
+    except CashFlowValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/wealth")
