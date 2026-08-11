@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from . import __version__
 from .balances import add_manual_value_observation
 from .config import settings
 from .db import get_session
@@ -199,7 +200,7 @@ def health() -> dict[str, str | bool]:
         "server": "127.0.0.1-only",
         "provider_connections": "opt-in-read-only",
         "money_movement": False,
-        "version": "1.2.1",
+        "version": __version__,
     }
 
 

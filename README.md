@@ -7,6 +7,8 @@ It does not move money, store bank passwords, categorize purchases, or provide
 financial advice. SoFi and Fidelity can be connected through optional Plaid
 read-only access or imported manually.
 
+Current local release: **Money Map v2.0.0**.
+
 ## Privacy first
 
 All real source files, the SQLite database, generated reports, and backups live under
@@ -106,13 +108,15 @@ from any investment account's detail view.
 
 ## Main views
 
+- **Goals:** the default return loop for closer/same/farther, the distinct financial change,
+  and one binding milestone
+- **Retirement:** separate deterministic work-optional and accessible-bridge projections
+- **Life Lab:** isolated alternative-path experiments with explicit reviewed promotion
 - **Overview:** net worth, trailing 12 complete months, paycheck flow, and monthly history
 - **Accounts:** any connected bank, loan, or investment account with generic drill-down
 - **Income:** all 42 completed paychecks from 2025-01-01 through 2026-07-29
 - **Activity:** account flows without merchant spending categories
 - **Wealth:** accessible money, retirement/restricted balances, and investment performance
-- **Plan:** Life Lab work-optional ages, deterministic stress paths, generic dated goals,
-  reverse-engineered drive paths, public state-income context, and reproducible snapshots
 - **Add account:** generic Plaid Link, local imports, and local report generation
 
 ## Life Lab

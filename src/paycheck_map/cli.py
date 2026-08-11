@@ -13,6 +13,7 @@ from pathlib import Path
 
 import uvicorn
 
+from . import __version__
 from .config import settings
 from .db import SessionLocal, initialize_database
 from .goal_operations import (
@@ -144,6 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="paycheck-map",
         description="Local-first paycheck allocation and forecasting",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     serve = subparsers.add_parser("serve", help="build and run the local application")
@@ -160,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("payroll-status", help="validate completed payroll history")
     sync = subparsers.add_parser("sync", help="update all active read-only connections")
     sync.add_argument("--status", action="store_true", help="show whether data needs updating")
-    subparsers.add_parser("verify", help="run the complete v1.2.1 release gate")
+    subparsers.add_parser("verify", help="run the complete v2.0.0 release gate")
     return parser
 
 

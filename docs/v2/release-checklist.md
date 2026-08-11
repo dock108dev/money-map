@@ -167,25 +167,42 @@ credential, or real balance enters the repository.
 
 ## Slice 7 — release candidate and v2.0.0
 
-- [ ] Create and verify a fresh active-database backup; record local path, size, SHA-256,
+- [x] Create and verify a fresh active-database backup; record local path, size, SHA-256,
   integrity, foreign-key, revision, and logical-manifest evidence without private values.
-- [ ] Complete isolated restore upgrade/start/Goals/Retirement/Lab/downgrade/re-upgrade drill.
-- [ ] Prove pre-v2 logical equality and independently verify all v2 mappings/check-ins.
-- [ ] Run focused tests and full backend/frontend release gate from a clean checkout.
-- [ ] Run synthetic CI with no `.local` data, credentials, provider access, or network
+- [x] Complete isolated restore upgrade/start/Goals/Retirement/Lab/downgrade/re-upgrade drill.
+- [x] Prove pre-v2 logical equality and independently verify all v2 mappings/check-ins.
+- [x] Run focused tests and full backend/frontend release gate from a clean checkout.
+- [x] Run synthetic CI with no `.local` data, credentials, provider access, or network
   dependency.
-- [ ] Run canonical privacy scan, package build, formatting, lint, strict types, migrations,
+- [x] Run canonical privacy scan, package build, formatting, lint, strict types, migrations,
   backup/restore, SQLite integrity, and foreign-key checks.
-- [ ] Run accessibility and visual validation at all reference states/viewports.
-- [ ] If freshness requires it, perform only one explicitly authorized read-only refresh;
+- [x] Run accessibility and visual validation at all reference states/viewports.
+- [x] If freshness requires it, perform only one explicitly authorized read-only refresh;
   otherwise use current observed state. Never move money.
-- [ ] Complete bounded owner acceptance for closer / what changed / what next in about 15
+- [x] Complete bounded owner acceptance for closer / what changed / what next in about 15
   seconds and record the result.
-- [ ] Update all version surfaces to `2.0.0` only after every release-candidate gate passes:
+- [x] Update all version surfaces to `2.0.0` only after every release-candidate gate passes:
   Python package, API health/FastAPI, CLI/help, frontend package/lockfile, docs, and release
   evidence.
-- [ ] Re-run the entire release gate after version changes and prove all surfaces agree.
-- [ ] Record downgrade and verified-backup restore commands, v2-only data-loss boundary,
+- [x] Re-run the entire release gate after version changes and prove all surfaces agree.
+- [x] Record downgrade and verified-backup restore commands, v2-only data-loss boundary,
   logical rollback evidence, and application restart checks.
-- [ ] Obtain final owner acceptance before any push, pull request, merge, deploy, tag, or
+- [x] Obtain final owner acceptance before any push, pull request, merge, deploy, tag, or
   publication; those external actions require separate instruction.
+
+### Slice 7 completion record
+
+- The supported recovery backup and two disposable restore targets passed integrity,
+  foreign-key, revision, and logical-manifest verification.
+- Upgrade/downgrade/re-upgrade proved deterministic `0009_goal_persistence` mapping, exact
+  preservation of all 31 pre-v2 tables, removal of v2-only tables at the rollback boundary,
+  and intact `life_*` evidence.
+- The real built frontend, synthetic responsive states, and two-page print evidence passed.
+- The owner accepted the uncoached ordinary Goals loop on 2026-08-11 within approximately
+  15 seconds without a visible Phase B change.
+- All current Python package, installed metadata, FastAPI, health, CLI, frontend package, and
+  lockfile surfaces report `2.0.0`; historical v1.2.1 evidence remains labeled historically.
+- Exact commands, totals, package verification, process evidence, private database digests,
+  and rollback instructions remain in ignored local release evidence.
+- Local checkpoint subject: `Release Money Map 2.0.0`. Nothing was pushed, tagged, published,
+  deployed, or opened as a pull request.
