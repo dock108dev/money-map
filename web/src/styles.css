@@ -3388,6 +3388,7 @@ tbody tr[tabindex]:hover {
 
   .refresh-button {
     min-width: 92px;
+    min-height: 44px;
   }
 
   .net-worth-hero {

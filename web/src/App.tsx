@@ -26,10 +26,12 @@ import { openPlaidLink } from "./plaid-link";
 import type { DashboardData } from "./types";
 
 const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
+const GoalsView = lazy(() => import("./goals/GoalsView"));
 
-type View = "overview" | "accounts" | "income" | "activity" | "wealth" | "plan" | "connections" | "review";
+type View = "goals" | "overview" | "accounts" | "income" | "activity" | "wealth" | "plan" | "connections" | "review";
 
 const nav: Array<{ id: View; label: string; glyph: string }> = [
+  { id: "goals", label: "Goals", glyph: "◉" },
   { id: "overview", label: "Overview", glyph: "⌂" },
   { id: "accounts", label: "Accounts", glyph: "▤" },
   { id: "income", label: "Income", glyph: "$" },
@@ -44,12 +46,13 @@ export default function App() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>(() =>
-    window.location.hash === "#plaid-live-setup" ? "connections" : "overview",
+    window.location.hash === "#plaid-live-setup" ? "connections" : "goals",
   );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
+  const [goalsReloadVersion, setGoalsReloadVersion] = useState(0);
   const autoRefreshStarted = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -80,6 +83,7 @@ export default function App() {
       if (!detail.toLowerCase().includes("already updating")) setUpdateMessage(detail);
       await refresh();
     } finally {
+      setGoalsReloadVersion((current) => current + 1);
       setUpdating(false);
     }
   }, [refresh]);
@@ -320,6 +324,11 @@ export default function App() {
         </header>
         {error && <div className="error-banner">{error}</div>}
         <div className="content-wrap">
+          {view === "goals" && (
+            <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Goals…</p></div>}>
+              <GoalsView reloadVersion={goalsReloadVersion} />
+            </Suspense>
+          )}
           {view === "overview" && (
             <OverviewView
               accounts={data.accounts}

@@ -2,6 +2,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import {
+  comparisonState,
+  latestState,
+  milestoneState,
+  noCandidatesState,
+  positionState,
+  primaryState,
+} from "./goals/fixtures";
 
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -113,6 +121,12 @@ function workingFetch(refreshDue = false, connectionCount = 1) {
     if (url === "/api/exceptions" || url === "/api/timeline" || url === "/api/scenarios" || url === "/api/imports") return json([]);
     if (url === "/api/plaid/status") return json(plaid(refreshDue, connectionCount));
     if (url === "/api/payroll") return json({ period: { start: "2025-01-01", end: "2026-07-29" }, count: 0, statement_count: 0, calculated_count: 0, totals: {}, rows: [] });
+    if (url === "/api/v2/goals/primary") return json(primaryState);
+    if (url === "/api/v2/goals/position") return json(positionState);
+    if (url === "/api/v2/goals/check-ins/latest") return json(latestState);
+    if (url === "/api/v2/goals/comparison") return json(comparisonState("250.00"));
+    if (url === "/api/v2/goals/milestone") return json(milestoneState());
+    if (url === "/api/v2/goals/candidates") return json(noCandidatesState);
     if (url === "/api/life-plan/profile") return json(null);
     if (url === "/api/life-plan/goals" || url === "/api/life-plan/scenarios") return json([]);
     if (url === "/api/life-plan/starting-point") return json({
@@ -125,6 +139,7 @@ function workingFetch(refreshDue = false, connectionCount = 1) {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.location.hash = "";
 });
 
 describe("application states", () => {
@@ -149,6 +164,7 @@ describe("application states", () => {
     const fetch = workingFetch();
     vi.stubGlobal("fetch", fetch);
     render(<App />);
+    await screen.findByRole("heading", { name: "Quiet place by the water" });
     const button = await screen.findByRole("button", { name: "Update data" });
     fireEvent.click(button);
     await waitFor(() =>
@@ -158,6 +174,9 @@ describe("application states", () => {
       ),
     );
     expect(await screen.findByText("10 accounts updated")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/goals/position").length).toBeGreaterThan(1);
+    });
   });
 
   it("runs the daily automatic update only once after loading stale data", async () => {
@@ -198,6 +217,27 @@ describe("application states", () => {
     expect(await screen.findByRole("heading", { name: "Wealth" })).toBeInTheDocument();
     expect(screen.getByText("$33,014.92")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "◎ Plan" })).toBeInTheDocument();
+  });
+
+  it("makes the lazy Goals feature the default and keeps Overview one click away", async () => {
+    const fetch = workingFetch(false, 2);
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Quiet place by the water" })).toBeInTheDocument();
+    const navigation = screen.getByRole("navigation");
+    const buttons = Array.from(navigation.querySelectorAll("button"));
+    expect(buttons[0]).toHaveTextContent("Goals");
+    expect(screen.getByRole("button", { name: "◉ Goals" })).toHaveClass("active");
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/life-plan"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "⌂ Overview" }));
+    expect(await screen.findByText("Net worth")).toBeInTheDocument();
+  });
+
+  it("preserves the plaid setup hash route", async () => {
+    window.location.hash = "#plaid-live-setup";
+    vi.stubGlobal("fetch", workingFetch(false, 2));
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
   });
 
   it("loads Life Lab only after Plan is opened", async () => {
