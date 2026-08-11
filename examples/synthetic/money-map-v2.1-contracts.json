@@ -1,0 +1,387 @@
+{
+  "schema": "money-map-v2.1-synthetic-matrix-v1",
+  "materialization": "Recursively merge each case patch over base_vector; object keys merge and arrays replace.",
+  "required_states": [
+    "all_imported_history",
+    "trailing_12_months",
+    "year_to_date",
+    "custom_range",
+    "partial_opening_month",
+    "partial_closing_month",
+    "no_activity",
+    "transfer_heavy_activity",
+    "interest_and_fees",
+    "positive_net_period",
+    "negative_net_period",
+    "stale_connection_evidence",
+    "missing_recurring_payroll",
+    "missing_recurring_outflow_coverage",
+    "negative_recurring_margin",
+    "zero_recurring_margin",
+    "positive_recurring_margin",
+    "active_2030_goal",
+    "2035-11-18_comparison",
+    "completed_goal",
+    "expired_unfinished_goal",
+    "cash_floor_breach",
+    "malformed_decimals",
+    "monthly_summary_reconciliation_failure",
+    "current_synthetic_relationship"
+  ],
+  "base_vector": {
+    "vector_id": "synthetic_base",
+    "covers": ["synthetic_base"],
+    "cash_flow": {
+      "period": {
+        "kind": "all_imported_history",
+        "start_date": "2026-06-15",
+        "end_date": "2026-08-11",
+        "as_of_date": "2026-08-11"
+      },
+      "coverage": {
+        "coverage_start": "2026-06-15",
+        "coverage_end": "2026-08-11",
+        "transaction_count": 24,
+        "opening_month": "partial",
+        "closing_month": "partial",
+        "completeness": "complete",
+        "incomplete_reasons": []
+      },
+      "totals": {
+        "external_cash_inflows": {"amount": "7200.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:external-in"], "derivation": null, "unavailable_reason": null},
+        "interest_received": {"amount": "13.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:interest"], "derivation": null, "unavailable_reason": null},
+        "money_in": {"amount": "7213.00", "evidence": "derived", "source_refs": ["cash-flow:synthetic-base:in"], "derivation": "money_in", "unavailable_reason": null},
+        "external_cash_outflows": {"amount": "8000.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:external-out"], "derivation": null, "unavailable_reason": null},
+        "fees_paid": {"amount": "18.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:fees"], "derivation": null, "unavailable_reason": null},
+        "money_out": {"amount": "8018.00", "evidence": "derived", "source_refs": ["cash-flow:synthetic-base:out"], "derivation": "money_out", "unavailable_reason": null},
+        "net_cash_flow": {"amount": "-805.00", "evidence": "derived", "source_refs": ["cash-flow:synthetic-base:net"], "derivation": "net_cash_flow", "unavailable_reason": null}
+      },
+      "monthly_points": [
+        {
+          "month": "2026-06",
+          "start_date": "2026-06-15",
+          "end_date": "2026-06-30",
+          "partial": true,
+          "transaction_count": 10,
+          "amounts": {
+            "external_cash_inflows": {"amount": "3000.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-06:external-in"], "derivation": null, "unavailable_reason": null},
+            "interest_received": {"amount": "5.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-06:interest"], "derivation": null, "unavailable_reason": null},
+            "money_in": {"amount": "3005.00", "evidence": "derived", "source_refs": ["cash-flow:2026-06:in"], "derivation": "money_in", "unavailable_reason": null},
+            "external_cash_outflows": {"amount": "3500.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-06:external-out"], "derivation": null, "unavailable_reason": null},
+            "fees_paid": {"amount": "10.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-06:fees"], "derivation": null, "unavailable_reason": null},
+            "money_out": {"amount": "3510.00", "evidence": "derived", "source_refs": ["cash-flow:2026-06:out"], "derivation": "money_out", "unavailable_reason": null},
+            "net_cash_flow": {"amount": "-505.00", "evidence": "derived", "source_refs": ["cash-flow:2026-06:net"], "derivation": "net_cash_flow", "unavailable_reason": null}
+          },
+          "transfers_excluded": {
+            "matched_owned_account_amount": {"amount": "1000.00", "evidence": "observed", "source_refs": ["transfer:cedar-001"], "derivation": null, "unavailable_reason": null},
+            "matched_owned_account_count": 2,
+            "internal_transfer_amount": {"amount": "500.00", "evidence": "observed", "source_refs": ["transfer:cedar-internal-001"], "derivation": null, "unavailable_reason": null},
+            "internal_transfer_count": 1
+          }
+        },
+        {
+          "month": "2026-07",
+          "start_date": "2026-07-01",
+          "end_date": "2026-07-31",
+          "partial": false,
+          "transaction_count": 8,
+          "amounts": {
+            "external_cash_inflows": {"amount": "3200.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-07:external-in"], "derivation": null, "unavailable_reason": null},
+            "interest_received": {"amount": "6.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-07:interest"], "derivation": null, "unavailable_reason": null},
+            "money_in": {"amount": "3206.00", "evidence": "derived", "source_refs": ["cash-flow:2026-07:in"], "derivation": "money_in", "unavailable_reason": null},
+            "external_cash_outflows": {"amount": "3000.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-07:external-out"], "derivation": null, "unavailable_reason": null},
+            "fees_paid": {"amount": "5.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-07:fees"], "derivation": null, "unavailable_reason": null},
+            "money_out": {"amount": "3005.00", "evidence": "derived", "source_refs": ["cash-flow:2026-07:out"], "derivation": "money_out", "unavailable_reason": null},
+            "net_cash_flow": {"amount": "201.00", "evidence": "derived", "source_refs": ["cash-flow:2026-07:net"], "derivation": "net_cash_flow", "unavailable_reason": null}
+          },
+          "transfers_excluded": {
+            "matched_owned_account_amount": {"amount": "800.00", "evidence": "observed", "source_refs": ["transfer:cedar-002"], "derivation": null, "unavailable_reason": null},
+            "matched_owned_account_count": 1,
+            "internal_transfer_amount": {"amount": "200.00", "evidence": "observed", "source_refs": ["transfer:cedar-internal-002"], "derivation": null, "unavailable_reason": null},
+            "internal_transfer_count": 1
+          }
+        },
+        {
+          "month": "2026-08",
+          "start_date": "2026-08-01",
+          "end_date": "2026-08-11",
+          "partial": true,
+          "transaction_count": 6,
+          "amounts": {
+            "external_cash_inflows": {"amount": "1000.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-08:external-in"], "derivation": null, "unavailable_reason": null},
+            "interest_received": {"amount": "2.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-08:interest"], "derivation": null, "unavailable_reason": null},
+            "money_in": {"amount": "1002.00", "evidence": "derived", "source_refs": ["cash-flow:2026-08:in"], "derivation": "money_in", "unavailable_reason": null},
+            "external_cash_outflows": {"amount": "1500.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-08:external-out"], "derivation": null, "unavailable_reason": null},
+            "fees_paid": {"amount": "3.00", "evidence": "observed", "source_refs": ["ledger:maple-ridge-credit:2026-08:fees"], "derivation": null, "unavailable_reason": null},
+            "money_out": {"amount": "1503.00", "evidence": "derived", "source_refs": ["cash-flow:2026-08:out"], "derivation": "money_out", "unavailable_reason": null},
+            "net_cash_flow": {"amount": "-501.00", "evidence": "derived", "source_refs": ["cash-flow:2026-08:net"], "derivation": "net_cash_flow", "unavailable_reason": null}
+          },
+          "transfers_excluded": {
+            "matched_owned_account_amount": {"amount": "200.00", "evidence": "observed", "source_refs": ["transfer:cedar-003"], "derivation": null, "unavailable_reason": null},
+            "matched_owned_account_count": 1,
+            "internal_transfer_amount": {"amount": "100.00", "evidence": "observed", "source_refs": ["transfer:cedar-internal-003"], "derivation": null, "unavailable_reason": null},
+            "internal_transfer_count": 1
+          }
+        }
+      ],
+      "transfers_excluded": {
+        "matched_owned_account_amount": {"amount": "2000.00", "evidence": "observed", "source_refs": ["transfer:cedar:matched-total"], "derivation": null, "unavailable_reason": null},
+        "matched_owned_account_count": 4,
+        "internal_transfer_amount": {"amount": "800.00", "evidence": "observed", "source_refs": ["transfer:cedar:internal-total"], "derivation": null, "unavailable_reason": null},
+        "internal_transfer_count": 3
+      },
+      "freshness": {
+        "state": "current",
+        "observed_at": "2026-08-11T14:15:00Z",
+        "stale_sources": [],
+        "warnings": []
+      },
+      "warnings": []
+    },
+    "recurring": {
+      "as_of_date": "2026-08-11",
+      "effective_recurring_take_home": {"amount": "4400.00", "evidence": "derived", "source_refs": ["payroll:silver-kite:cadence"], "derivation": "effective_recurring_take_home", "unavailable_reason": null},
+      "observed_recurring_monthly_outflow": {"amount": "10002.98", "evidence": "observed", "source_refs": ["outflow:juniper-window"], "derivation": null, "unavailable_reason": null},
+      "current_monthly_margin": {"amount": "-5602.98", "evidence": "derived", "source_refs": ["recurring:synthetic:margin"], "derivation": "current_monthly_margin", "unavailable_reason": null},
+      "stabilization_gap": {"amount": "5602.98", "evidence": "derived", "source_refs": ["recurring:synthetic:stabilization"], "derivation": "stabilization_gap", "unavailable_reason": null},
+      "margin_state": "negative",
+      "warnings": []
+    },
+    "goal": {
+      "goal_program_id": "goal_harbor_studio",
+      "observed_on": "2026-08-11",
+      "target_date": "2030-08-10",
+      "goal_target": {"amount": "1872168.96", "evidence": "user_entered", "source_refs": ["goal:harbor-studio:target"], "derivation": null, "unavailable_reason": null},
+      "reserved_for_goal": {"amount": "0.00", "evidence": "user_entered", "source_refs": ["goal:harbor-studio:reservation"], "derivation": null, "unavailable_reason": null},
+      "remaining_target": {"amount": "1872168.96", "evidence": "derived", "source_refs": ["goal:harbor-studio:remaining"], "derivation": "remaining_target", "unavailable_reason": null},
+      "accessible_cash": {"amount": "5000.00", "evidence": "observed", "source_refs": ["balance:maple-ridge-credit:cash"], "derivation": null, "unavailable_reason": null},
+      "protected_cash_floor": {"amount": "3000.00", "evidence": "user_entered", "source_refs": ["goal:harbor-studio:floor"], "derivation": null, "unavailable_reason": null},
+      "funding_months": "48.000000000000",
+      "goal_state": "active",
+      "required_goal_pace": {"amount": "39003.52", "evidence": "derived", "source_refs": ["goal:harbor-studio:pace"], "derivation": "required_goal_pace", "unavailable_reason": null},
+      "calculation_version": "goal-arithmetic-v1"
+    },
+    "combined_monthly_improvement": {"amount": "44606.50", "evidence": "derived", "source_refs": ["gap:harbor-studio:combined"], "derivation": "combined_monthly_improvement", "unavailable_reason": null},
+    "contract_version": "money-map-v2.1-contract-v1"
+  },
+  "valid_cases": [
+    {
+      "vector_id": "current_relationship",
+      "covers": ["all_imported_history", "partial_opening_month", "partial_closing_month", "interest_and_fees", "negative_net_period", "negative_recurring_margin", "active_2030_goal", "current_synthetic_relationship"],
+      "patch": {}
+    },
+    {
+      "vector_id": "trailing_transfer_heavy_zero_margin",
+      "covers": ["trailing_12_months", "partial_closing_month", "transfer_heavy_activity", "zero_recurring_margin"],
+      "patch": {
+        "cash_flow": {
+          "period": {"kind": "trailing_12_months", "start_date": "2025-09-01", "end_date": "2026-08-11", "as_of_date": "2026-08-11"},
+          "coverage": {"coverage_start": "2025-09-01", "coverage_end": "2026-08-11", "transaction_count": 6, "opening_month": "full", "closing_month": "partial"},
+          "totals": {
+            "external_cash_inflows": {"amount": "0.00"}, "interest_received": {"amount": "0.00"}, "money_in": {"amount": "0.00"},
+            "external_cash_outflows": {"amount": "0.00"}, "fees_paid": {"amount": "0.00"}, "money_out": {"amount": "0.00"}, "net_cash_flow": {"amount": "0.00"}
+          },
+          "monthly_points": [
+            {
+              "month": "2026-08", "start_date": "2026-08-01", "end_date": "2026-08-11", "partial": true, "transaction_count": 6,
+              "amounts": {
+                "external_cash_inflows": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:willow-bank:2026-08:external-in"], "derivation": null, "unavailable_reason": null},
+                "interest_received": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:willow-bank:2026-08:interest"], "derivation": null, "unavailable_reason": null},
+                "money_in": {"amount": "0.00", "evidence": "derived", "source_refs": ["cash-flow:transfer-heavy:in"], "derivation": "money_in", "unavailable_reason": null},
+                "external_cash_outflows": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:willow-bank:2026-08:external-out"], "derivation": null, "unavailable_reason": null},
+                "fees_paid": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:willow-bank:2026-08:fees"], "derivation": null, "unavailable_reason": null},
+                "money_out": {"amount": "0.00", "evidence": "derived", "source_refs": ["cash-flow:transfer-heavy:out"], "derivation": "money_out", "unavailable_reason": null},
+                "net_cash_flow": {"amount": "0.00", "evidence": "derived", "source_refs": ["cash-flow:transfer-heavy:net"], "derivation": "net_cash_flow", "unavailable_reason": null}
+              },
+              "transfers_excluded": {
+                "matched_owned_account_amount": {"amount": "10000.00", "evidence": "observed", "source_refs": ["transfer:willow:matched"], "derivation": null, "unavailable_reason": null}, "matched_owned_account_count": 4,
+                "internal_transfer_amount": {"amount": "2000.00", "evidence": "observed", "source_refs": ["transfer:willow:internal"], "derivation": null, "unavailable_reason": null}, "internal_transfer_count": 2
+              }
+            }
+          ],
+          "transfers_excluded": {
+            "matched_owned_account_amount": {"amount": "10000.00"}, "matched_owned_account_count": 4,
+            "internal_transfer_amount": {"amount": "2000.00"}, "internal_transfer_count": 2
+          }
+        },
+        "recurring": {
+          "effective_recurring_take_home": {"amount": "4000.00"}, "observed_recurring_monthly_outflow": {"amount": "4000.00"},
+          "current_monthly_margin": {"amount": "0.00"}, "stabilization_gap": {"amount": "0.00"}, "margin_state": "zero"
+        },
+        "goal": {
+          "target_date": "2027-08-10", "goal_target": {"amount": "12000.00"}, "reserved_for_goal": {"amount": "0.00"},
+          "remaining_target": {"amount": "12000.00"}, "funding_months": "12.000000000000", "required_goal_pace": {"amount": "1000.00"}
+        },
+        "combined_monthly_improvement": {"amount": "1000.00"}
+      }
+    },
+    {
+      "vector_id": "ytd_no_activity_missing_payroll",
+      "covers": ["year_to_date", "partial_closing_month", "no_activity", "missing_recurring_payroll"],
+      "patch": {
+        "cash_flow": {
+          "period": {"kind": "year_to_date", "start_date": "2026-01-01", "end_date": "2026-08-11", "as_of_date": "2026-08-11"},
+          "coverage": {"coverage_start": "2026-01-01", "coverage_end": "2026-08-11", "transaction_count": 0, "opening_month": "full", "closing_month": "partial"},
+          "totals": {
+            "external_cash_inflows": {"amount": "0.00"}, "interest_received": {"amount": "0.00"}, "money_in": {"amount": "0.00"},
+            "external_cash_outflows": {"amount": "0.00"}, "fees_paid": {"amount": "0.00"}, "money_out": {"amount": "0.00"}, "net_cash_flow": {"amount": "0.00"}
+          },
+          "monthly_points": [
+            {
+              "month": "2026-08", "start_date": "2026-08-01", "end_date": "2026-08-11", "partial": true, "transaction_count": 0,
+              "amounts": {
+                "external_cash_inflows": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:birch-bank:no-activity:external-in"], "derivation": null, "unavailable_reason": null},
+                "interest_received": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:birch-bank:no-activity:interest"], "derivation": null, "unavailable_reason": null},
+                "money_in": {"amount": "0.00", "evidence": "derived", "source_refs": ["cash-flow:no-activity:in"], "derivation": "money_in", "unavailable_reason": null},
+                "external_cash_outflows": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:birch-bank:no-activity:external-out"], "derivation": null, "unavailable_reason": null},
+                "fees_paid": {"amount": "0.00", "evidence": "observed", "source_refs": ["ledger:birch-bank:no-activity:fees"], "derivation": null, "unavailable_reason": null},
+                "money_out": {"amount": "0.00", "evidence": "derived", "source_refs": ["cash-flow:no-activity:out"], "derivation": "money_out", "unavailable_reason": null},
+                "net_cash_flow": {"amount": "0.00", "evidence": "derived", "source_refs": ["cash-flow:no-activity:net"], "derivation": "net_cash_flow", "unavailable_reason": null}
+              },
+              "transfers_excluded": {
+                "matched_owned_account_amount": {"amount": "0.00", "evidence": "observed", "source_refs": ["transfer:birch:matched-zero"], "derivation": null, "unavailable_reason": null}, "matched_owned_account_count": 0,
+                "internal_transfer_amount": {"amount": "0.00", "evidence": "observed", "source_refs": ["transfer:birch:internal-zero"], "derivation": null, "unavailable_reason": null}, "internal_transfer_count": 0
+              }
+            }
+          ],
+          "transfers_excluded": {"matched_owned_account_amount": {"amount": "0.00"}, "matched_owned_account_count": 0, "internal_transfer_amount": {"amount": "0.00"}, "internal_transfer_count": 0}
+        },
+        "recurring": {
+          "effective_recurring_take_home": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Synthetic payroll cadence is missing"},
+          "current_monthly_margin": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Recurring payroll is required for current margin"},
+          "stabilization_gap": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Current margin is unavailable"},
+          "margin_state": "unavailable",
+          "warnings": ["Recurring payroll evidence is missing"]
+        },
+        "goal": {"target_date": "2027-08-10", "goal_target": {"amount": "12000.00"}, "remaining_target": {"amount": "12000.00"}, "funding_months": "12.000000000000", "required_goal_pace": {"amount": "1000.00"}},
+        "combined_monthly_improvement": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Current recurring margin is unavailable"}
+      }
+    },
+    {
+      "vector_id": "custom_positive_period",
+      "covers": ["custom_range", "positive_net_period", "positive_recurring_margin"],
+      "patch": {
+        "cash_flow": {
+          "period": {"kind": "custom_range", "start_date": "2026-07-01", "end_date": "2026-07-31", "as_of_date": "2026-08-11"},
+          "coverage": {"coverage_start": "2026-07-01", "coverage_end": "2026-07-31", "transaction_count": 5, "opening_month": "full", "closing_month": "full"},
+          "totals": {
+            "external_cash_inflows": {"amount": "5000.00"}, "interest_received": {"amount": "10.00"}, "money_in": {"amount": "5010.00"},
+            "external_cash_outflows": {"amount": "4000.00"}, "fees_paid": {"amount": "10.00"}, "money_out": {"amount": "4010.00"}, "net_cash_flow": {"amount": "1000.00"}
+          },
+          "monthly_points": [
+            {
+              "month": "2026-07", "start_date": "2026-07-01", "end_date": "2026-07-31", "partial": false, "transaction_count": 5,
+              "amounts": {
+                "external_cash_inflows": {"amount": "5000.00", "evidence": "observed", "source_refs": ["ledger:pine-coop:2026-07:external-in"], "derivation": null, "unavailable_reason": null},
+                "interest_received": {"amount": "10.00", "evidence": "observed", "source_refs": ["ledger:pine-coop:2026-07:interest"], "derivation": null, "unavailable_reason": null},
+                "money_in": {"amount": "5010.00", "evidence": "derived", "source_refs": ["cash-flow:positive:in"], "derivation": "money_in", "unavailable_reason": null},
+                "external_cash_outflows": {"amount": "4000.00", "evidence": "observed", "source_refs": ["ledger:pine-coop:2026-07:external-out"], "derivation": null, "unavailable_reason": null},
+                "fees_paid": {"amount": "10.00", "evidence": "observed", "source_refs": ["ledger:pine-coop:2026-07:fees"], "derivation": null, "unavailable_reason": null},
+                "money_out": {"amount": "4010.00", "evidence": "derived", "source_refs": ["cash-flow:positive:out"], "derivation": "money_out", "unavailable_reason": null},
+                "net_cash_flow": {"amount": "1000.00", "evidence": "derived", "source_refs": ["cash-flow:positive:net"], "derivation": "net_cash_flow", "unavailable_reason": null}
+              },
+              "transfers_excluded": {
+                "matched_owned_account_amount": {"amount": "0.00", "evidence": "observed", "source_refs": ["transfer:pine:matched-zero"], "derivation": null, "unavailable_reason": null}, "matched_owned_account_count": 0,
+                "internal_transfer_amount": {"amount": "0.00", "evidence": "observed", "source_refs": ["transfer:pine:internal-zero"], "derivation": null, "unavailable_reason": null}, "internal_transfer_count": 0
+              }
+            }
+          ],
+          "transfers_excluded": {"matched_owned_account_amount": {"amount": "0.00"}, "matched_owned_account_count": 0, "internal_transfer_amount": {"amount": "0.00"}, "internal_transfer_count": 0}
+        },
+        "recurring": {
+          "effective_recurring_take_home": {"amount": "6000.00"}, "observed_recurring_monthly_outflow": {"amount": "5000.00"},
+          "current_monthly_margin": {"amount": "1000.00"}, "stabilization_gap": {"amount": "0.00"}, "margin_state": "positive"
+        },
+        "goal": {"target_date": "2027-08-10", "goal_target": {"amount": "12000.00"}, "remaining_target": {"amount": "12000.00"}, "funding_months": "12.000000000000", "required_goal_pace": {"amount": "1000.00"}},
+        "combined_monthly_improvement": {"amount": "0.00"}
+      }
+    },
+    {
+      "vector_id": "stale_missing_outflow",
+      "covers": ["stale_connection_evidence", "missing_recurring_outflow_coverage"],
+      "patch": {
+        "cash_flow": {
+          "coverage": {"completeness": "incomplete", "incomplete_reasons": ["Synthetic connection coverage is stale"]},
+          "freshness": {"state": "stale", "stale_sources": ["connection:amber-credit"], "warnings": ["Synthetic connection evidence is stale"]},
+          "warnings": ["Selected-period totals exclude activity after the stale source date"]
+        },
+        "recurring": {
+          "observed_recurring_monthly_outflow": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Synthetic outflow coverage is incomplete"},
+          "current_monthly_margin": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Recurring outflow is required for current margin"},
+          "stabilization_gap": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Current margin is unavailable"},
+          "margin_state": "unavailable",
+          "warnings": ["Recurring outflow coverage is incomplete"]
+        },
+        "combined_monthly_improvement": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Current recurring margin is unavailable"}
+      }
+    },
+    {
+      "vector_id": "goal_2035_comparison",
+      "covers": ["2035-11-18_comparison"],
+      "patch": {
+        "goal": {
+          "target_date": "2035-11-18", "goal_target": {"amount": "12000.00"}, "remaining_target": {"amount": "12000.00"},
+          "funding_months": "111.277419354839", "required_goal_pace": {"amount": "107.84"}
+        },
+        "combined_monthly_improvement": {"amount": "5710.82"}
+      }
+    },
+    {
+      "vector_id": "completed_goal",
+      "covers": ["completed_goal"],
+      "patch": {
+        "goal": {
+          "target_date": "2026-07-31", "goal_target": {"amount": "12000.00"}, "reserved_for_goal": {"amount": "12000.00"},
+          "remaining_target": {"amount": "0.00"}, "funding_months": "0.000000000000", "goal_state": "completed", "required_goal_pace": {"amount": "0.00"}
+        },
+        "combined_monthly_improvement": {"amount": "5602.98"}
+      }
+    },
+    {
+      "vector_id": "expired_unfinished_goal",
+      "covers": ["expired_unfinished_goal"],
+      "patch": {
+        "goal": {
+          "target_date": "2026-07-31", "goal_target": {"amount": "12000.00"}, "reserved_for_goal": {"amount": "0.00"},
+          "remaining_target": {"amount": "12000.00"}, "funding_months": "0.000000000000", "goal_state": "expired_unfinished",
+          "required_goal_pace": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Synthetic unfinished goal date has expired"}
+        },
+        "combined_monthly_improvement": {"amount": null, "evidence": "unavailable", "source_refs": [], "derivation": null, "unavailable_reason": "Required goal pace is unavailable"}
+      }
+    },
+    {
+      "vector_id": "cash_floor_breach",
+      "covers": ["cash_floor_breach"],
+      "patch": {
+        "goal": {
+          "target_date": "2027-08-10", "goal_target": {"amount": "12000.00"}, "reserved_for_goal": {"amount": "0.00"}, "remaining_target": {"amount": "12000.00"},
+          "accessible_cash": {"amount": "1000.00"}, "protected_cash_floor": {"amount": "3000.00"},
+          "funding_months": "12.000000000000", "goal_state": "cash_floor_breach", "required_goal_pace": {"amount": "1000.00"}
+        },
+        "combined_monthly_improvement": {"amount": "6602.98"}
+      }
+    }
+  ],
+  "invalid_cases": [
+    {
+      "case_id": "malformed_decimal",
+      "covers": ["malformed_decimals"],
+      "expected_error": "exact two-place decimal",
+      "patch": {"cash_flow": {"totals": {"money_in": {"amount": "7213.0"}}}}
+    },
+    {
+      "case_id": "monthly_summary_drift",
+      "covers": ["monthly_summary_reconciliation_failure"],
+      "expected_error": "reconcile exactly",
+      "patch": {
+        "cash_flow": {
+          "totals": {
+            "external_cash_inflows": {"amount": "7201.00"},
+            "money_in": {"amount": "7214.00"},
+            "net_cash_flow": {"amount": "-804.00"}
+          }
+        }
+      }
+    }
+  ]
+}
