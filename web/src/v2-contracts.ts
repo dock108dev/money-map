@@ -39,6 +39,43 @@ export interface PrimaryGoalProgram {
   source_life_goal_id: number | null;
 }
 
+export interface GoalProgramView {
+  goal_program_id: string;
+  name: string;
+  target_date: string;
+  target_amount: EvidencedMoney;
+  protected_cash_floor: EvidencedMoney;
+  reserved_for_goal: EvidencedMoney;
+  status: "active" | "complete";
+  is_primary: boolean;
+  source_life_goal_id: number | null;
+  edit_token: string;
+  updated_at: string;
+}
+
+export type PrimaryGoalState =
+  | { state: "primary"; goal: GoalProgramView }
+  | { state: "no_primary"; goal: null };
+
+export interface GoalCandidateList {
+  state: "selection_required" | "no_candidates";
+  candidates: GoalProgramView[];
+}
+
+export interface GoalEditRequest {
+  expected_edit_token: string;
+  name?: string | null;
+  target_date?: string | null;
+  target_amount?: ExactDecimalString | null;
+  protected_cash_floor?: ExactDecimalString | null;
+  reserved_for_goal?: ExactDecimalString | null;
+}
+
+export interface PrimaryGoalSelectionRequest {
+  goal_program_id: string;
+  expected_edit_token: string;
+}
+
 export type PaceStatus = "active" | "complete" | "expired";
 
 export interface GoalPosition {
@@ -64,6 +101,10 @@ export interface GoalPosition {
   calculation_version: "goal-arithmetic-v1";
 }
 
+export type GoalPositionState =
+  | { state: "available"; position: GoalPosition; source_fingerprint: string }
+  | { state: "no_primary"; position: null; source_fingerprint: null };
+
 export interface GoalCheckIn {
   check_in_id: string;
   goal_program_id: string;
@@ -72,6 +113,16 @@ export interface GoalCheckIn {
   position: GoalPosition;
   created_at: string;
   contract_version: "money-map-v2-contract-v1";
+}
+
+export type GoalCheckInState =
+  | { state: "available"; check_in: GoalCheckIn }
+  | { state: "no_primary" | "no_check_in"; check_in: null };
+
+export interface GoalCheckInTimelinePage {
+  state: "available" | "no_primary";
+  check_ins: GoalCheckIn[];
+  next_cursor: string | null;
 }
 
 export type ComparisonComponentKind =
@@ -105,6 +156,14 @@ export interface GoalComparison {
   components: GoalComparisonComponent[];
 }
 
+export type GoalComparisonState =
+  | { state: "available"; comparison: GoalComparison; reason: null }
+  | {
+      state: "no_primary" | "no_previous_check_in" | "unavailable";
+      comparison: null;
+      reason: string;
+    };
+
 export type GoalMilestoneKind =
   | "data_unavailable"
   | "restore_floor"
@@ -119,6 +178,10 @@ export interface GoalMilestone {
   amount: EvidencedMoney;
   position_fingerprint: string;
 }
+
+export type GoalMilestoneState =
+  | { state: "available"; milestone: GoalMilestone }
+  | { state: "no_primary"; milestone: null };
 
 export interface RetirementGoalInclusion {
   goal_program_id: string;
@@ -207,6 +270,18 @@ export interface SourceFingerprintMaterial {
   goal_configuration: FingerprintGoalConfiguration;
   source_records: FingerprintSourceRecord[];
 }
+
+export type GoalProvenanceState =
+  | {
+      state: "available";
+      source_fingerprint: string;
+      source_material: SourceFingerprintMaterial;
+    }
+  | {
+      state: "no_primary";
+      source_fingerprint: null;
+      source_material: null;
+    };
 
 export function isExactDecimalString(value: unknown): value is ExactDecimalString {
   return typeof value === "string" && /^-?\d+\.\d{2}$/.test(value);

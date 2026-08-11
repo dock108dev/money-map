@@ -13,6 +13,22 @@ from .balances import add_manual_value_observation
 from .config import settings
 from .db import get_session
 from .forecasting import ScenarioInput, build_forecast, ensure_baseline
+from .goal_service import (
+    GoalValidationError,
+    IneligibleGoalError,
+    StaleGoalWriteError,
+    UnknownGoalError,
+    calculate_primary_goal_position,
+    check_in_timeline,
+    current_milestone,
+    edit_goal,
+    goal_candidates,
+    latest_check_in,
+    latest_comparison,
+    primary_goal,
+    primary_goal_state,
+    select_primary_goal,
+)
 from .ingestion import import_private_inbox, rollback_import_batch
 from .keychain import SecretStore, SecretStoreError, keychain
 from .life_plan import (
@@ -74,6 +90,19 @@ from .services import (
     sofi_summary,
     timeline,
     wealth_dashboard,
+)
+from .v2_contracts import (
+    GoalCandidateList,
+    GoalCheckInState,
+    GoalCheckInTimelinePage,
+    GoalComparisonState,
+    GoalEditRequest,
+    GoalMilestoneState,
+    GoalPositionState,
+    GoalProgramView,
+    GoalProvenanceState,
+    PrimaryGoalSelectionRequest,
+    PrimaryGoalState,
 )
 
 router = APIRouter(prefix="/api")
@@ -153,6 +182,150 @@ def get_accounts(session: Session = Depends(get_session)) -> dict[str, Any]:
 @router.get("/wealth")
 def get_wealth(session: Session = Depends(get_session)) -> dict[str, Any]:
     return wealth_dashboard(session)
+
+
+@router.get("/v2/goals/primary")
+def get_v2_primary_goal(session: Session = Depends(get_session)) -> PrimaryGoalState:
+    return primary_goal_state(session)
+
+
+@router.put("/v2/goals/primary")
+def put_v2_primary_goal(
+    payload: PrimaryGoalSelectionRequest,
+    session: Session = Depends(get_session),
+) -> GoalProgramView:
+    try:
+        result = select_primary_goal(session, request=payload)
+        session.commit()
+        return result
+    except UnknownGoalError as exc:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (StaleGoalWriteError, IneligibleGoalError) as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/v2/goals/candidates")
+def get_v2_goal_candidates(session: Session = Depends(get_session)) -> GoalCandidateList:
+    return goal_candidates(session)
+
+
+@router.get("/v2/goals/position")
+def get_v2_goal_position(
+    observed_on: date | None = None,
+    session: Session = Depends(get_session),
+) -> GoalPositionState:
+    result = calculate_primary_goal_position(session, observed_on=observed_on or date.today())
+    if result is None:
+        return GoalPositionState(state="no_primary")
+    return GoalPositionState(
+        state="available",
+        position=result.position,
+        source_fingerprint=result.source_fingerprint,
+    )
+
+
+@router.get("/v2/goals/check-ins/latest")
+def get_v2_latest_goal_check_in(
+    session: Session = Depends(get_session),
+) -> GoalCheckInState:
+    program = primary_goal(session)
+    if program is None:
+        return GoalCheckInState(state="no_primary")
+    result = latest_check_in(session, program=program)
+    return GoalCheckInState(
+        state="available" if result is not None else "no_check_in",
+        check_in=result,
+    )
+
+
+@router.get("/v2/goals/check-ins")
+def get_v2_goal_check_ins(
+    limit: int = 20,
+    cursor: str | None = None,
+    session: Session = Depends(get_session),
+) -> GoalCheckInTimelinePage:
+    program = primary_goal(session)
+    if program is None:
+        return GoalCheckInTimelinePage(state="no_primary")
+    try:
+        result = check_in_timeline(session, program=program, limit=limit, cursor=cursor)
+    except GoalValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return GoalCheckInTimelinePage(
+        state="available",
+        check_ins=result.check_ins,
+        next_cursor=result.next_cursor,
+    )
+
+
+@router.get("/v2/goals/comparison")
+def get_v2_goal_comparison(
+    session: Session = Depends(get_session),
+) -> GoalComparisonState:
+    program = primary_goal(session)
+    if program is None:
+        return GoalComparisonState(
+            state="no_primary", reason="A primary goal has not been selected"
+        )
+    result = latest_comparison(session, program=program)
+    return GoalComparisonState(
+        state=result.state,
+        comparison=result.comparison,
+        reason=result.reason,
+    )
+
+
+@router.get("/v2/goals/milestone")
+def get_v2_goal_milestone(
+    observed_on: date | None = None,
+    session: Session = Depends(get_session),
+) -> GoalMilestoneState:
+    result = calculate_primary_goal_position(session, observed_on=observed_on or date.today())
+    if result is None:
+        return GoalMilestoneState(state="no_primary")
+    return GoalMilestoneState(state="available", milestone=current_milestone(result))
+
+
+@router.get("/v2/goals/provenance")
+def get_v2_goal_provenance(
+    observed_on: date | None = None,
+    session: Session = Depends(get_session),
+) -> GoalProvenanceState:
+    result = calculate_primary_goal_position(session, observed_on=observed_on or date.today())
+    if result is None:
+        return GoalProvenanceState(state="no_primary")
+    return GoalProvenanceState(
+        state="available",
+        source_fingerprint=result.source_fingerprint,
+        source_material=result.source_material,
+    )
+
+
+@router.patch("/v2/goals/{goal_program_id}")
+def patch_v2_goal(
+    goal_program_id: str,
+    payload: GoalEditRequest,
+    session: Session = Depends(get_session),
+) -> GoalProgramView:
+    try:
+        result = edit_goal(
+            session,
+            goal_program_id=goal_program_id,
+            request=payload,
+        )
+        session.commit()
+        return result
+    except UnknownGoalError as exc:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except StaleGoalWriteError as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except GoalValidationError as exc:
+        session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/life-plan/profile")

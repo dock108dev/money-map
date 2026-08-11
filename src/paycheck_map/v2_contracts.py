@@ -6,7 +6,7 @@ import hashlib
 import json
 from calendar import monthrange
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal, localcontext
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from enum import StrEnum
 from typing import Final, Literal, Self
 
@@ -136,6 +136,126 @@ class PrimaryGoalProgram(ContractModel):
         return self
 
 
+class GoalProgramView(ContractModel):
+    """Operational goal metadata used by candidate and write APIs."""
+
+    goal_program_id: str = Field(pattern=r"^goal_[a-z0-9_]+$")
+    name: str = Field(min_length=1, max_length=120)
+    target_date: date
+    target_amount: EvidencedMoney
+    protected_cash_floor: EvidencedMoney
+    reserved_for_goal: EvidencedMoney
+    status: Literal["active", "complete"]
+    is_primary: bool
+    source_life_goal_id: int | None = Field(default=None, ge=1)
+    edit_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    updated_at: datetime
+
+    @model_validator(mode="after")
+    def validate_operational_goal(self) -> Self:
+        _require_evidence(self.target_amount, EvidenceClass.USER_ENTERED, "target_amount")
+        _require_evidence(
+            self.protected_cash_floor, EvidenceClass.USER_ENTERED, "protected_cash_floor"
+        )
+        _require_evidence(self.reserved_for_goal, EvidenceClass.USER_ENTERED, "reserved_for_goal")
+        target = _required_amount(self.target_amount, "target_amount")
+        floor = _required_amount(self.protected_cash_floor, "protected_cash_floor")
+        reserved = _required_amount(self.reserved_for_goal, "reserved_for_goal")
+        if min(target, floor, reserved) < ZERO:
+            raise ValueError("Goal configuration money cannot be negative")
+        if reserved > target:
+            raise ValueError("Reserved money cannot exceed the goal target")
+        expected_status = "complete" if reserved >= target else "active"
+        if self.status != expected_status:
+            raise ValueError("Goal status must be derived from target and reserved amounts")
+        if self.updated_at.tzinfo is None or self.updated_at.utcoffset() is None:
+            raise ValueError("Goal update time must be timezone-aware")
+        return self
+
+
+class PrimaryGoalState(ContractModel):
+    state: Literal["primary", "no_primary"]
+    goal: GoalProgramView | None
+
+    @model_validator(mode="after")
+    def match_state_to_goal(self) -> Self:
+        if (self.state == "primary") != (self.goal is not None):
+            raise ValueError("Primary-goal state and goal presence must agree")
+        if self.goal is not None and not self.goal.is_primary:
+            raise ValueError("The primary-goal response must identify a primary program")
+        return self
+
+
+class GoalCandidateList(ContractModel):
+    state: Literal["selection_required", "no_candidates"]
+    candidates: tuple[GoalProgramView, ...]
+
+    @model_validator(mode="after")
+    def match_candidate_state(self) -> Self:
+        if (self.state == "selection_required") != bool(self.candidates):
+            raise ValueError("Candidate-list state and candidate presence must agree")
+        if any(
+            candidate.is_primary or candidate.status != "active" for candidate in self.candidates
+        ):
+            raise ValueError("Only active non-primary goals may be selection candidates")
+        return self
+
+
+class GoalEditRequest(ContractModel):
+    expected_edit_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    target_date: date | None = None
+    target_amount: Decimal | None = None
+    protected_cash_floor: Decimal | None = None
+    reserved_for_goal: Decimal | None = None
+
+    @field_validator("target_amount", "protected_cash_floor", "reserved_for_goal", mode="before")
+    @classmethod
+    def parse_exact_decimal_string(cls, value: object) -> object:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Goal money inputs must be exact decimal strings")
+        try:
+            parsed = Decimal(value)
+            if not parsed.is_finite():
+                raise ValueError("Goal money inputs must be finite")
+            return money(parsed)
+        except InvalidOperation as exc:
+            raise ValueError("Goal money inputs must be valid finite decimals") from exc
+
+    @field_serializer("target_amount", "protected_cash_floor", "reserved_for_goal")
+    def serialize_optional_money(self, value: Decimal | None) -> str | None:
+        return None if value is None else format(value, ".2f")
+
+    @model_validator(mode="after")
+    def validate_edit(self) -> Self:
+        if all(
+            value is None
+            for value in (
+                self.name,
+                self.target_date,
+                self.target_amount,
+                self.protected_cash_floor,
+                self.reserved_for_goal,
+            )
+        ):
+            raise ValueError("A goal edit must change at least one supported field")
+        money_values = (
+            self.target_amount,
+            self.protected_cash_floor,
+            self.reserved_for_goal,
+        )
+        if any(value is not None and value < ZERO for value in money_values):
+            raise ValueError("Goal money inputs cannot be negative")
+        return self
+
+
+class PrimaryGoalSelectionRequest(ContractModel):
+    goal_program_id: str = Field(pattern=r"^goal_[a-z0-9_]+$")
+    expected_edit_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class PaceStatus(StrEnum):
     ACTIVE = "active"
     COMPLETE = "complete"
@@ -237,6 +357,19 @@ class GoalPosition(ContractModel):
         return self
 
 
+class GoalPositionState(ContractModel):
+    state: Literal["available", "no_primary"]
+    position: GoalPosition | None = None
+    source_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def match_position_state(self) -> Self:
+        available = self.position is not None and self.source_fingerprint is not None
+        if (self.state == "available") != available:
+            raise ValueError("Position state, position, and fingerprint must agree")
+        return self
+
+
 class GoalCheckIn(ContractModel):
     check_in_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     goal_program_id: str = Field(pattern=r"^goal_[a-z0-9_]+$")
@@ -268,6 +401,29 @@ class GoalCheckInHistory(ContractModel):
         identities = [(item.goal_program_id, item.source_fingerprint) for item in self.check_ins]
         if len(identities) != len(set(identities)):
             raise ValueError("Source-equivalent check-ins are duplicates")
+        return self
+
+
+class GoalCheckInState(ContractModel):
+    state: Literal["available", "no_primary", "no_check_in"]
+    check_in: GoalCheckIn | None = None
+
+    @model_validator(mode="after")
+    def match_check_in_state(self) -> Self:
+        if (self.state == "available") != (self.check_in is not None):
+            raise ValueError("Check-in state and check-in presence must agree")
+        return self
+
+
+class GoalCheckInTimelinePage(ContractModel):
+    state: Literal["available", "no_primary"]
+    check_ins: tuple[GoalCheckIn, ...] = ()
+    next_cursor: str | None = None
+
+    @model_validator(mode="after")
+    def require_empty_no_primary_page(self) -> Self:
+        if self.state == "no_primary" and (self.check_ins or self.next_cursor is not None):
+            raise ValueError("A no-primary timeline must be empty")
         return self
 
 
@@ -371,6 +527,21 @@ class GoalComparison(ContractModel):
         return self
 
 
+class GoalComparisonState(ContractModel):
+    state: Literal["available", "no_primary", "no_previous_check_in", "unavailable"]
+    comparison: GoalComparison | None = None
+    reason: str | None = Field(default=None, min_length=1, max_length=240)
+
+    @model_validator(mode="after")
+    def match_comparison_state(self) -> Self:
+        if self.state == "available":
+            if self.comparison is None or self.reason is not None:
+                raise ValueError("Available comparison state requires only a comparison")
+        elif self.comparison is not None or self.reason is None:
+            raise ValueError("Unavailable comparison states require only a reason")
+        return self
+
+
 class GoalMilestoneKind(StrEnum):
     DATA_UNAVAILABLE = "data_unavailable"
     RESTORE_FLOOR = "restore_floor"
@@ -405,6 +576,17 @@ class GoalMilestone(ContractModel):
             _require_derivation(self.amount, MoneyDerivation.MILESTONE_AMOUNT, "milestone amount")
             if _required_amount(self.amount, "milestone amount") < ZERO:
                 raise ValueError("Milestone amount cannot be negative")
+        return self
+
+
+class GoalMilestoneState(ContractModel):
+    state: Literal["available", "no_primary"]
+    milestone: GoalMilestone | None = None
+
+    @model_validator(mode="after")
+    def match_milestone_state(self) -> Self:
+        if (self.state == "available") != (self.milestone is not None):
+            raise ValueError("Milestone state and milestone presence must agree")
         return self
 
 
@@ -693,6 +875,25 @@ class SourceFingerprintMaterial(ContractModel):
 
     def fingerprint(self) -> str:
         return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
+
+
+class GoalProvenanceState(ContractModel):
+    state: Literal["available", "no_primary"]
+    source_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_material: SourceFingerprintMaterial | None = None
+
+    @model_validator(mode="after")
+    def match_provenance_state(self) -> Self:
+        available = self.source_fingerprint is not None and self.source_material is not None
+        if (self.state == "available") != available:
+            raise ValueError("Provenance state, material, and fingerprint must agree")
+        if (
+            available
+            and self.source_material is not None
+            and self.source_material.fingerprint() != self.source_fingerprint
+        ):
+            raise ValueError("Provenance fingerprint must match its canonical material")
+        return self
 
 
 def check_in_identity(goal_program_id: str, source_fingerprint: str) -> str:
