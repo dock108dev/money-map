@@ -1,7 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { cashFlowFixture } from "./cash-flow/test-fixtures";
 import {
   comparisonState,
   latestState,
@@ -131,7 +132,7 @@ function workingFetch(
         automatic: init?.body,
       });
     }
-    if (url === "/api/overview") return json(overview);
+    if (url.startsWith("/api/v2/cash-flow?")) return json(cashFlowFixture());
     if (url === "/api/accounts") return json(accounts);
     if (url === "/api/wealth") return json(wealth);
     if (url === "/api/exceptions") return json(options.issues ?? []);
@@ -190,7 +191,7 @@ describe("application states", () => {
     const fetch = workingFetch();
     vi.stubGlobal("fetch", fetch);
     render(<App />);
-    await screen.findByRole("heading", { name: "Quiet place by the water" });
+    await screen.findByRole("heading", { name: "Cash Flow" });
     const button = await screen.findByRole("button", { name: "Update data" });
     fireEvent.click(button);
     await waitFor(() =>
@@ -201,7 +202,7 @@ describe("application states", () => {
     );
     expect(await screen.findByText("10 accounts updated")).toBeInTheDocument();
     await waitFor(() => {
-      expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/goals/position").length).toBeGreaterThan(1);
+      expect(fetch.mock.calls.filter(([input]) => String(input).includes("/api/v2/cash-flow?period_kind=all_imported_history")).length).toBeGreaterThan(1);
     });
   });
 
@@ -255,28 +256,29 @@ describe("application states", () => {
     expect(screen.getByRole("button", { name: "Lab" })).toBeInTheDocument();
   });
 
-  it("makes the lazy Goals feature the default and keeps Overview one click away", async () => {
+  it("makes Cash Flow the default and first navigation item while Goals stays reachable", async () => {
     const fetch = workingFetch(false, 2);
     vi.stubGlobal("fetch", fetch);
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Quiet place by the water" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Cash Flow" })).toBeInTheDocument();
     const navigation = screen.getByRole("navigation");
     const buttons = Array.from(navigation.querySelectorAll("button"));
-    expect(buttons[0]).toHaveTextContent("Goals");
-    expect(screen.getByRole("button", { name: "Goals" })).toHaveAttribute("aria-current", "page");
+    expect(buttons[0]).toHaveTextContent("Cash Flow");
+    expect(screen.getByRole("button", { name: "Cash Flow" })).toHaveAttribute("aria-current", "page");
     expect(navigation).toHaveAttribute("aria-label", "Primary navigation");
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/life-plan"))).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
-    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/overview"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    expect(await screen.findByRole("heading", { name: "Quiet place by the water" })).toBeInTheDocument();
   });
 
   it("keeps the exact visible navigation order and exposes the conditional Review count", async () => {
     vi.stubGlobal("fetch", workingFetch(false, 2, { issues: [{ id: 1 }, { id: 2 }] }));
     render(<App />);
-    await screen.findByRole("heading", { name: "Quiet place by the water" });
+    await screen.findByRole("heading", { name: "Cash Flow" });
     const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
     expect(Array.from(navigation.querySelectorAll("button")).map((button) => button.getAttribute("aria-label")?.replace(/, \d+ issues$/u, ""))).toEqual([
-      "Goals", "Overview", "Accounts", "Income", "Activity", "Wealth", "Retirement", "Lab", "Add account", "Review",
+      "Cash Flow", "Goals", "Accounts", "Income", "Activity", "Wealth", "Retirement", "Lab", "Add account", "Review",
     ]);
     expect(screen.getByRole("button", { name: "Review, 2 issues" })).toHaveTextContent("Review2");
   });
@@ -291,17 +293,12 @@ describe("application states", () => {
   it("opens closed evidence for print and restores its screen state afterward", async () => {
     vi.stubGlobal("fetch", workingFetch(false, 2));
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
-    await screen.findByRole("heading", { name: "Overview" });
-    const custom = screen.getByText("Custom range").closest("details")!;
-    const evidence = screen.getByText("Detailed period evidence").closest("details")!;
-    expect(custom).not.toHaveAttribute("open");
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    const evidence = (await screen.findByText("Cash Flow evidence")).closest("details")!;
     expect(evidence).not.toHaveAttribute("open");
     window.dispatchEvent(new Event("beforeprint"));
-    expect(custom).toHaveAttribute("open");
     expect(evidence).toHaveAttribute("open");
     window.dispatchEvent(new Event("afterprint"));
-    expect(custom).not.toHaveAttribute("open");
     expect(evidence).not.toHaveAttribute("open");
   });
 
@@ -309,6 +306,7 @@ describe("application states", () => {
     const fetch = workingFetch(false, 2);
     vi.stubGlobal("fetch", fetch);
     render(<App />);
+    await screen.findByRole("heading", { name: "Cash Flow" });
     const retirement = await screen.findByRole("button", { name: "Retirement" });
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/retirement"))).toBe(false);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/lab"))).toBe(false);
@@ -323,5 +321,32 @@ describe("application states", () => {
     expect(screen.queryByRole("heading", { name: "Retirement" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Start blank/ })).toBeInTheDocument();
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/lab/snapshots")).toBe(true);
+  });
+
+  it("carries a Cash Flow period into Activity while direct navigation stays all-history", async () => {
+    vi.stubGlobal("fetch", workingFetch(false, 2));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /Transactions for this period/ }));
+    expect(await screen.findByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(screen.getByText("Jun 15–Aug 11 · inclusive")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cash Flow" }));
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
+    fireEvent.click(within(navigation).getByRole("button", { name: "Activity" }));
+    expect(await screen.findByText("Imported activity")).toBeInTheDocument();
+  });
+
+  it("keeps Accounts, Income, Activity, Wealth, Goals, Retirement, and Lab routes reachable", async () => {
+    vi.stubGlobal("fetch", workingFetch(false, 2));
+    render(<App />);
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    for (const route of ["Accounts", "Income", "Activity", "Wealth", "Goals"] as const) {
+      fireEvent.click(screen.getByRole("button", { name: route }));
+      await screen.findByRole("heading", { name: route === "Goals" ? "Quiet place by the water" : route });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Retirement" }));
+    await screen.findByRole("heading", { name: "Retirement" });
+    fireEvent.click(screen.getByRole("button", { name: "Lab" }));
+    await screen.findByRole("heading", { name: "Life Lab" });
   });
 });

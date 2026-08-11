@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
+  type ApplicationData,
   configurePlaid,
   createReport,
   createPlaidLinkToken,
@@ -7,7 +8,6 @@ import {
   disconnectPlaidConnection,
   exchangePlaidToken,
   loadDashboard,
-  loadPeriod,
   importInbox,
   syncAllPlaidConnections,
   syncPlaidConnection,
@@ -18,22 +18,20 @@ import {
   ActivityView,
   ConnectionsView,
   IncomeView,
-  OverviewView,
   ReviewView,
   WealthView,
 } from "./components";
+import CashFlowView from "./cash-flow/CashFlowView";
 import { openPlaidLink } from "./plaid-link";
-import type { DashboardData } from "./types";
-
 const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
 const RetirementView = lazy(() => import("./retirement/RetirementView"));
 const GoalsView = lazy(() => import("./goals/GoalsView"));
 
-type View = "goals" | "overview" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
+type View = "cash-flow" | "goals" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
 
 const nav: Array<{ id: View; label: string; glyph: string }> = [
+  { id: "cash-flow", label: "Cash Flow", glyph: "↕" },
   { id: "goals", label: "Goals", glyph: "◉" },
-  { id: "overview", label: "Overview", glyph: "⌂" },
   { id: "accounts", label: "Accounts", glyph: "▤" },
   { id: "income", label: "Income", glyph: "$" },
   { id: "activity", label: "Activity", glyph: "↕" },
@@ -45,16 +43,17 @@ const nav: Array<{ id: View; label: string; glyph: string }> = [
 ];
 
 export default function App() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<ApplicationData | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>(() =>
-    window.location.hash === "#plaid-live-setup" ? "connections" : "goals",
+    window.location.hash === "#plaid-live-setup" ? "connections" : "cash-flow",
   );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
-  const [goalsReloadVersion, setGoalsReloadVersion] = useState(0);
+  const [dataReloadVersion, setDataReloadVersion] = useState(0);
+  const [activityPeriod, setActivityPeriod] = useState<{ startDate: string; endDate: string } | null>(null);
   const autoRefreshStarted = useRef(false);
   const activeNavButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -88,7 +87,7 @@ export default function App() {
       if (!detail.toLowerCase().includes("already updating")) setUpdateMessage(detail);
       await refresh();
     } finally {
-      setGoalsReloadVersion((current) => current + 1);
+      setDataReloadVersion((current) => current + 1);
       setUpdating(false);
     }
   }, [refresh]);
@@ -230,18 +229,6 @@ export default function App() {
     }
   };
 
-  const runPeriodChange = async (startDate: string, endDate: string) => {
-    setBusy(true);
-    try {
-      const period = await loadPeriod(startDate, endDate);
-      setData((current) => current ? { ...current, ...period } : current);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The selected period could not load.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const runImport = async () => {
     setBusy(true);
     try {
@@ -317,7 +304,10 @@ export default function App() {
                 ref={view === item.id ? activeNavButtonRef : undefined}
                 aria-current={view === item.id ? "page" : undefined}
                 aria-label={item.id === "review" && data.issues.length > 0 ? `Review, ${data.issues.length} issues` : item.label}
-                onClick={() => setView(item.id)}
+                onClick={() => {
+                  if (item.id === "activity") setActivityPeriod(null);
+                  setView(item.id);
+                }}
               >
                 <span aria-hidden="true">{item.glyph}</span>
                 {item.label}
@@ -360,27 +350,27 @@ export default function App() {
         </header>
         {error && <div className="error-banner">{error}</div>}
         <div className="content-wrap">
-          {view === "goals" && (
-            <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Goals…</p></div>}>
-              <GoalsView reloadVersion={goalsReloadVersion} />
-            </Suspense>
-          )}
-          {view === "overview" && (
-            <OverviewView
-              accounts={data.accounts}
-              overview={data.overview}
-              timeline={data.timeline}
-              busy={busy}
-              onPeriodChange={(start, end) => void runPeriodChange(start, end)}
+          {view === "cash-flow" && (
+            <CashFlowView
+              netWorth={data.accounts.totals.net_worth}
+              reloadVersion={dataReloadVersion}
+              onShowActivity={(period) => {
+                setActivityPeriod(period);
+                setView("activity");
+              }}
               onShowAccounts={() => setView("accounts")}
-              onShowActivity={() => setView("activity")}
               onShowIncome={() => setView("income")}
               onShowWealth={() => setView("wealth")}
             />
           )}
+          {view === "goals" && (
+            <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Goals…</p></div>}>
+              <GoalsView reloadVersion={dataReloadVersion} />
+            </Suspense>
+          )}
           {view === "accounts" && <AccountsView data={data.accounts} />}
           {view === "income" && <IncomeView data={data.payroll} />}
-          {view === "activity" && <ActivityView data={data.accounts} />}
+          {view === "activity" && <ActivityView data={data.accounts} period={activityPeriod} />}
           {view === "wealth" && <WealthView data={data.wealth} />}
           {view === "retirement" && (
             <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Retirement…</p></div>}>

@@ -176,7 +176,7 @@ export function validateV21ContractVector(value: unknown): V21ContractVector {
   if (vector.contract_version !== V21_CONTRACT_VERSION) {
     throw new Error("Unexpected v2.1 contract version");
   }
-  const cashFlow = validateCashFlowResult(vector.cash_flow);
+  const cashFlow = validateCashFlowPeriodResult(vector.cash_flow);
   const recurring = validateRecurringFacts(vector.recurring);
   const goal = validateGoal(vector.goal);
   const combined = validateMoney(
@@ -215,7 +215,7 @@ export function isV21ContractVector(value: unknown): value is V21ContractVector 
   }
 }
 
-function validateCashFlowResult(value: unknown): CashFlowPeriodResult {
+export function validateCashFlowPeriodResult(value: unknown): CashFlowPeriodResult {
   const result = record(value, "cash_flow");
   const period = validatePeriod(result.period);
   const coverage = validateCoverage(result.coverage);
@@ -294,6 +294,15 @@ function validateCashFlowResult(value: unknown): CashFlowPeriodResult {
     freshness,
     warnings,
   };
+}
+
+export function isCashFlowPeriodResult(value: unknown): value is CashFlowPeriodResult {
+  try {
+    validateCashFlowPeriodResult(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function validatePeriod(value: unknown): SelectedPeriod {

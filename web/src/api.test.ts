@@ -1,0 +1,93 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  CashFlowApiError,
+  CashFlowUnavailableError,
+  CashFlowValidationError,
+  loadCashFlow,
+} from "./api";
+import { cashFlowFixture } from "./cash-flow/test-fixtures";
+
+const json = (value: unknown, status = 200) =>
+  new Response(JSON.stringify(value), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("Cash Flow API", () => {
+  it.each([
+    ["all_imported_history", "/api/v2/cash-flow?period_kind=all_imported_history"],
+    ["trailing_12_months", "/api/v2/cash-flow?period_kind=trailing_12_months"],
+    ["year_to_date", "/api/v2/cash-flow?period_kind=year_to_date"],
+    [
+      "custom_range",
+      "/api/v2/cash-flow?period_kind=custom_range&start_date=2026-04-03&end_date=2026-04-19",
+    ],
+  ] as const)("loads and validates %s", async (periodKind, expectedUrl) => {
+    const fetch = vi.fn(async () => json(cashFlowFixture()));
+    vi.stubGlobal("fetch", fetch);
+    const result = await loadCashFlow({
+      periodKind,
+      ...(periodKind === "custom_range"
+        ? { startDate: "2026-04-03", endDate: "2026-04-19" }
+        : {}),
+    });
+    expect(fetch).toHaveBeenCalledWith(expectedUrl);
+    expect(result.totals.money_in.amount).toBe("7213.00");
+    expect(result.totals.net_cash_flow.amount).toBe("-805.00");
+  });
+
+  it("safely parses object-shaped 409 unavailable detail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => json({ detail: { state: "unavailable", reason: "No imported cash activity" } }, 409)),
+    );
+    await expect(loadCashFlow({ periodKind: "all_imported_history" })).rejects.toMatchObject({
+      name: "CashFlowUnavailableError",
+      status: 409,
+      reason: "No imported cash activity",
+      message: "No imported cash activity",
+    } satisfies Partial<CashFlowUnavailableError>);
+  });
+
+  it("uses a safe unavailable fallback for malformed 409 detail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ detail: { state: "unavailable" } }, 409)));
+    await expect(loadCashFlow({ periodKind: "all_imported_history" })).rejects.toThrow(
+      "Cash Flow is unavailable.",
+    );
+  });
+
+  it("keeps string and FastAPI-array 422 validation errors distinct", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ detail: "Custom dates are invalid" }, 422))
+      .mockResolvedValueOnce(json({ detail: [{ msg: "Input should be a valid period" }] }, 422));
+    vi.stubGlobal("fetch", fetch);
+    await expect(loadCashFlow({ periodKind: "custom_range" })).rejects.toMatchObject({
+      name: "CashFlowValidationError",
+      status: 422,
+      message: "Custom dates are invalid",
+    } satisfies Partial<CashFlowValidationError>);
+    await expect(loadCashFlow({ periodKind: "year_to_date" })).rejects.toThrow(
+      "Input should be a valid period",
+    );
+  });
+
+  it("represents general HTTP and invalid-contract failures separately", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ detail: "Service offline" }, 503))
+      .mockResolvedValueOnce(json({ totals: { money_in: 12.34 } }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(loadCashFlow({ periodKind: "all_imported_history" })).rejects.toMatchObject({
+      name: "CashFlowApiError",
+      status: 503,
+    } satisfies Partial<CashFlowApiError>);
+    await expect(loadCashFlow({ periodKind: "all_imported_history" })).rejects.toMatchObject({
+      name: "CashFlowApiError",
+      status: 0,
+    } satisfies Partial<CashFlowApiError>);
+  });
+});

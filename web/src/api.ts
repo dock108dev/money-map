@@ -1,4 +1,48 @@
 import type { AccountDetail, DashboardData, PlaidRefreshResult, PlaidStatus } from "./types";
+import {
+  validateCashFlowPeriodResult,
+  type CashFlowPeriodResult,
+  type PeriodKind,
+} from "./v21-contracts";
+
+export type ApplicationData = Pick<
+  DashboardData,
+  "accounts" | "wealth" | "issues" | "plaid" | "payroll" | "scenarios" | "imports"
+>;
+
+export interface CashFlowRequest {
+  periodKind: PeriodKind;
+  startDate?: string;
+  endDate?: string;
+}
+
+export class CashFlowUnavailableError extends Error {
+  readonly status = 409;
+
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = "CashFlowUnavailableError";
+  }
+}
+
+export class CashFlowValidationError extends Error {
+  readonly status = 422;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CashFlowValidationError";
+  }
+}
+
+export class CashFlowApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "CashFlowApiError";
+  }
+}
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -12,41 +56,84 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function loadDashboard(): Promise<DashboardData> {
-  const [overview, accounts, wealth, issues, plaid, payroll, timeline, scenarios, imports] = await Promise.all([
-      request<DashboardData["overview"]>("/api/overview"),
-      request<DashboardData["accounts"]>("/api/accounts"),
-      request<DashboardData["wealth"]>("/api/wealth"),
-      request<DashboardData["issues"]>("/api/exceptions"),
-      request<DashboardData["plaid"]>("/api/plaid/status"),
-      request<DashboardData["payroll"]>("/api/payroll"),
-      request<DashboardData["timeline"]>("/api/timeline"),
-      request<DashboardData["scenarios"]>("/api/scenarios"),
-      request<DashboardData["imports"]>("/api/imports"),
-    ]);
+export async function loadDashboard(): Promise<ApplicationData> {
+  const [accounts, wealth, issues, plaid, payroll, scenarios, imports] = await Promise.all([
+    request<DashboardData["accounts"]>("/api/accounts"),
+    request<DashboardData["wealth"]>("/api/wealth"),
+    request<DashboardData["issues"]>("/api/exceptions"),
+    request<DashboardData["plaid"]>("/api/plaid/status"),
+    request<DashboardData["payroll"]>("/api/payroll"),
+    request<DashboardData["scenarios"]>("/api/scenarios"),
+    request<DashboardData["imports"]>("/api/imports"),
+  ]);
   return {
-    overview,
     accounts,
     wealth,
     issues,
     plaid,
     payroll,
-    paychecks: [],
-    timeline,
     scenarios,
     imports,
-    sofi: { accounts: [], consolidated_external_net: null, internal_transfer_pairs: 0, warnings: [] },
-    fidelity: { accounts: [], consolidated: {}, warnings: [] },
   };
 }
 
-export async function loadPeriod(startDate: string, endDate: string) {
-  const query = new URLSearchParams({ start_date: startDate, end_date: endDate });
-  const [overview, timeline] = await Promise.all([
-    request<DashboardData["overview"]>(`/api/overview?${query}`),
-    request<DashboardData["timeline"]>(`/api/timeline?${query}`),
-  ]);
-  return { overview, timeline };
+function detailMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "object" && item !== null && "msg" in item) {
+          const message = (item as { msg?: unknown }).msg;
+          return typeof message === "string" ? message : null;
+        }
+        return null;
+      })
+      .filter((item): item is string => Boolean(item));
+    if (messages.length) return messages.join("; ");
+  }
+  return fallback;
+}
+
+export async function loadCashFlow({
+  periodKind,
+  startDate,
+  endDate,
+}: CashFlowRequest): Promise<CashFlowPeriodResult> {
+  const query = new URLSearchParams({ period_kind: periodKind });
+  if (startDate !== undefined) query.set("start_date", startDate);
+  if (endDate !== undefined) query.set("end_date", endDate);
+  const response = await fetch(`/api/v2/cash-flow?${query}`);
+  const body = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    const detail =
+      typeof body === "object" && body !== null && "detail" in body
+        ? (body as { detail?: unknown }).detail
+        : null;
+    if (response.status === 409) {
+      const reason =
+        typeof detail === "object" && detail !== null && "reason" in detail
+          ? (detail as { reason?: unknown }).reason
+          : null;
+      throw new CashFlowUnavailableError(
+        typeof reason === "string" && reason.trim() ? reason : "Cash Flow is unavailable.",
+      );
+    }
+    if (response.status === 422) {
+      throw new CashFlowValidationError(
+        detailMessage(detail, "The selected Cash Flow period is invalid."),
+      );
+    }
+    throw new CashFlowApiError(
+      response.status,
+      detailMessage(detail, `Cash Flow request failed (${response.status}).`),
+    );
+  }
+  try {
+    return validateCashFlowPeriodResult(body);
+  } catch (reason) {
+    const detail = reason instanceof Error ? reason.message : "Unknown contract error";
+    throw new CashFlowApiError(0, `Cash Flow evidence was invalid: ${detail}`);
+  }
 }
 
 export function loadAccountDetail(accountId: number, startDate: string, endDate: string) {

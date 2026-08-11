@@ -627,9 +627,7 @@ describe("account-first views", () => {
     expect(screen.getByText("Tracking")).toBeInTheDocument();
     expect(screen.queryByText(/unresolved/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/second dated/i)).not.toBeInTheDocument();
-    const budget = document.querySelector('[data-copy-budget="overview-hero-summary"]');
-    expect(budget).not.toBeNull();
-    expect(proseWordCount(budget!)).toBeLessThanOrEqual(COPY_BUDGETS["overview-hero-summary"]);
+    expect(document.querySelector('[data-copy-budget="overview-hero-summary"]')).toBeNull();
   });
 
   it("limits Overview recent activity to five rows", () => {
@@ -725,6 +723,18 @@ describe("account-first views", () => {
     fireEvent.click(screen.getByRole("button", { name: "Money out" }));
     expect(screen.queryByText("OPTUM PAYROLL")).not.toBeInTheDocument();
     expect(screen.getByText("Mortgage payment")).toBeInTheDocument();
+  });
+
+  it("filters already-loaded Activity rows to an inclusive Cash Flow handoff period", () => {
+    render(
+      <ActivityView
+        data={accounts}
+        period={{ startDate: "2026-07-29", endDate: "2026-07-29" }}
+      />,
+    );
+    expect(screen.getByText("Jul 29–Jul 29 · inclusive")).toBeInTheDocument();
+    expect(screen.getByText("OPTUM PAYROLL")).toBeInTheDocument();
+    expect(screen.queryByText("Mortgage payment")).not.toBeInTheDocument();
   });
 
   it("shows only actionable review issues", () => {

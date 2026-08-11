@@ -147,7 +147,7 @@ export function OverviewView({
   }, [overview.period.start, overview.period.end]);
 
   return (
-    <div className="view-stack account-first-view" data-copy-budget="overview-hero-summary">
+    <div className="view-stack account-first-view" data-retired-surface="overview">
       <section className="net-worth-hero" aria-labelledby="overview-title">
         <div className="net-worth-copy">
           <span>Money Map</span>
@@ -748,9 +748,18 @@ function AccountDetailPanel({
 
 type ActivityFilter = "all" | "in" | "out" | "transfer" | "investment";
 
-export function ActivityView({ data }: { data: AccountsDashboard }) {
+export function ActivityView({
+  data,
+  period = null,
+}: {
+  data: AccountsDashboard;
+  period?: { startDate: string; endDate: string } | null;
+}) {
   const [filter, setFilter] = useState<ActivityFilter>("all");
-  const rows = data.activity.filter((row) => {
+  const periodRows = period
+    ? data.activity.filter((row) => row.date >= period.startDate && row.date <= period.endDate)
+    : data.activity;
+  const rows = periodRows.filter((row) => {
     if (filter === "all") return true;
     if (filter === "investment") return row.account_category === "investment";
     return row.direction === filter;
@@ -759,7 +768,11 @@ export function ActivityView({ data }: { data: AccountsDashboard }) {
     <div className="view-stack account-first-view">
       <section className="simple-page-heading" data-copy-budget="utility-page-heading">
         <div>
-          <span className="eyebrow">{activityPeriod(data)}</span>
+          <span className="eyebrow">
+            {period
+              ? `${shortDate(period.startDate)}–${shortDate(period.endDate)} · inclusive`
+              : activityPeriod(data)}
+          </span>
           <h1 data-prose>Activity</h1>
         </div>
         <strong>{rows.length} records</strong>

@@ -4,6 +4,7 @@ import matrix from "../../examples/synthetic/money-map-v2.1-contracts.json";
 import {
   isV21ContractVector,
   parseExactMoneyCents,
+  validateCashFlowPeriodResult,
   validateV21ContractVector,
 } from "./v21-contracts";
 
@@ -64,6 +65,13 @@ describe("Money Map v2.1 frontend contracts", () => {
     ["1.0", "01.00", "$1.00", "NaN", "Infinity", "1.001", 1, 1.0].forEach((value) => {
       expect(() => parseExactMoneyCents(value)).toThrow("exact two-place decimal");
     });
+  });
+
+  it("exports the standalone Cash Flow result validator used by the API client", () => {
+    const vector = validateV21ContractVector(materialize(matrix.valid_cases[0]));
+    expect(validateCashFlowPeriodResult(structuredClone(vector.cash_flow))).toEqual(
+      vector.cash_flow,
+    );
   });
 
   it("keeps historical net, recurring margin, stabilization, and goal pace distinct", () => {

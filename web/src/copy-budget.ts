@@ -3,7 +3,7 @@ export const COPY_BUDGETS = {
   "retirement-before-chart": 65,
   "lab-seed-chooser": 65,
   "lab-active-summary": 70,
-  "overview-hero-summary": 45,
+  "cash-flow-first-viewport": 45,
   "wealth-hero-result": 50,
   "utility-page-heading": 20,
 } as const;

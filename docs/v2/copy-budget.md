@@ -24,7 +24,7 @@ Money Map should answer the current question before it explains the evidence. Ea
 | Retirement result before chart | 65 |
 | Lab seed chooser | 65 |
 | Lab active-result summary | 70 |
-| Overview hero and first summary | 45 |
+| Cash Flow first viewport | 45 |
 | Wealth hero and first result | 50 |
 | Utility page heading | 20 |
 
