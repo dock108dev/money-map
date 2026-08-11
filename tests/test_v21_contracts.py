@@ -12,6 +12,7 @@ from pydantic import ValidationError
 import paycheck_map.v2_contracts as v2_contracts
 import paycheck_map.v21_contracts as v21_contracts
 from paycheck_map.v21_contracts import (
+    GoalGapPreviewRequest,
     MarginState,
     V21ContractVector,
     V21EvidencedMoney,
@@ -108,6 +109,40 @@ def test_money_rejects_malformed_nonfinite_and_non_string_boundaries(amount: obj
                 "unavailable_reason": None,
             }
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("additional_reservation", 1.25),
+        ("additional_reservation", 1),
+        ("additional_reservation", "1.0"),
+        ("monthly_spending_reduction", "-0.01"),
+        ("monthly_after_tax_income", "NaN"),
+        ("target_date", "2035-02-31"),
+    ],
+)
+def test_goal_gap_request_rejects_binary_malformed_negative_and_invalid_date(
+    field: str, value: object
+) -> None:
+    payload: dict[str, object] = {
+        "additional_reservation": "0.00",
+        "monthly_spending_reduction": "0.00",
+        "monthly_after_tax_income": "0.00",
+    }
+    payload[field] = value
+    with pytest.raises(ValidationError):
+        GoalGapPreviewRequest.model_validate(payload)
+
+
+def test_goal_gap_request_defaults_to_zero_without_inventing_a_target_date() -> None:
+    request = GoalGapPreviewRequest()
+
+    assert request.target_date is None
+    assert request.additional_reservation == Decimal("0.00")
+    assert request.monthly_spending_reduction == Decimal("0.00")
+    assert request.monthly_after_tax_income == Decimal("0.00")
+    assert request.model_dump(mode="json")["additional_reservation"] == "0.00"
 
 
 def test_current_relationship_keeps_historical_net_separate_from_recurring_margin() -> None:

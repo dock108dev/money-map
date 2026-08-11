@@ -2,10 +2,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { COPY_BUDGETS, proseWordCount } from "../copy-budget";
-import { goalPosition, positionState } from "../goals/fixtures";
-import type { ExactDecimalString, GoalPositionState } from "../v2-contracts";
-import { validateCashFlowPeriodResult, type CashFlowPeriodResult } from "../v21-contracts";
+import type { ExactDecimalString } from "../v2-contracts";
+import {
+  validateCashFlowPeriodResult,
+  validateGoalGapPreviewResponse,
+  type CashFlowPeriodResult,
+  type GoalGapPreviewResponse,
+} from "../v21-contracts";
 import CashFlowView from "./CashFlowView";
+import { goalGapFixture, unavailableMoney } from "./goal-gap-test-fixtures";
 import { cashFlowFixture, longZeroCashFlow } from "./test-fixtures";
 
 const json = (value: unknown, status = 200) =>
@@ -19,6 +24,7 @@ const callbacks = {
   onShowAccounts: vi.fn(),
   onShowIncome: vi.fn(),
   onShowWealth: vi.fn(),
+  onShowGoals: vi.fn(),
 };
 
 function cashFlowWith(
@@ -30,33 +36,45 @@ function cashFlowWith(
   return validateCashFlowPeriodResult(value);
 }
 
-function goalWithGap(amount: ExactDecimalString): GoalPositionState {
-  return {
-    state: "available",
-    source_fingerprint: "synthetic-cash-flow-gap",
-    position: {
-      ...goalPosition,
-      effective_recurring_take_home: {
-        ...goalPosition.effective_recurring_take_home,
-        amount: "3200.00",
-      },
-      observed_recurring_outflow: {
-        ...goalPosition.observed_recurring_outflow,
-        amount: "3700.00",
-      },
-      recurring_cash_flow_gap: { ...goalPosition.recurring_cash_flow_gap, amount },
-    },
-  };
+function positiveGoalGap(): GoalGapPreviewResponse {
+  const value = structuredClone(goalGapFixture());
+  value.baseline_current_recurring_facts.observed_recurring_monthly_outflow.amount = "3900.00";
+  value.baseline_current_recurring_facts.current_monthly_margin.amount = "300.00";
+  value.baseline_current_recurring_facts.stabilization_gap.amount = "0.00";
+  value.baseline_current_recurring_facts.margin_state = "positive";
+  value.baseline_combined_monthly_improvement.amount = "38703.52";
+  value.adjusted_recurring_outflow.amount = "3900.00";
+  value.adjusted_monthly_margin.amount = "300.00";
+  value.adjusted_stabilization_gap.amount = "0.00";
+  value.remaining_combined_monthly_improvement.amount = "38703.52";
+  return validateGoalGapPreviewResponse(value);
+}
+
+function goalWithGap(amount: ExactDecimalString): GoalGapPreviewResponse {
+  const value = structuredClone(goalGapFixture());
+  value.baseline_current_recurring_facts.effective_recurring_take_home.amount = "3200.00";
+  value.baseline_current_recurring_facts.observed_recurring_monthly_outflow.amount = "3700.00";
+  value.baseline_current_recurring_facts.current_monthly_margin.amount = `-${amount}` as ExactDecimalString;
+  value.baseline_current_recurring_facts.stabilization_gap.amount = amount;
+  value.baseline_combined_monthly_improvement.amount = "39503.52";
+  value.adjusted_recurring_take_home.amount = "3200.00";
+  value.adjusted_recurring_outflow.amount = "3700.00";
+  value.adjusted_monthly_margin.amount = `-${amount}` as ExactDecimalString;
+  value.adjusted_stabilization_gap.amount = amount;
+  value.remaining_combined_monthly_improvement.amount = "39503.52";
+  return validateGoalGapPreviewResponse(value);
 }
 
 function workingFetch(
   cashFlow: CashFlowPeriodResult = cashFlowFixture(),
-  goal: GoalPositionState | Response = positionState,
+  goal: GoalGapPreviewResponse | Response = positiveGoalGap(),
 ) {
-  return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.startsWith("/api/v2/cash-flow?")) return json(cashFlow);
-    if (url === "/api/v2/goals/position") return goal instanceof Response ? goal : json(goal);
+    if (url === "/api/v2/goals/gap-preview" && init?.method === "POST") {
+      return goal instanceof Response ? goal : json(goal);
+    }
     return json({ detail: "Not found" }, 404);
   });
 }
@@ -202,7 +220,7 @@ describe("Cash Flow default surface", () => {
   });
 
   it("shows a 409 unavailable state with a recoverable Retry", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).startsWith("/api/v2/cash-flow?") ? json({ detail: { state: "unavailable", reason: "No imported bank coverage" } }, 409) : json(positionState)));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).startsWith("/api/v2/cash-flow?") ? json({ detail: { state: "unavailable", reason: "No imported bank coverage" } }, 409) : json(positiveGoalGap())));
     renderView();
     expect(await screen.findByRole("alert")).toHaveTextContent("Cash Flow unavailable: No imported bank coverage");
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
@@ -213,7 +231,7 @@ describe("Cash Flow default surface", () => {
       const url = String(input);
       if (url.includes("trailing_12_months")) return json({ detail: "Unsupported period evidence" }, 422);
       if (url.startsWith("/api/v2/cash-flow?")) return json(cashFlowFixture());
-      return json(positionState);
+      return json(positiveGoalGap());
     });
     vi.stubGlobal("fetch", fetch);
     renderView();
@@ -225,7 +243,7 @@ describe("Cash Flow default surface", () => {
   });
 
   it("shows a retryable general failure", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).startsWith("/api/v2/cash-flow?") ? json({ detail: "Temporary service problem" }, 503) : json(positionState)));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).startsWith("/api/v2/cash-flow?") ? json({ detail: "Temporary service problem" }, 503) : json(positiveGoalGap())));
     renderView();
     expect(await screen.findByRole("alert")).toHaveTextContent("Temporary service problem Try again");
   });
@@ -236,7 +254,7 @@ describe("Cash Flow default surface", () => {
     const trailing = new Promise<Response>((resolve) => { resolveTrailing = resolve; });
     const fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/v2/goals/position") return json(positionState);
+      if (url === "/api/v2/goals/gap-preview") return json(positiveGoalGap());
       if (url.includes("trailing_12_months")) return trailing;
       if (url.includes("year_to_date")) return json(cashFlowFixture("ytd_no_activity_missing_payroll"));
       cashCalls += 1;
@@ -266,20 +284,18 @@ describe("Cash Flow default surface", () => {
   });
 
   it("keeps the recurring pattern unavailable when dependent evidence is missing", async () => {
-    const unavailable: GoalPositionState = {
-      state: "available",
-      source_fingerprint: "synthetic-cash-flow-position",
-      position: {
-        ...goalPosition,
-        recurring_cash_flow_gap: {
-          amount: null,
-          evidence: "unavailable",
-          source_refs: [],
-          derivation: null,
-          unavailable_reason: "Recurring outflow coverage is incomplete",
-        },
-      },
-    };
+    const unavailable = structuredClone(goalGapFixture());
+    const reason = "Recurring outflow coverage is incomplete";
+    unavailable.baseline_current_recurring_facts.observed_recurring_monthly_outflow = unavailableMoney(reason);
+    unavailable.baseline_current_recurring_facts.current_monthly_margin = unavailableMoney(reason);
+    unavailable.baseline_current_recurring_facts.stabilization_gap = unavailableMoney(reason);
+    unavailable.baseline_current_recurring_facts.margin_state = "unavailable";
+    unavailable.baseline_combined_monthly_improvement = unavailableMoney(reason);
+    unavailable.adjusted_recurring_outflow = unavailableMoney(reason);
+    unavailable.adjusted_monthly_margin = unavailableMoney(reason);
+    unavailable.adjusted_stabilization_gap = unavailableMoney(reason);
+    unavailable.remaining_combined_monthly_improvement = unavailableMoney(reason);
+    unavailable.gross_income_context = { state: "unavailable", reason };
     vi.stubGlobal("fetch", workingFetch(cashFlowFixture(), unavailable));
     renderView();
     expect(await screen.findByText("Current monthly pattern unavailable")).toBeInTheDocument();
@@ -387,6 +403,9 @@ describe("Cash Flow default surface", () => {
     const urls = fetch.mock.calls.map(([input]) => String(input));
     expect(urls.some((url) => url.includes("retirement") || url.includes("/lab/"))).toBe(false);
     expect(urls.some((url) => url.includes("check-in"))).toBe(false);
-    expect(fetch.mock.calls.every(([, init]) => init?.method === undefined || init.method === "GET")).toBe(true);
+    expect(urls.some((url) => url.includes("/goals/") && !url.endsWith("gap-preview"))).toBe(false);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method && init.method !== "GET").every(([input, init]) =>
+      String(input) === "/api/v2/goals/gap-preview" && init?.method === "POST",
+    )).toBe(true);
   });
 });

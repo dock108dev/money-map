@@ -256,6 +256,158 @@
 .freshness-stale { color: #85572a; }
 .freshness-incomplete { color: #8b4938; }
 
+.goal-gap-card {
+  min-width: 0;
+  padding: 10px 13px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #cbd8cf;
+  border-left: 4px solid var(--deep-green);
+  border-radius: 11px;
+  background: #f7faf6;
+}
+
+.goal-gap-card-quiet {
+  min-height: 44px;
+  border-left-color: #84938b;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.goal-gap-copy { min-width: 0; display: grid; gap: 2px; }
+.goal-gap-copy .eyebrow { font-size: 8px; }
+.goal-gap-copy > strong {
+  overflow-wrap: anywhere;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(15px, 1.6vw, 19px);
+  line-height: 1.15;
+  font-weight: 500;
+}
+
+.goal-gap-equation,
+.goal-gap-floor {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-gap-floor { color: #8b4938; font-weight: 750; }
+.goal-gap-actions { display: flex; align-items: center; gap: 8px; }
+.goal-gap-actions .primary-button { min-height: 34px; padding: 7px 11px; font-size: 10px; }
+.link-button {
+  padding: 4px;
+  border: 0;
+  color: #245f4c;
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.goal-gap-dialog { width: min(960px, 100%); }
+.goal-gap-boundary {
+  margin: 14px 0;
+  padding: 9px 11px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  border: 1px solid #e1b4a8;
+  border-radius: 9px;
+  color: #743c30;
+  background: #fbede8;
+  font-size: 10px;
+}
+
+.goal-gap-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.86fr) minmax(300px, 1.14fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.goal-gap-controls { display: grid; gap: 10px; }
+.goal-gap-controls > label,
+.repeated-outflow-row label {
+  display: grid;
+  gap: 4px;
+  color: #4f5c56;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.goal-gap-controls input,
+.repeated-outflow-row input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #c6cec8;
+  border-radius: 7px;
+  color: var(--ink);
+  background: white;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal-gap-quick-date {
+  width: fit-content;
+  margin-top: -5px;
+  padding: 3px 0;
+  border: 0;
+  color: #245f4c;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 750;
+  text-decoration: underline;
+}
+
+.repeated-outflow-candidates {
+  border: 1px solid #d8ddd9;
+  border-radius: 9px;
+  background: white;
+}
+
+.repeated-outflow-candidates > summary {
+  padding: 9px 10px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.repeated-outflow-candidates > p { margin: 0; padding: 0 10px 9px; color: var(--muted); font-size: 9px; }
+.repeated-outflow-row { margin: 0 9px 9px; padding: 9px; display: grid; gap: 3px; border: 1px solid #e0e4e1; border-radius: 7px; }
+.repeated-outflow-row > strong { font-family: Georgia, serif; font-size: 13px; font-weight: 500; }
+.repeated-outflow-row > span { color: var(--muted); font-size: 8px; line-height: 1.35; }
+.repeated-outflow-row label { margin-top: 5px; }
+.goal-gap-draft-total { margin: -2px 0 0; color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+.goal-gap-preview-error { margin: 0; padding: 8px 10px; border-radius: 7px; color: #743c30; background: #fbede8; font-size: 10px; }
+.goal-gap-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.goal-gap-results {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #cbd8cf;
+  border-radius: 12px;
+  background: #f7faf6;
+}
+
+.goal-gap-results h3 { margin: 4px 0 0; font-family: Georgia, serif; font-size: 16px; font-weight: 500; }
+.goal-gap-result-headline { display: block; margin: 2px 0 12px; overflow-wrap: anywhere; font-family: Georgia, serif; font-size: clamp(27px, 4vw, 42px); line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums; }
+.goal-gap-results dl { margin: 0; display: grid; gap: 6px; }
+.goal-gap-results dl > div { min-width: 0; padding: 7px 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border-top: 1px solid #dce4de; }
+.goal-gap-results dt { color: var(--muted); font-size: 9px; font-weight: 700; }
+.goal-gap-results dd { max-width: 280px; margin: 0; overflow-wrap: anywhere; text-align: right; font-size: 10px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.goal-gap-gross-note { margin: 10px 0 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.goal-gap-time-evidence { margin-top: 10px; font-size: 9px; }
+.goal-gap-time-evidence summary { cursor: pointer; font-weight: 750; }
+.goal-gap-time-evidence p { margin-bottom: 0; color: var(--muted); line-height: 1.45; }
+.goal-gap-dialog-footer { margin-top: 16px; padding-top: 12px; display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); }
+
 .cash-flow-empty {
   padding: 18px;
   border: 1px dashed #b9c3bc;
@@ -342,8 +494,13 @@
   .cash-flow-chart { height: 150px; }
   .cash-flow-axis-label { font-size: 17px; }
   .cash-flow-current-answer { display: grid; }
+  .goal-gap-card { grid-template-columns: 1fr; }
+  .goal-gap-actions { justify-content: space-between; }
   .cash-flow-destinations { grid-template-columns: 1fr 1fr; }
   .cash-flow-evidence-grid { grid-template-columns: 1fr; }
+  .goal-gap-layout { grid-template-columns: 1fr; }
+  .goal-gap-results dl > div { grid-template-columns: 1fr; gap: 3px; }
+  .goal-gap-results dd { max-width: none; text-align: left; }
 }
 
 @media (max-width: 400px) {
@@ -352,6 +509,8 @@
   .cash-flow-metrics strong { font-size: 22px; }
   .cash-flow-chart-panel { padding-inline: 8px; }
   .cash-flow-chart { height: 135px; }
+  .goal-gap-dialog { padding-inline: 15px; }
+  .goal-gap-boundary { display: grid; }
 }
 
 @media print {
@@ -363,6 +522,13 @@
   .cash-flow-destinations {
     display: none !important;
   }
+
+  .goal-gap-actions,
+  .goal-gap-card-quiet .link-button {
+    display: none !important;
+  }
+
+  .goal-gap-card { padding: 8px 10px; break-inside: avoid; }
 
   .cash-flow-view { gap: 10px; }
   .cash-flow-first-viewport { gap: 8px; }

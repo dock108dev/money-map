@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from calendar import monthrange
 from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 from enum import StrEnum
 from typing import Final, Literal, Self
 
@@ -71,6 +71,18 @@ class V21MoneyDerivation(StrEnum):
     REMAINING_TARGET = "remaining_target"
     REQUIRED_GOAL_PACE = "required_goal_pace"
     COMBINED_MONTHLY_IMPROVEMENT = "combined_monthly_improvement"
+    PREVIEW_TOTAL_RESERVATION = "preview_total_reservation"
+    PREVIEW_REMAINING_TARGET = "preview_remaining_target"
+    PREVIEW_REQUIRED_GOAL_PACE = "preview_required_goal_pace"
+    ADJUSTED_RECURRING_TAKE_HOME = "adjusted_recurring_take_home"
+    ADJUSTED_RECURRING_OUTFLOW = "adjusted_recurring_outflow"
+    ADJUSTED_MONTHLY_MARGIN = "adjusted_monthly_margin"
+    ADJUSTED_STABILIZATION_GAP = "adjusted_stabilization_gap"
+    REMAINING_COMBINED_MONTHLY_IMPROVEMENT = "remaining_combined_monthly_improvement"
+    ESTIMATED_MONTHLY_GROSS_INCOME = "estimated_monthly_gross_income"
+    ESTIMATED_ANNUAL_GROSS_INCOME = "estimated_annual_gross_income"
+    RECURRING_OUTFLOW_MEDIAN = "recurring_outflow_median"
+    RECURRING_OUTFLOW_TYPICAL_MONTHLY = "recurring_outflow_typical_monthly"
 
 
 class V21EvidencedMoney(ContractModel):
@@ -578,6 +590,416 @@ class V21ContractVector(ContractModel):
         return self
 
 
+class GoalGapPreviewRequest(ContractModel):
+    """Strict non-persistent inputs for one goal-gap calculation."""
+
+    target_date: date | None = None
+    additional_reservation: Decimal = ZERO
+    monthly_spending_reduction: Decimal = ZERO
+    monthly_after_tax_income: Decimal = ZERO
+
+    @field_validator("target_date", mode="before")
+    @classmethod
+    def parse_optional_iso_date(cls, value: object) -> object:
+        if value is None or (isinstance(value, date) and not isinstance(value, datetime)):
+            return value
+        if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+            raise ValueError("Target date must be a real ISO date")
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("Target date must be a real ISO date") from exc
+        if parsed.isoformat() != value:
+            raise ValueError("Target date must be a real ISO date")
+        return parsed
+
+    @field_validator(
+        "additional_reservation",
+        "monthly_spending_reduction",
+        "monthly_after_tax_income",
+        mode="before",
+    )
+    @classmethod
+    def parse_nonnegative_money(cls, value: object) -> Decimal:
+        parsed = _parse_contract_money(value)
+        if parsed < ZERO:
+            raise ValueError("Draft money inputs cannot be negative")
+        return parsed
+
+    @field_serializer(
+        "additional_reservation",
+        "monthly_spending_reduction",
+        "monthly_after_tax_income",
+    )
+    def serialize_draft_money(self, value: Decimal) -> str:
+        return format(value, ".2f")
+
+
+class GrossIncomeContextAvailable(ContractModel):
+    state: Literal["available"] = "available"
+    effective_take_home_ratio: Decimal
+    ratio_precision: Literal["0.000000000001"] = "0.000000000001"
+    supporting_payroll_date: date
+    source_ref: str = Field(min_length=1)
+    estimated_monthly_gross_income_needed: V21EvidencedMoney
+    estimated_annual_gross_income_needed: V21EvidencedMoney
+    estimate_label: Literal["Estimate based on the latest supported paycheck"] = (
+        "Estimate based on the latest supported paycheck"
+    )
+    disclaimer: Literal["Not a tax-return estimate"] = "Not a tax-return estimate"
+
+    @field_validator("effective_take_home_ratio", mode="before")
+    @classmethod
+    def parse_ratio(cls, value: object) -> Decimal:
+        if isinstance(value, (bool, float)):
+            raise ValueError("Take-home ratio cannot pass through binary float or bool")
+        parsed = Decimal(str(value))
+        if not parsed.is_finite() or parsed <= ZERO:
+            raise ValueError("Take-home ratio must be positive")
+        exact = parsed.quantize(MONTH_FRACTION, rounding=ROUND_HALF_UP)
+        if exact != parsed:
+            raise ValueError("Take-home ratio must use the declared twelve-place precision")
+        return exact
+
+    @field_serializer("effective_take_home_ratio")
+    def serialize_ratio(self, value: Decimal) -> str:
+        return format(value, ".12f")
+
+    @model_validator(mode="after")
+    def validate_gross_estimates(self) -> Self:
+        _require_derivation(
+            self.estimated_monthly_gross_income_needed,
+            V21MoneyDerivation.ESTIMATED_MONTHLY_GROSS_INCOME,
+            "estimated_monthly_gross_income_needed",
+        )
+        _require_derivation(
+            self.estimated_annual_gross_income_needed,
+            V21MoneyDerivation.ESTIMATED_ANNUAL_GROSS_INCOME,
+            "estimated_annual_gross_income_needed",
+        )
+        monthly = _amount(
+            self.estimated_monthly_gross_income_needed,
+            "estimated_monthly_gross_income_needed",
+        )
+        annual = _amount(
+            self.estimated_annual_gross_income_needed,
+            "estimated_annual_gross_income_needed",
+        )
+        if annual != money(monthly * Decimal("12")):
+            raise ValueError("Annual gross estimate must equal monthly gross times twelve")
+        if self.source_ref not in self.estimated_monthly_gross_income_needed.source_refs:
+            raise ValueError("Gross estimates must retain their supporting payroll reference")
+        return self
+
+
+class GrossIncomeContextUnavailable(ContractModel):
+    state: Literal["unavailable"] = "unavailable"
+    reason: str = Field(min_length=1, max_length=240)
+
+
+GrossIncomeContext = GrossIncomeContextAvailable | GrossIncomeContextUnavailable
+
+
+class GoalGapPreviewAvailable(ContractModel):
+    state: Literal["available"] = "available"
+    goal_program_id: str = Field(pattern=r"^goal_[a-z0-9_]+$")
+    goal_name: str = Field(min_length=1, max_length=120)
+    observed_on: date
+    baseline_current_recurring_facts: CurrentRecurringFacts
+    baseline_goal_pace_reference: RequiredGoalPaceReference
+    baseline_combined_monthly_improvement: V21EvidencedMoney
+    preview_target_date: date
+    existing_explicit_reservation: V21EvidencedMoney
+    additional_draft_reservation: V21EvidencedMoney
+    preview_total_reservation: V21EvidencedMoney
+    preview_remaining_target: V21EvidencedMoney
+    exact_funding_months: Decimal
+    preview_required_goal_pace: V21EvidencedMoney
+    draft_spending_reduction: V21EvidencedMoney
+    draft_after_tax_income: V21EvidencedMoney
+    adjusted_recurring_take_home: V21EvidencedMoney
+    adjusted_recurring_outflow: V21EvidencedMoney
+    adjusted_monthly_margin: V21EvidencedMoney
+    adjusted_stabilization_gap: V21EvidencedMoney
+    remaining_combined_monthly_improvement: V21EvidencedMoney
+    gross_income_context: GrossIncomeContext
+    warnings: tuple[str, ...] = ()
+    calculation_version: Literal["goal-arithmetic-v1"] = GOAL_CALCULATION_VERSION
+    contract_version: Literal["money-map-v2.1-contract-v1"] = CONTRACT_VERSION
+
+    @field_validator("exact_funding_months", mode="before")
+    @classmethod
+    def parse_exact_funding_months(cls, value: object) -> Decimal:
+        if isinstance(value, (float, bool)):
+            raise ValueError("Funding months cannot pass through binary float or bool")
+        parsed = Decimal(str(value))
+        if not parsed.is_finite() or parsed < ZERO:
+            raise ValueError("Funding months must be finite and nonnegative")
+        exact = parsed.quantize(MONTH_FRACTION, rounding=ROUND_HALF_UP)
+        if exact != parsed:
+            raise ValueError("Funding months must use twelve-place precision")
+        return exact
+
+    @field_serializer("exact_funding_months")
+    def serialize_exact_funding_months(self, value: Decimal) -> str:
+        return format(value, ".12f")
+
+    @model_validator(mode="after")
+    def validate_preview_arithmetic(self) -> Self:
+        if self.goal_program_id != self.baseline_goal_pace_reference.goal_program_id:
+            raise ValueError("Preview and baseline must describe the same goal program")
+        if self.observed_on != self.baseline_goal_pace_reference.observed_on:
+            raise ValueError("Preview and baseline must share one observation date")
+
+        margin = self.baseline_current_recurring_facts.current_monthly_margin.amount
+        pace = self.baseline_goal_pace_reference.required_goal_pace.amount
+        _validate_optional_derived_money(
+            self.baseline_combined_monthly_improvement,
+            V21MoneyDerivation.COMBINED_MONTHLY_IMPROVEMENT,
+            None if margin is None or pace is None else money(max(pace - margin, ZERO)),
+            "baseline_combined_monthly_improvement",
+        )
+
+        _require_evidence(
+            self.existing_explicit_reservation,
+            EvidenceClass.USER_ENTERED,
+            "existing_explicit_reservation",
+        )
+        _require_evidence(
+            self.additional_draft_reservation,
+            EvidenceClass.USER_ENTERED,
+            "additional_draft_reservation",
+        )
+        _require_evidence(
+            self.draft_spending_reduction,
+            EvidenceClass.USER_ENTERED,
+            "draft_spending_reduction",
+        )
+        _require_evidence(
+            self.draft_after_tax_income,
+            EvidenceClass.USER_ENTERED,
+            "draft_after_tax_income",
+        )
+        existing = _amount(self.existing_explicit_reservation, "existing_explicit_reservation")
+        additional = _amount(self.additional_draft_reservation, "additional_draft_reservation")
+        reduction = _amount(self.draft_spending_reduction, "draft_spending_reduction")
+        income = _amount(self.draft_after_tax_income, "draft_after_tax_income")
+        if min(existing, additional, reduction, income) < ZERO:
+            raise ValueError("Preview money inputs cannot be negative")
+
+        total = money(existing + additional)
+        _validate_optional_derived_money(
+            self.preview_total_reservation,
+            V21MoneyDerivation.PREVIEW_TOTAL_RESERVATION,
+            total,
+            "preview_total_reservation",
+        )
+        target = _amount(
+            self.baseline_goal_pace_reference.goal_target,
+            "baseline goal target",
+        )
+        remaining = money(max(target - total, ZERO))
+        _validate_optional_derived_money(
+            self.preview_remaining_target,
+            V21MoneyDerivation.PREVIEW_REMAINING_TARGET,
+            remaining,
+            "preview_remaining_target",
+        )
+        expected_months = remaining_funding_months(self.observed_on, self.preview_target_date)
+        if self.exact_funding_months != expected_months:
+            raise ValueError("Preview funding months must reuse goal-arithmetic-v1")
+        preview_pace = required_funding_pace(remaining, self.observed_on, self.preview_target_date)
+        _validate_optional_derived_money(
+            self.preview_required_goal_pace,
+            V21MoneyDerivation.PREVIEW_REQUIRED_GOAL_PACE,
+            preview_pace,
+            "preview_required_goal_pace",
+        )
+
+        take_home = self.baseline_current_recurring_facts.effective_recurring_take_home.amount
+        outflow = self.baseline_current_recurring_facts.observed_recurring_monthly_outflow.amount
+        adjusted_take_home = None if take_home is None else money(take_home + income)
+        adjusted_outflow = None if outflow is None else money(outflow - reduction)
+        if adjusted_outflow is not None and adjusted_outflow < ZERO:
+            raise ValueError("Draft spending reduction cannot exceed supported outflow")
+        _validate_optional_derived_money(
+            self.adjusted_recurring_take_home,
+            V21MoneyDerivation.ADJUSTED_RECURRING_TAKE_HOME,
+            adjusted_take_home,
+            "adjusted_recurring_take_home",
+        )
+        _validate_optional_derived_money(
+            self.adjusted_recurring_outflow,
+            V21MoneyDerivation.ADJUSTED_RECURRING_OUTFLOW,
+            adjusted_outflow,
+            "adjusted_recurring_outflow",
+        )
+        adjusted_margin = (
+            None
+            if adjusted_take_home is None or adjusted_outflow is None
+            else money(adjusted_take_home - adjusted_outflow)
+        )
+        _validate_optional_derived_money(
+            self.adjusted_monthly_margin,
+            V21MoneyDerivation.ADJUSTED_MONTHLY_MARGIN,
+            adjusted_margin,
+            "adjusted_monthly_margin",
+        )
+        adjusted_gap = None if adjusted_margin is None else money(max(-adjusted_margin, ZERO))
+        _validate_optional_derived_money(
+            self.adjusted_stabilization_gap,
+            V21MoneyDerivation.ADJUSTED_STABILIZATION_GAP,
+            adjusted_gap,
+            "adjusted_stabilization_gap",
+        )
+        combined = (
+            None
+            if preview_pace is None or adjusted_margin is None
+            else money(max(preview_pace - adjusted_margin, ZERO))
+        )
+        _validate_optional_derived_money(
+            self.remaining_combined_monthly_improvement,
+            V21MoneyDerivation.REMAINING_COMBINED_MONTHLY_IMPROVEMENT,
+            combined,
+            "remaining_combined_monthly_improvement",
+        )
+        if isinstance(self.gross_income_context, GrossIncomeContextAvailable):
+            if combined is None:
+                raise ValueError("Gross-income context requires a combined monthly result")
+            with localcontext() as context:
+                context.prec = 40
+                expected_monthly_gross = money(
+                    combined / self.gross_income_context.effective_take_home_ratio
+                )
+            if (
+                _amount(
+                    self.gross_income_context.estimated_monthly_gross_income_needed,
+                    "estimated_monthly_gross_income_needed",
+                )
+                != expected_monthly_gross
+            ):
+                raise ValueError("Gross estimate must use the exposed take-home ratio")
+        return self
+
+
+class GoalGapPreviewUnavailable(ContractModel):
+    state: Literal["no_primary", "unavailable"]
+    observed_on: date
+    reason: str = Field(min_length=1, max_length=240)
+    warnings: tuple[str, ...] = ()
+    calculation_version: Literal["goal-arithmetic-v1"] = GOAL_CALCULATION_VERSION
+    contract_version: Literal["money-map-v2.1-contract-v1"] = CONTRACT_VERSION
+
+
+GoalGapPreviewResponse = GoalGapPreviewAvailable | GoalGapPreviewUnavailable
+
+
+class RecurringOutflowCadence(StrEnum):
+    MONTHLY = "monthly"
+    BIWEEKLY = "biweekly"
+    WEEKLY = "weekly"
+
+
+class RecurringOutflowAmountRange(ContractModel):
+    minimum: V21EvidencedMoney
+    maximum: V21EvidencedMoney
+
+    @model_validator(mode="after")
+    def validate_range(self) -> Self:
+        _require_evidence(self.minimum, EvidenceClass.OBSERVED, "amount_range.minimum")
+        _require_evidence(self.maximum, EvidenceClass.OBSERVED, "amount_range.maximum")
+        if _amount(self.minimum, "amount_range.minimum") <= ZERO:
+            raise ValueError("Recurring outflow amounts must be positive")
+        if _amount(self.minimum, "amount_range.minimum") > _amount(
+            self.maximum, "amount_range.maximum"
+        ):
+            raise ValueError("Recurring outflow amount range is reversed")
+        return self
+
+
+class RecurringOutflowCandidate(ContractModel):
+    candidate_id: str = Field(pattern=r"^candidate_[0-9a-f]{24}$")
+    observed_description: str = Field(min_length=1, max_length=500)
+    safe_account_label: str = Field(min_length=1, max_length=80)
+    cadence: RecurringOutflowCadence
+    occurrence_count: int = Field(ge=1)
+    first_observed_date: date
+    last_observed_date: date
+    median_observed_amount: V21EvidencedMoney
+    typical_monthly_amount: V21EvidencedMoney
+    amount_range: RecurringOutflowAmountRange
+    confidence: Literal["high"] = "high"
+    source_refs: tuple[str, ...] = Field(min_length=1)
+    coverage_months: tuple[str, ...] = Field(min_length=3)
+
+    @field_validator("source_refs", "coverage_months")
+    @classmethod
+    def stable_unique_candidate_values(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not item for item in value) or len(set(value)) != len(value):
+            raise ValueError("Candidate evidence values must be non-empty and unique")
+        return tuple(sorted(value))
+
+    @model_validator(mode="after")
+    def validate_candidate(self) -> Self:
+        if self.first_observed_date > self.last_observed_date:
+            raise ValueError("Candidate observation dates are reversed")
+        if self.occurrence_count != len(self.source_refs):
+            raise ValueError("Candidate occurrence count must match source evidence")
+        if any(MONTH_PATTERN.fullmatch(value) is None for value in self.coverage_months):
+            raise ValueError("Candidate coverage months must use YYYY-MM")
+        _require_derivation(
+            self.median_observed_amount,
+            V21MoneyDerivation.RECURRING_OUTFLOW_MEDIAN,
+            "median_observed_amount",
+        )
+        _require_derivation(
+            self.typical_monthly_amount,
+            V21MoneyDerivation.RECURRING_OUTFLOW_TYPICAL_MONTHLY,
+            "typical_monthly_amount",
+        )
+        median = _amount(self.median_observed_amount, "median_observed_amount")
+        if not (
+            _amount(self.amount_range.minimum, "amount_range.minimum")
+            <= median
+            <= _amount(self.amount_range.maximum, "amount_range.maximum")
+        ):
+            raise ValueError("Candidate median must fall inside its observed amount range")
+        multiplier = {
+            RecurringOutflowCadence.MONTHLY: Decimal("1"),
+            RecurringOutflowCadence.BIWEEKLY: Decimal("26") / Decimal("12"),
+            RecurringOutflowCadence.WEEKLY: Decimal("52") / Decimal("12"),
+        }[self.cadence]
+        if _amount(self.typical_monthly_amount, "typical_monthly_amount") != money(
+            median * multiplier
+        ):
+            raise ValueError("Typical monthly amount must use the cadence conversion")
+        return self
+
+
+class RecurringOutflowCandidateList(ContractModel):
+    state: Literal["available", "empty", "unavailable"]
+    observed_on: date
+    candidates: tuple[RecurringOutflowCandidate, ...] = ()
+    reason: str | None = Field(default=None, min_length=1, max_length=240)
+    warnings: tuple[str, ...] = ()
+    contract_version: Literal["money-map-v2.1-contract-v1"] = CONTRACT_VERSION
+
+    @model_validator(mode="after")
+    def validate_candidate_state(self) -> Self:
+        if self.state == "available" and not self.candidates:
+            raise ValueError("Available candidate state requires at least one candidate")
+        if self.state == "empty" and (self.candidates or self.reason is not None):
+            raise ValueError("Empty candidate state has no candidates or unavailable reason")
+        if self.state == "unavailable" and (self.candidates or self.reason is None):
+            raise ValueError("Unavailable candidate state requires only a reason")
+        if self.state == "available" and self.reason is not None:
+            raise ValueError("Available candidate state cannot carry an unavailable reason")
+        identifiers = [candidate.candidate_id for candidate in self.candidates]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("Recurring outflow candidate IDs must be unique")
+        return self
+
+
 def _month_start_offset(value: date, offset: int) -> date:
     absolute = value.year * 12 + (value.month - 1) + offset
     return date(absolute // 12, absolute % 12 + 1, 1)
@@ -587,6 +1009,39 @@ def _amount(value: V21EvidencedMoney, name: str) -> Decimal:
     if value.amount is None:
         raise ValueError(f"{name} must be available")
     return value.amount
+
+
+def _parse_contract_money(value: object) -> Decimal:
+    if isinstance(value, (bool, float, int)):
+        raise ValueError("Money must cross the contract boundary as an exact decimal string")
+    if isinstance(value, str):
+        if EXACT_MONEY_PATTERN.fullmatch(value) is None:
+            raise ValueError("Money must be a finite exact two-place decimal string")
+        parsed = Decimal(value)
+    elif isinstance(value, Decimal):
+        parsed = value
+    else:
+        raise ValueError("Money must be Decimal internally or an exact decimal string")
+    if not parsed.is_finite():
+        raise ValueError("Money cannot be NaN or infinite")
+    exact = parsed.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if exact != parsed:
+        raise ValueError("Money cannot contain fractions of a cent")
+    return exact
+
+
+def _validate_optional_derived_money(
+    value: V21EvidencedMoney,
+    derivation: V21MoneyDerivation,
+    expected: Decimal | None,
+    name: str,
+) -> None:
+    if expected is None:
+        _require_evidence(value, EvidenceClass.UNAVAILABLE, name)
+        return
+    _require_derivation(value, derivation, name)
+    if _amount(value, name) != expected:
+        raise ValueError(f"{name} does not match its required exact arithmetic")
 
 
 def _require_evidence(value: V21EvidencedMoney, evidence: EvidenceClass, name: str) -> None:

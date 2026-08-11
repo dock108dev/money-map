@@ -19,6 +19,7 @@ from .cash_flow_service import (
 from .config import settings
 from .db import get_session
 from .forecasting import ScenarioInput, build_forecast, ensure_baseline
+from .goal_gap_service import GoalGapValidationError, build_goal_gap_preview
 from .goal_observation import load_backfill_goal_observation
 from .goal_operations import (
     exchange_token_with_goal_observation,
@@ -77,6 +78,7 @@ from .plaid_service import (
     revoke_plaid_connection,
 )
 from .reconciliation import reconcile_all
+from .recurring_outflow_service import recurring_outflow_candidates
 from .refresh import (
     RefreshAlreadyRunningError,
     local_business_date,
@@ -151,7 +153,13 @@ from .v2_contracts import (
     RetirementProjectionResult,
     RetirementSnapshotSaveRequest,
 )
-from .v21_contracts import CashFlowPeriodResult, PeriodKind
+from .v21_contracts import (
+    CashFlowPeriodResult,
+    GoalGapPreviewRequest,
+    GoalGapPreviewResponse,
+    PeriodKind,
+    RecurringOutflowCandidateList,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -255,6 +263,33 @@ def get_v2_cash_flow(
         ) from exc
     except CashFlowValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/v2/goals/gap-preview")
+def post_v2_goal_gap_preview(
+    payload: GoalGapPreviewRequest,
+    session: Session = Depends(get_session),
+) -> GoalGapPreviewResponse:
+    now = _cash_flow_api_now()
+    try:
+        return build_goal_gap_preview(
+            session,
+            request=payload,
+            observed_on=local_business_date(now),
+        )
+    except GoalGapValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/v2/cash-flow/recurring-outflow-candidates")
+def get_v2_recurring_outflow_candidates(
+    session: Session = Depends(get_session),
+) -> RecurringOutflowCandidateList:
+    now = _cash_flow_api_now()
+    return recurring_outflow_candidates(
+        session,
+        observed_on=local_business_date(now),
+    )
 
 
 @router.get("/wealth")

@@ -21,7 +21,19 @@ export type V21MoneyDerivation =
   | "stabilization_gap"
   | "remaining_target"
   | "required_goal_pace"
-  | "combined_monthly_improvement";
+  | "combined_monthly_improvement"
+  | "preview_total_reservation"
+  | "preview_remaining_target"
+  | "preview_required_goal_pace"
+  | "adjusted_recurring_take_home"
+  | "adjusted_recurring_outflow"
+  | "adjusted_monthly_margin"
+  | "adjusted_stabilization_gap"
+  | "remaining_combined_monthly_improvement"
+  | "estimated_monthly_gross_income"
+  | "estimated_annual_gross_income"
+  | "recurring_outflow_median"
+  | "recurring_outflow_typical_monthly";
 
 export interface V21EvidencedMoney {
   amount: ExactDecimalString | null;
@@ -136,6 +148,107 @@ export interface V21ContractVector {
   contract_version: typeof V21_CONTRACT_VERSION;
 }
 
+export interface GoalGapPreviewRequest {
+  target_date: string | null;
+  additional_reservation: ExactDecimalString;
+  monthly_spending_reduction: ExactDecimalString;
+  monthly_after_tax_income: ExactDecimalString;
+}
+
+export interface GrossIncomeContextAvailable {
+  state: "available";
+  effective_take_home_ratio: string;
+  ratio_precision: "0.000000000001";
+  supporting_payroll_date: string;
+  source_ref: string;
+  estimated_monthly_gross_income_needed: V21EvidencedMoney;
+  estimated_annual_gross_income_needed: V21EvidencedMoney;
+  estimate_label: "Estimate based on the latest supported paycheck";
+  disclaimer: "Not a tax-return estimate";
+}
+
+export interface GrossIncomeContextUnavailable {
+  state: "unavailable";
+  reason: string;
+}
+
+export type GrossIncomeContext =
+  | GrossIncomeContextAvailable
+  | GrossIncomeContextUnavailable;
+
+export interface GoalGapPreviewAvailable {
+  state: "available";
+  goal_program_id: string;
+  goal_name: string;
+  observed_on: string;
+  baseline_current_recurring_facts: CurrentRecurringFacts;
+  baseline_goal_pace_reference: RequiredGoalPaceReference;
+  baseline_combined_monthly_improvement: V21EvidencedMoney;
+  preview_target_date: string;
+  existing_explicit_reservation: V21EvidencedMoney;
+  additional_draft_reservation: V21EvidencedMoney;
+  preview_total_reservation: V21EvidencedMoney;
+  preview_remaining_target: V21EvidencedMoney;
+  exact_funding_months: string;
+  preview_required_goal_pace: V21EvidencedMoney;
+  draft_spending_reduction: V21EvidencedMoney;
+  draft_after_tax_income: V21EvidencedMoney;
+  adjusted_recurring_take_home: V21EvidencedMoney;
+  adjusted_recurring_outflow: V21EvidencedMoney;
+  adjusted_monthly_margin: V21EvidencedMoney;
+  adjusted_stabilization_gap: V21EvidencedMoney;
+  remaining_combined_monthly_improvement: V21EvidencedMoney;
+  gross_income_context: GrossIncomeContext;
+  warnings: string[];
+  calculation_version: "goal-arithmetic-v1";
+  contract_version: typeof V21_CONTRACT_VERSION;
+}
+
+export interface GoalGapPreviewUnavailable {
+  state: "no_primary" | "unavailable";
+  observed_on: string;
+  reason: string;
+  warnings: string[];
+  calculation_version: "goal-arithmetic-v1";
+  contract_version: typeof V21_CONTRACT_VERSION;
+}
+
+export type GoalGapPreviewResponse =
+  | GoalGapPreviewAvailable
+  | GoalGapPreviewUnavailable;
+
+export type RecurringOutflowCadence = "monthly" | "biweekly" | "weekly";
+
+export interface RecurringOutflowAmountRange {
+  minimum: V21EvidencedMoney;
+  maximum: V21EvidencedMoney;
+}
+
+export interface RecurringOutflowCandidate {
+  candidate_id: string;
+  observed_description: string;
+  safe_account_label: string;
+  cadence: RecurringOutflowCadence;
+  occurrence_count: number;
+  first_observed_date: string;
+  last_observed_date: string;
+  median_observed_amount: V21EvidencedMoney;
+  typical_monthly_amount: V21EvidencedMoney;
+  amount_range: RecurringOutflowAmountRange;
+  confidence: "high";
+  source_refs: string[];
+  coverage_months: string[];
+}
+
+export interface RecurringOutflowCandidateList {
+  state: "available" | "empty" | "unavailable";
+  observed_on: string;
+  candidates: RecurringOutflowCandidate[];
+  reason: string | null;
+  warnings: string[];
+  contract_version: typeof V21_CONTRACT_VERSION;
+}
+
 const evidenceClasses: EvidenceClass[] = [
   "observed",
   "derived",
@@ -153,6 +266,18 @@ const derivations: V21MoneyDerivation[] = [
   "remaining_target",
   "required_goal_pace",
   "combined_monthly_improvement",
+  "preview_total_reservation",
+  "preview_remaining_target",
+  "preview_required_goal_pace",
+  "adjusted_recurring_take_home",
+  "adjusted_recurring_outflow",
+  "adjusted_monthly_margin",
+  "adjusted_stabilization_gap",
+  "remaining_combined_monthly_improvement",
+  "estimated_monthly_gross_income",
+  "estimated_annual_gross_income",
+  "recurring_outflow_median",
+  "recurring_outflow_typical_monthly",
 ];
 const moneyPattern = /^-?(?:0|[1-9]\d*)\.\d{2}$/;
 const datePattern = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
@@ -303,6 +428,370 @@ export function isCashFlowPeriodResult(value: unknown): value is CashFlowPeriodR
   } catch {
     return false;
   }
+}
+
+export function validateGoalGapPreviewResponse(value: unknown): GoalGapPreviewResponse {
+  const result = record(value, "goal-gap preview");
+  const state = oneOf(result.state, ["available", "no_primary", "unavailable"], "state");
+  const observedOn = dateString(result.observed_on, "observed_on");
+  if (result.calculation_version !== "goal-arithmetic-v1") {
+    throw new Error("Unexpected goal-gap calculation version");
+  }
+  if (result.contract_version !== V21_CONTRACT_VERSION) {
+    throw new Error("Unexpected v2.1 contract version");
+  }
+  const warnings = stringArray(result.warnings, "goal-gap warnings");
+  if (state !== "available") {
+    return {
+      state,
+      observed_on: observedOn,
+      reason: expectString(result.reason, "goal-gap unavailable reason"),
+      warnings,
+      calculation_version: "goal-arithmetic-v1",
+      contract_version: V21_CONTRACT_VERSION,
+    };
+  }
+
+  const goalProgramId = expectString(result.goal_program_id, "goal_program_id");
+  if (!/^goal_[a-z0-9_]+$/.test(goalProgramId)) throw new Error("Invalid goal program ID");
+  const recurring = validateRecurringFacts(result.baseline_current_recurring_facts);
+  const goal = validateGoal(result.baseline_goal_pace_reference);
+  if (goal.goal_program_id !== goalProgramId || goal.observed_on !== observedOn) {
+    throw new Error("Preview and baseline goal identity must agree");
+  }
+  const baselineCombined = validateMoney(
+    result.baseline_combined_monthly_improvement,
+    "baseline combined monthly improvement",
+  );
+  const margin = optionalCents(recurring.current_monthly_margin);
+  const baselinePace = optionalCents(goal.required_goal_pace);
+  validateOptionalDerivedExact(
+    baselineCombined,
+    "combined_monthly_improvement",
+    margin === null || baselinePace === null ? null : max(baselinePace - margin, 0n),
+    "baseline combined monthly improvement",
+  );
+
+  const existing = validateMoney(result.existing_explicit_reservation, "existing reservation");
+  const additional = validateMoney(result.additional_draft_reservation, "additional reservation");
+  const total = validateMoney(result.preview_total_reservation, "preview total reservation");
+  const remaining = validateMoney(result.preview_remaining_target, "preview remaining target");
+  const previewPace = validateMoney(result.preview_required_goal_pace, "preview required pace");
+  const reduction = validateMoney(result.draft_spending_reduction, "draft spending reduction");
+  const income = validateMoney(result.draft_after_tax_income, "draft after-tax income");
+  const adjustedTakeHome = validateMoney(
+    result.adjusted_recurring_take_home,
+    "adjusted recurring take-home",
+  );
+  const adjustedOutflow = validateMoney(
+    result.adjusted_recurring_outflow,
+    "adjusted recurring outflow",
+  );
+  const adjustedMargin = validateMoney(result.adjusted_monthly_margin, "adjusted monthly margin");
+  const adjustedGap = validateMoney(
+    result.adjusted_stabilization_gap,
+    "adjusted stabilization gap",
+  );
+  const remainingCombined = validateMoney(
+    result.remaining_combined_monthly_improvement,
+    "remaining combined monthly improvement",
+  );
+  [existing, additional, reduction, income].forEach((item) =>
+    requireEvidence(item, "user_entered", "goal-gap draft"),
+  );
+  const existingCents = requiredCents(existing, "existing reservation");
+  const additionalCents = requiredCents(additional, "additional reservation");
+  const reductionCents = requiredCents(reduction, "draft spending reduction");
+  const incomeCents = requiredCents(income, "draft after-tax income");
+  if ([existingCents, additionalCents, reductionCents, incomeCents].some((item) => item < 0n)) {
+    throw new Error("Goal-gap draft values cannot be negative");
+  }
+  validateOptionalDerivedExact(
+    total,
+    "preview_total_reservation",
+    existingCents + additionalCents,
+    "preview total reservation",
+  );
+  const targetCents = requiredCents(goal.goal_target, "goal target");
+  validateOptionalDerivedExact(
+    remaining,
+    "preview_remaining_target",
+    max(targetCents - requiredCents(total, "preview total reservation"), 0n),
+    "preview remaining target",
+  );
+  const previewPaceCents = optionalCents(previewPace);
+  if (previewPaceCents === null) requireUnavailable(previewPace, "preview required pace");
+  else requireDerived(previewPace, "preview_required_goal_pace", "preview required pace");
+
+  const takeHomeCents = optionalCents(recurring.effective_recurring_take_home);
+  const outflowCents = optionalCents(recurring.observed_recurring_monthly_outflow);
+  const adjustedTakeHomeExpected =
+    takeHomeCents === null ? null : takeHomeCents + incomeCents;
+  const adjustedOutflowExpected =
+    outflowCents === null ? null : outflowCents - reductionCents;
+  if (adjustedOutflowExpected !== null && adjustedOutflowExpected < 0n) {
+    throw new Error("Draft spending reduction exceeds recurring outflow");
+  }
+  validateOptionalDerivedExact(
+    adjustedTakeHome,
+    "adjusted_recurring_take_home",
+    adjustedTakeHomeExpected,
+    "adjusted recurring take-home",
+  );
+  validateOptionalDerivedExact(
+    adjustedOutflow,
+    "adjusted_recurring_outflow",
+    adjustedOutflowExpected,
+    "adjusted recurring outflow",
+  );
+  const adjustedMarginExpected =
+    adjustedTakeHomeExpected === null || adjustedOutflowExpected === null
+      ? null
+      : adjustedTakeHomeExpected - adjustedOutflowExpected;
+  validateOptionalDerivedExact(
+    adjustedMargin,
+    "adjusted_monthly_margin",
+    adjustedMarginExpected,
+    "adjusted monthly margin",
+  );
+  validateOptionalDerivedExact(
+    adjustedGap,
+    "adjusted_stabilization_gap",
+    adjustedMarginExpected === null ? null : max(-adjustedMarginExpected, 0n),
+    "adjusted stabilization gap",
+  );
+  validateOptionalDerivedExact(
+    remainingCombined,
+    "remaining_combined_monthly_improvement",
+    previewPaceCents === null || adjustedMarginExpected === null
+      ? null
+      : max(previewPaceCents - adjustedMarginExpected, 0n),
+    "remaining combined monthly improvement",
+  );
+
+  const grossIncomeContext = validateGrossIncomeContext(result.gross_income_context);
+  return {
+    state: "available",
+    goal_program_id: goalProgramId,
+    goal_name: expectString(result.goal_name, "goal_name"),
+    observed_on: observedOn,
+    baseline_current_recurring_facts: recurring,
+    baseline_goal_pace_reference: goal,
+    baseline_combined_monthly_improvement: baselineCombined,
+    preview_target_date: dateString(result.preview_target_date, "preview_target_date"),
+    existing_explicit_reservation: existing,
+    additional_draft_reservation: additional,
+    preview_total_reservation: total,
+    preview_remaining_target: remaining,
+    exact_funding_months: decimal12String(result.exact_funding_months, "exact_funding_months"),
+    preview_required_goal_pace: previewPace,
+    draft_spending_reduction: reduction,
+    draft_after_tax_income: income,
+    adjusted_recurring_take_home: adjustedTakeHome,
+    adjusted_recurring_outflow: adjustedOutflow,
+    adjusted_monthly_margin: adjustedMargin,
+    adjusted_stabilization_gap: adjustedGap,
+    remaining_combined_monthly_improvement: remainingCombined,
+    gross_income_context: grossIncomeContext,
+    warnings,
+    calculation_version: "goal-arithmetic-v1",
+    contract_version: V21_CONTRACT_VERSION,
+  };
+}
+
+export function isGoalGapPreviewResponse(value: unknown): value is GoalGapPreviewResponse {
+  try {
+    validateGoalGapPreviewResponse(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function validateRecurringOutflowCandidateList(
+  value: unknown,
+): RecurringOutflowCandidateList {
+  const result = record(value, "recurring outflow candidates");
+  const state = oneOf(result.state, ["available", "empty", "unavailable"], "candidate state");
+  if (result.contract_version !== V21_CONTRACT_VERSION) {
+    throw new Error("Unexpected v2.1 contract version");
+  }
+  const rawCandidates = array(result.candidates, "candidates");
+  const candidates = rawCandidates.map((item, index) => validateRecurringCandidate(item, index));
+  const reason = result.reason === null ? null : expectString(result.reason, "candidate reason");
+  if (state === "available" && (candidates.length === 0 || reason !== null)) {
+    throw new Error("Available candidate state is malformed");
+  }
+  if (state === "empty" && (candidates.length > 0 || reason !== null)) {
+    throw new Error("Empty candidate state is malformed");
+  }
+  if (state === "unavailable" && (candidates.length > 0 || reason === null)) {
+    throw new Error("Unavailable candidate state is malformed");
+  }
+  if (new Set(candidates.map((item) => item.candidate_id)).size !== candidates.length) {
+    throw new Error("Candidate IDs must be unique");
+  }
+  return {
+    state,
+    observed_on: dateString(result.observed_on, "candidate observed_on"),
+    candidates,
+    reason,
+    warnings: stringArray(result.warnings, "candidate warnings"),
+    contract_version: V21_CONTRACT_VERSION,
+  };
+}
+
+export function isRecurringOutflowCandidateList(
+  value: unknown,
+): value is RecurringOutflowCandidateList {
+  try {
+    validateRecurringOutflowCandidateList(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validateGrossIncomeContext(value: unknown): GrossIncomeContext {
+  const context = record(value, "gross-income context");
+  const state = oneOf(context.state, ["available", "unavailable"], "gross-income state");
+  if (state === "unavailable") {
+    return { state, reason: expectString(context.reason, "gross-income unavailable reason") };
+  }
+  const ratio = decimal12String(context.effective_take_home_ratio, "take-home ratio");
+  const ratioUnits = BigInt(ratio.replace(".", ""));
+  if (ratioUnits <= 0n) {
+    throw new Error("Take-home ratio must be positive");
+  }
+  if (context.ratio_precision !== "0.000000000001") {
+    throw new Error("Unexpected take-home ratio precision");
+  }
+  const monthly = validateMoney(
+    context.estimated_monthly_gross_income_needed,
+    "estimated monthly gross income",
+  );
+  const annual = validateMoney(
+    context.estimated_annual_gross_income_needed,
+    "estimated annual gross income",
+  );
+  requireDerived(monthly, "estimated_monthly_gross_income", "estimated monthly gross income");
+  requireDerived(annual, "estimated_annual_gross_income", "estimated annual gross income");
+  if (requiredCents(annual, "annual gross") !== requiredCents(monthly, "monthly gross") * 12n) {
+    throw new Error("Annual gross estimate must equal monthly gross times twelve");
+  }
+  const sourceRef = expectString(context.source_ref, "gross-income source_ref");
+  if (!monthly.source_refs.includes(sourceRef)) {
+    throw new Error("Gross estimate must retain its payroll source reference");
+  }
+  if (
+    context.estimate_label !== "Estimate based on the latest supported paycheck" ||
+    context.disclaimer !== "Not a tax-return estimate"
+  ) {
+    throw new Error("Gross-income estimate labels are invalid");
+  }
+  return {
+    state,
+    effective_take_home_ratio: ratio,
+    ratio_precision: "0.000000000001",
+    supporting_payroll_date: dateString(
+      context.supporting_payroll_date,
+      "supporting_payroll_date",
+    ),
+    source_ref: sourceRef,
+    estimated_monthly_gross_income_needed: monthly,
+    estimated_annual_gross_income_needed: annual,
+    estimate_label: "Estimate based on the latest supported paycheck",
+    disclaimer: "Not a tax-return estimate",
+  };
+}
+
+function validateRecurringCandidate(
+  value: unknown,
+  index: number,
+): RecurringOutflowCandidate {
+  const candidate = record(value, `candidates[${index}]`);
+  const candidateId = expectString(candidate.candidate_id, "candidate_id");
+  if (!/^candidate_[0-9a-f]{24}$/.test(candidateId)) throw new Error("Invalid candidate ID");
+  const cadence = oneOf(candidate.cadence, ["monthly", "biweekly", "weekly"], "cadence");
+  const sourceRefs = stringArray(candidate.source_refs, "candidate source_refs");
+  const coverageMonths = stringArray(candidate.coverage_months, "candidate coverage_months");
+  if (coverageMonths.length < 3 || coverageMonths.some((month) => !/^\d{4}-(?:0[1-9]|1[0-2])$/.test(month))) {
+    throw new Error("Candidate needs at least three valid coverage months");
+  }
+  const occurrenceCount = nonnegativeInteger(candidate.occurrence_count, "occurrence_count");
+  if (occurrenceCount !== sourceRefs.length) {
+    throw new Error("Candidate occurrence count must match source evidence");
+  }
+  const median = validateMoney(candidate.median_observed_amount, "candidate median");
+  const typical = validateMoney(candidate.typical_monthly_amount, "candidate typical monthly");
+  requireDerived(median, "recurring_outflow_median", "candidate median");
+  requireDerived(typical, "recurring_outflow_typical_monthly", "candidate typical monthly");
+  const amountRange = record(candidate.amount_range, "candidate amount range");
+  const minimum = validateMoney(amountRange.minimum, "candidate minimum");
+  const maximum = validateMoney(amountRange.maximum, "candidate maximum");
+  requireEvidence(minimum, "observed", "candidate minimum");
+  requireEvidence(maximum, "observed", "candidate maximum");
+  const medianCents = requiredCents(median, "candidate median");
+  if (
+    requiredCents(minimum, "candidate minimum") > medianCents ||
+    medianCents > requiredCents(maximum, "candidate maximum")
+  ) {
+    throw new Error("Candidate median must be inside its amount range");
+  }
+  const expectedTypical =
+    cadence === "monthly"
+      ? medianCents
+      : roundDivideHalfUp(medianCents * (cadence === "biweekly" ? 26n : 52n), 12n);
+  if (requiredCents(typical, "candidate typical monthly") !== expectedTypical) {
+    throw new Error("Candidate typical monthly amount does not match cadence");
+  }
+  if (candidate.confidence !== "high") throw new Error("Only high-confidence candidates are valid");
+  const first = dateString(candidate.first_observed_date, "first_observed_date");
+  const last = dateString(candidate.last_observed_date, "last_observed_date");
+  if (dateOrdinal(first) > dateOrdinal(last)) throw new Error("Candidate dates are reversed");
+  return {
+    candidate_id: candidateId,
+    observed_description: expectString(candidate.observed_description, "observed_description"),
+    safe_account_label: expectString(candidate.safe_account_label, "safe_account_label"),
+    cadence,
+    occurrence_count: occurrenceCount,
+    first_observed_date: first,
+    last_observed_date: last,
+    median_observed_amount: median,
+    typical_monthly_amount: typical,
+    amount_range: { minimum, maximum },
+    confidence: "high",
+    source_refs: sourceRefs,
+    coverage_months: coverageMonths,
+  };
+}
+
+function validateOptionalDerivedExact(
+  value: V21EvidencedMoney,
+  derivation: V21MoneyDerivation,
+  expected: bigint | null,
+  label: string,
+): void {
+  if (expected === null) {
+    requireUnavailable(value, label);
+    return;
+  }
+  requireDerived(value, derivation, label);
+  if (requiredCents(value, label) !== expected) {
+    throw new Error(`${label} does not reconcile`);
+  }
+}
+
+function decimal12String(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^(?:0|[1-9]\d*)\.\d{12}$/.test(value)) {
+    throw new Error(`${label} must be a nonnegative twelve-place decimal string`);
+  }
+  return value;
+}
+
+function roundDivideHalfUp(numerator: bigint, denominator: bigint): bigint {
+  if (numerator < 0n || denominator <= 0n) throw new Error("Positive exact division required");
+  return (numerator * 2n + denominator) / (denominator * 2n);
 }
 
 function validatePeriod(value: unknown): SelectedPeriod {

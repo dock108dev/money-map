@@ -361,6 +361,7 @@ export default function App() {
               onShowAccounts={() => setView("accounts")}
               onShowIncome={() => setView("income")}
               onShowWealth={() => setView("wealth")}
+              onShowGoals={() => setView("goals")}
             />
           )}
           {view === "goals" && (

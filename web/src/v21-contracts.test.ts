@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import matrix from "../../examples/synthetic/money-map-v2.1-contracts.json";
 import {
+  candidateFixture,
+  goalGapFixture,
+} from "./cash-flow/goal-gap-test-fixtures";
+import {
   isV21ContractVector,
   parseExactMoneyCents,
   validateCashFlowPeriodResult,
+  validateGoalGapPreviewResponse,
+  validateRecurringOutflowCandidateList,
   validateV21ContractVector,
 } from "./v21-contracts";
 
@@ -102,5 +108,41 @@ describe("Money Map v2.1 frontend contracts", () => {
     expect(vector.goal.required_goal_pace.amount).toBe("1000.00");
     expect(vector.recurring.current_monthly_margin.evidence).toBe("unavailable");
     expect(vector.combined_monthly_improvement.evidence).toBe("unavailable");
+  });
+
+  it("validates exact goal-gap preview arithmetic and gross evidence", () => {
+    const result = validateGoalGapPreviewResponse(goalGapFixture());
+    expect(result.state).toBe("available");
+    if (result.state !== "available") throw new Error("Expected available preview");
+    expect(result.baseline_combined_monthly_improvement.amount).toBe("44606.50");
+    expect(result.exact_funding_months).toBe("48.000000000000");
+    expect(result.gross_income_context.state).toBe("available");
+  });
+
+  it("rejects preview arithmetic drift while preserving unavailable states", () => {
+    const drift = structuredClone(goalGapFixture());
+    drift.remaining_combined_monthly_improvement.amount = "44606.49";
+    expect(() => validateGoalGapPreviewResponse(drift)).toThrow("does not reconcile");
+    expect(
+      validateGoalGapPreviewResponse({
+        state: "no_primary",
+        observed_on: "2026-08-11",
+        reason: "A primary goal has not been selected",
+        warnings: [],
+        calculation_version: "goal-arithmetic-v1",
+        contract_version: "money-map-v2.1-contract-v1",
+      }).state,
+    ).toBe("no_primary");
+  });
+
+  it("validates high-confidence recurring candidates and cadence conversion", () => {
+    const result = validateRecurringOutflowCandidateList(candidateFixture());
+    expect(result.state).toBe("available");
+    expect(result.candidates[0].typical_monthly_amount.amount).toBe("10.00");
+    const drift = structuredClone(candidateFixture());
+    drift.candidates[0].typical_monthly_amount.amount = "10.01";
+    expect(() => validateRecurringOutflowCandidateList(drift)).toThrow(
+      "does not match cadence",
+    );
   });
 });

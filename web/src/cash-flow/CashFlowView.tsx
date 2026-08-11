@@ -5,15 +5,16 @@ import {
   CashFlowUnavailableError,
   CashFlowValidationError,
   loadCashFlow,
+  previewGoalGap,
   type CashFlowRequest,
 } from "../api";
-import { loadGoalPosition } from "../goals/api";
-import type { GoalPositionState } from "../v2-contracts";
 import {
   parseExactMoneyCents,
   type CashFlowPeriodResult,
+  type GoalGapPreviewResponse,
   type MonthlyCashFlowPoint,
 } from "../v21-contracts";
+import GoalGapCard from "./GoalGapCard";
 import "./cash-flow.css";
 
 type PeriodChoice = "all" | "trailing" | "year" | "prior" | "custom";
@@ -35,6 +36,7 @@ interface CashFlowViewProps {
   onShowAccounts: () => void;
   onShowIncome: () => void;
   onShowWealth: () => void;
+  onShowGoals: () => void;
 }
 
 type RecurringPattern =
@@ -109,33 +111,22 @@ function netContext(value: string): "positive" | "negative" | "even" {
   return cents > 0n ? "positive" : cents < 0n ? "negative" : "even";
 }
 
-function recurringPattern(state: GoalPositionState): RecurringPattern {
+function recurringPattern(state: GoalGapPreviewResponse): RecurringPattern {
   if (state.state !== "available") {
     return { state: "unavailable", reason: "No primary goal supplies recurring evidence." };
   }
-  const { position } = state;
-  const gap = position.recurring_cash_flow_gap;
-  if (gap.amount === null) {
+  const recurring = state.baseline_current_recurring_facts;
+  const margin = recurring.current_monthly_margin;
+  if (margin.amount === null) {
     return {
       state: "unavailable",
-      reason: gap.unavailable_reason ?? "The recurring cash-flow gap is unavailable.",
+      reason: margin.unavailable_reason ?? "The recurring cash-flow pattern is unavailable.",
     };
   }
-  const gapCents = parseExactMoneyCents(gap.amount);
-  if (gapCents > 0n) return { state: "available", kind: "gap", cents: gapCents };
-  const takeHome = position.effective_recurring_take_home;
-  const outflow = position.observed_recurring_outflow;
-  if (takeHome.amount === null || outflow.amount === null) {
-    return {
-      state: "unavailable",
-      reason:
-        takeHome.unavailable_reason ??
-        outflow.unavailable_reason ??
-        "Recurring take-home or outflow evidence is unavailable.",
-    };
-  }
-  const margin = parseExactMoneyCents(takeHome.amount) - parseExactMoneyCents(outflow.amount);
-  return { state: "available", kind: "margin", cents: margin > 0n ? margin : 0n };
+  const marginCents = parseExactMoneyCents(margin.amount);
+  return marginCents < 0n
+    ? { state: "available", kind: "gap", cents: -marginCents }
+    : { state: "available", kind: "margin", cents: marginCents };
 }
 
 function requestError(reason: unknown): string {
@@ -257,6 +248,7 @@ export default function CashFlowView({
   onShowAccounts,
   onShowIncome,
   onShowWealth,
+  onShowGoals,
 }: CashFlowViewProps) {
   const [result, setResult] = useState<CashFlowPeriodResult | null>(null);
   const [activeSelection, setActiveSelection] = useState<PeriodSelection>(ALL_SELECTION);
@@ -272,6 +264,8 @@ export default function CashFlowView({
     state: "unavailable",
     reason: "Recurring evidence is loading.",
   });
+  const [goalGap, setGoalGap] = useState<GoalGapPreviewResponse | null>(null);
+  const [goalGapError, setGoalGapError] = useState("");
   const requestSequence = useRef(0);
 
   const requestPeriod = useCallback(async (selection: PeriodSelection) => {
@@ -302,15 +296,26 @@ export default function CashFlowView({
 
   useEffect(() => {
     let current = true;
-    void loadGoalPosition()
+    setGoalGapError("");
+    void previewGoalGap({
+      target_date: null,
+      additional_reservation: "0.00",
+      monthly_spending_reduction: "0.00",
+      monthly_after_tax_income: "0.00",
+    })
       .then((state) => {
-        if (current) setPattern(recurringPattern(state));
+        if (current) {
+          setGoalGap(state);
+          setPattern(recurringPattern(state));
+        }
       })
       .catch((reason: unknown) => {
         if (!current) return;
+        const message = reason instanceof Error ? reason.message : "Goal impact could not load.";
+        setGoalGapError(message);
         setPattern({
           state: "unavailable",
-          reason: reason instanceof Error ? reason.message : "Recurring evidence could not load.",
+          reason: message,
         });
       });
     return () => {
@@ -430,6 +435,7 @@ export default function CashFlowView({
                 Evidence {result.freshness.state} as of {freshnessTime(result.freshness.observed_at)} · {result.coverage.completeness} coverage
               </span>
             </div>
+            <GoalGapCard result={goalGap} error={goalGapError} onOpenGoals={onShowGoals} />
           </>
         ) : !loading ? (
           <div className="cash-flow-empty" role="status">No Cash Flow result is available. Use Retry after activity evidence is imported.</div>

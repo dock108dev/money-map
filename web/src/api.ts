@@ -1,8 +1,13 @@
 import type { AccountDetail, DashboardData, PlaidRefreshResult, PlaidStatus } from "./types";
 import {
   validateCashFlowPeriodResult,
+  validateGoalGapPreviewResponse,
+  validateRecurringOutflowCandidateList,
   type CashFlowPeriodResult,
+  type GoalGapPreviewRequest,
+  type GoalGapPreviewResponse,
   type PeriodKind,
+  type RecurringOutflowCandidateList,
 } from "./v21-contracts";
 
 export type ApplicationData = Pick<
@@ -41,6 +46,16 @@ export class CashFlowApiError extends Error {
   ) {
     super(message);
     this.name = "CashFlowApiError";
+  }
+}
+
+export class GoalGapApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GoalGapApiError";
   }
 }
 
@@ -133,6 +148,54 @@ export async function loadCashFlow({
   } catch (reason) {
     const detail = reason instanceof Error ? reason.message : "Unknown contract error";
     throw new CashFlowApiError(0, `Cash Flow evidence was invalid: ${detail}`);
+  }
+}
+
+export async function previewGoalGap(
+  payload: GoalGapPreviewRequest,
+): Promise<GoalGapPreviewResponse> {
+  const response = await fetch("/api/v2/goals/gap-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    const detail =
+      typeof body === "object" && body !== null && "detail" in body
+        ? (body as { detail?: unknown }).detail
+        : null;
+    throw new GoalGapApiError(
+      response.status,
+      detailMessage(detail, `Goal-gap preview failed (${response.status}).`),
+    );
+  }
+  try {
+    return validateGoalGapPreviewResponse(body);
+  } catch (reason) {
+    const detail = reason instanceof Error ? reason.message : "Unknown contract error";
+    throw new GoalGapApiError(0, `Goal-gap evidence was invalid: ${detail}`);
+  }
+}
+
+export async function loadRecurringOutflowCandidates(): Promise<RecurringOutflowCandidateList> {
+  const response = await fetch("/api/v2/cash-flow/recurring-outflow-candidates");
+  const body = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    const detail =
+      typeof body === "object" && body !== null && "detail" in body
+        ? (body as { detail?: unknown }).detail
+        : null;
+    throw new GoalGapApiError(
+      response.status,
+      detailMessage(detail, `Repeated-outflow candidates failed (${response.status}).`),
+    );
+  }
+  try {
+    return validateRecurringOutflowCandidateList(body);
+  } catch (reason) {
+    const detail = reason instanceof Error ? reason.message : "Unknown contract error";
+    throw new GoalGapApiError(0, `Repeated-outflow evidence was invalid: ${detail}`);
   }
 }
 

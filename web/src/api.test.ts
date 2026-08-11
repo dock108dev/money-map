@@ -5,7 +5,10 @@ import {
   CashFlowUnavailableError,
   CashFlowValidationError,
   loadCashFlow,
+  loadRecurringOutflowCandidates,
+  previewGoalGap,
 } from "./api";
+import { candidateFixture, goalGapFixture } from "./cash-flow/goal-gap-test-fixtures";
 import { cashFlowFixture } from "./cash-flow/test-fixtures";
 
 const json = (value: unknown, status = 200) =>
@@ -89,5 +92,59 @@ describe("Cash Flow API", () => {
       name: "CashFlowApiError",
       status: 0,
     } satisfies Partial<CashFlowApiError>);
+  });
+
+  it("posts and validates an exact read-only goal-gap preview", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      json(goalGapFixture()),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const result = await previewGoalGap({
+      target_date: null,
+      additional_reservation: "0.00",
+      monthly_spending_reduction: "0.00",
+      monthly_after_tax_income: "0.00",
+    });
+    expect(result.state).toBe("available");
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v2/goals/gap-preview",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const init = fetch.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      target_date: null,
+      additional_reservation: "0.00",
+      monthly_spending_reduction: "0.00",
+      monthly_after_tax_income: "0.00",
+    });
+  });
+
+  it("loads and validates recurring-outflow candidates", async () => {
+    const fetch = vi.fn(async () => json(candidateFixture()));
+    vi.stubGlobal("fetch", fetch);
+    const result = await loadRecurringOutflowCandidates();
+    expect(result.candidates[0].confidence).toBe("high");
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v2/cash-flow/recurring-outflow-candidates",
+    );
+  });
+
+  it("keeps goal-gap HTTP and invalid-contract errors explicit", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(json({ detail: "Draft exceeds supported outflow" }, 422))
+      .mockResolvedValueOnce(json({ state: "available" }));
+    vi.stubGlobal("fetch", fetch);
+    const payload = {
+      target_date: null,
+      additional_reservation: "0.00" as const,
+      monthly_spending_reduction: "0.00" as const,
+      monthly_after_tax_income: "0.00" as const,
+    };
+    await expect(previewGoalGap(payload)).rejects.toMatchObject({
+      status: 422,
+      message: "Draft exceeds supported outflow",
+    });
+    await expect(previewGoalGap(payload)).rejects.toMatchObject({ status: 0 });
   });
 });

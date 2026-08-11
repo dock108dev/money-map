@@ -22,9 +22,9 @@ from sqlalchemy import Select, and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from .cash_months import complete_observed_cash_months
 from .models import (
     Account,
-    AccountBalancePoint,
     AccountTransaction,
     BalanceSnapshot,
     GoalCheckInComponent,
@@ -554,69 +554,11 @@ def _payroll_evidence(
 def _recurring_outflow_evidence(
     session: Session,
 ) -> tuple[EvidencedMoney, FingerprintSourceRecord | None]:
-    cash_accounts = list(
-        session.scalars(
-            select(Account)
-            .join(Institution)
-            .where(
-                Institution.kind == "bank",
-                Account.account_type.in_(["checking", "savings"]),
-            )
-            .order_by(Account.id)
-        )
-    )
+    complete_evidence = complete_observed_cash_months(session)
+    cash_accounts = list(complete_evidence.accounts)
     if not cash_accounts:
         return _unavailable_money("No cash accounts establish recurring-outflow coverage"), None
-    complete_by_account: list[set[tuple[int, int]]] = []
-    coverage_refs: list[str] = []
-    for account in cash_accounts:
-        snapshots = list(
-            session.scalars(
-                select(BalanceSnapshot)
-                .where(BalanceSnapshot.account_id == account.id)
-                .order_by(BalanceSnapshot.id)
-            )
-        )
-        snapshot_openings = {
-            (row.snapshot_date.year, row.snapshot_date.month)
-            for row in snapshots
-            if row.kind == "opening" and row.snapshot_date.day == 1
-        }
-        snapshot_closings = {
-            (row.snapshot_date.year, row.snapshot_date.month)
-            for row in snapshots
-            if row.kind in {"closing", "current"}
-            and row.snapshot_date.day
-            == calendar.monthrange(row.snapshot_date.year, row.snapshot_date.month)[1]
-        }
-        points = list(
-            session.scalars(
-                select(AccountBalancePoint)
-                .where(AccountBalancePoint.account_id == account.id)
-                .order_by(AccountBalancePoint.id)
-            )
-        )
-        point_openings = {
-            (row.balance_date.year, row.balance_date.month)
-            for row in points
-            if row.kind == "month_open"
-        }
-        point_closings = {
-            (row.balance_date.year, row.balance_date.month)
-            for row in points
-            if row.kind == "month_close"
-            or (
-                row.source_kind == "observed"
-                and row.balance_date.day
-                == calendar.monthrange(row.balance_date.year, row.balance_date.month)[1]
-            )
-        }
-        complete_by_account.append(
-            (snapshot_openings & snapshot_closings) | (point_openings & point_closings)
-        )
-        coverage_refs.extend(f"balance_snapshot:{row.id}" for row in snapshots)
-        coverage_refs.extend(f"balance_point:{row.id}:{row.fingerprint}" for row in points)
-    complete_months = set.intersection(*complete_by_account) if complete_by_account else set()
+    complete_months = set(complete_evidence.months)
     if not complete_months:
         return _unavailable_money("No complete observed cash months establish outflow"), None
 
@@ -645,7 +587,7 @@ def _recurring_outflow_evidence(
     evidence_payload = {
         "cash_account_ids": account_ids,
         "coverage_months": labels,
-        "coverage_refs": sorted(coverage_refs),
+        "coverage_refs": sorted(complete_evidence.coverage_refs),
         "transactions": [
             {
                 "id": row.id,
