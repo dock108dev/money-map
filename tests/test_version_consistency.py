@@ -14,7 +14,7 @@ from paycheck_map.app import app
 
 from .conftest import PROJECT_ROOT
 
-EXPECTED_VERSION = "2.0.0"
+EXPECTED_VERSION = "2.1.0"
 
 
 def test_every_current_version_surface_agrees() -> None:

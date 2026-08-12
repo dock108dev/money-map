@@ -1656,6 +1656,11 @@ tbody tr[tabindex]:hover {
 }
 
 @media (max-width: 980px) {
+  .app-shell .content-wrap :is(button, input, select, textarea, summary),
+  .focused-dialog :is(button, input, select, textarea, summary) {
+    min-height: 44px;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }

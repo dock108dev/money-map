@@ -162,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("payroll-status", help="validate completed payroll history")
     sync = subparsers.add_parser("sync", help="update all active read-only connections")
     sync.add_argument("--status", action="store_true", help="show whether data needs updating")
-    subparsers.add_parser("verify", help="run the complete v2.0.0 release gate")
+    subparsers.add_parser("verify", help="run the complete v2.1.0 release gate")
     return parser
 
 
