@@ -751,14 +751,14 @@ describe("account-first views", () => {
             entity_id: "1",
             rule: "account_balance",
             status: "unreconciled",
-            residual: "2.00",
+            residual: "2153.51",
             details: {
-              account_name: "Personal loan",
+              account_name: "SoFi Personal Loan",
               message: "Account balance does not match its activity.",
-              opening_balance: "1000.00",
+              opening_balance: "46071.56",
               accounted_activity: "0.00",
-              expected_closing_balance: "1000.00",
-              closing_balance: "1002.00",
+              expected_closing_balance: "46071.56",
+              closing_balance: "43918.05",
               likely_cause: "interest_or_balance_adjustment",
               next_steps: ["Update the connection.", "Compare the statement."],
             },
@@ -768,7 +768,9 @@ describe("account-first views", () => {
     );
     expect(screen.getByText("account balance")).toBeInTheDocument();
     expect(screen.getByText("Account balance does not match its activity.")).toBeInTheDocument();
-    expect(screen.getByText("Personal loan")).toBeInTheDocument();
+    expect(screen.getByText("SoFi Personal Loan")).toBeInTheDocument();
+    expect(screen.getByText("$2,153.51")).toBeInTheDocument();
+    expect(screen.getByText("account balance").closest(".review-card")).toHaveTextContent("Unexplained difference$2,153.51");
     expect(screen.getByText("Compare the statement.")).toBeInTheDocument();
     expect(proseWordCount(document.querySelector('[data-copy-budget="utility-page-heading"]')!)).toBeLessThanOrEqual(COPY_BUDGETS["utility-page-heading"]);
     fireEvent.click(screen.getByRole("button", { name: "Update data" }));

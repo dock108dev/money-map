@@ -122,8 +122,23 @@ button {
 
 .sidebar nav {
   display: grid;
-  gap: 5px;
+  gap: 14px;
   margin-top: 24px;
+}
+
+.nav-group,
+.nav-group-items {
+  display: grid;
+  gap: 5px;
+}
+
+.nav-group-label {
+  padding: 0 12px;
+  color: #789087;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .sidebar nav button {
@@ -1661,9 +1676,30 @@ tbody tr[tabindex]:hover {
   .sidebar nav {
     margin: 0;
     display: flex;
+    gap: 5px;
     overflow-x: auto;
     scroll-snap-type: x proximity;
     scrollbar-width: thin;
+  }
+
+  .nav-group {
+    display: flex;
+    flex: 0 0 auto;
+  }
+
+  .nav-group-items {
+    display: flex;
+    gap: 5px;
+  }
+
+  .nav-group-label {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .sidebar nav button {
@@ -3710,5 +3746,15 @@ tbody tr[tabindex]:hover {
 
   .date-range input {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .focused-dialog-backdrop * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

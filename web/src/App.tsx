@@ -29,17 +29,25 @@ const GoalsView = lazy(() => import("./goals/GoalsView"));
 
 type View = "cash-flow" | "goals" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
 
-const nav: Array<{ id: View; label: string; glyph: string }> = [
-  { id: "cash-flow", label: "Cash Flow", glyph: "↕" },
-  { id: "goals", label: "Goals", glyph: "◉" },
-  { id: "accounts", label: "Accounts", glyph: "▤" },
-  { id: "income", label: "Income", glyph: "$" },
-  { id: "activity", label: "Activity", glyph: "↕" },
-  { id: "wealth", label: "Wealth", glyph: "◇" },
-  { id: "retirement", label: "Retirement", glyph: "◎" },
-  { id: "lab", label: "Lab", glyph: "⌁" },
-  { id: "connections", label: "Add account", glyph: "+" },
-  { id: "review", label: "Review", glyph: "!" },
+const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; label: string; glyph: string }> }> = [
+  { id: "everyday", label: "Everyday", items: [
+    { id: "cash-flow", label: "Cash Flow", glyph: "↕" },
+    { id: "goals", label: "Goals", glyph: "◉" },
+    { id: "activity", label: "Activity", glyph: "↕" },
+  ] },
+  { id: "details", label: "Details", items: [
+    { id: "accounts", label: "Accounts", glyph: "▤" },
+    { id: "income", label: "Income", glyph: "$" },
+    { id: "wealth", label: "Wealth", glyph: "◇" },
+  ] },
+  { id: "planning", label: "Planning", items: [
+    { id: "retirement", label: "Retirement", glyph: "◎" },
+    { id: "lab", label: "Lab", glyph: "⌁" },
+  ] },
+  { id: "data", label: "Data", items: [
+    { id: "connections", label: "Add account", glyph: "+" },
+    { id: "review", label: "Review", glyph: "!" },
+  ] },
 ];
 
 export default function App() {
@@ -295,25 +303,32 @@ export default function App() {
           </div>
         </div>
         <nav aria-label="Primary navigation">
-          {nav
-            .filter((item) => item.id !== "review" || data.issues.length > 0)
-            .map((item) => (
-              <button
-                className={view === item.id ? "active" : ""}
-                key={item.id}
-                ref={view === item.id ? activeNavButtonRef : undefined}
-                aria-current={view === item.id ? "page" : undefined}
-                aria-label={item.id === "review" && data.issues.length > 0 ? `Review, ${data.issues.length} issues` : item.label}
-                onClick={() => {
-                  if (item.id === "activity") setActivityPeriod(null);
-                  setView(item.id);
-                }}
-              >
-                <span aria-hidden="true">{item.glyph}</span>
-                {item.label}
-                {item.id === "review" && data.issues.length > 0 && <em>{data.issues.length}</em>}
-              </button>
-            ))}
+          {navGroups.map((group) => (
+            <div className="nav-group" role="group" aria-labelledby={`nav-group-${group.id}`} key={group.id}>
+              <span className="nav-group-label" id={`nav-group-${group.id}`}>{group.label}</span>
+              <div className="nav-group-items">
+                {group.items
+                  .filter((item) => item.id !== "review" || data.issues.length > 0)
+                  .map((item) => (
+                    <button
+                      className={view === item.id ? "active" : ""}
+                      key={item.id}
+                      ref={view === item.id ? activeNavButtonRef : undefined}
+                      aria-current={view === item.id ? "page" : undefined}
+                      aria-label={item.id === "review" && data.issues.length > 0 ? `Review, ${data.issues.length} issues` : item.label}
+                      onClick={() => {
+                        if (item.id === "activity") setActivityPeriod(null);
+                        setView(item.id);
+                      }}
+                    >
+                      <span aria-hidden="true">{item.glyph}</span>
+                      {item.label}
+                      {item.id === "review" && data.issues.length > 0 && <em>{data.issues.length}</em>}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          ))}
         </nav>
         <div className="privacy-card">
           <span className="privacy-dot" />

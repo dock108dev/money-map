@@ -25,7 +25,8 @@ import {
   projectLabExperiment,
   saveLabSnapshot,
 } from "./api";
-import { DriveCalculator } from "./DriveCalculator";
+import { DriveCalculator, wholeMonthIntervals } from "./DriveCalculator";
+import { availableMissionOptions, missionSelectionContext } from "./mission-selection";
 import "./life-lab.css";
 
 function currency(value: unknown) {
@@ -324,7 +325,23 @@ export default function LifeLabView() {
   const projection = result?.projection as unknown as LifeProjection | undefined;
   const selected = result?.reverse_solver.selected_result as unknown as PathResult | undefined;
   const mission = result ? missionOf(result.draft) : null;
+  const missionTargetDate = mission ? String(mission.target_date).slice(0, 10) : "";
+  const missionMonths = projection && missionTargetDate
+    ? wholeMonthIntervals(projection.as_of, missionTargetDate)
+    : 0;
   const benchmarkRows = useMemo(() => Object.entries(projection?.benchmarks.thresholds ?? {}), [projection]);
+  const routeSelectionContext = useMemo(() => {
+    if (!result || !seed || !projection || !selected) return "";
+    const options = availableMissionOptions(projection.goals, selected);
+    return missionSelectionContext({
+      experimentId: result.experiment_id,
+      experimentFingerprint: result.experiment_fingerprint,
+      seedKind: seed.seed_kind,
+      projectionFingerprint: projection.source_fingerprint,
+      path: selected,
+      options,
+    });
+  }, [projection, result, seed, selected]);
 
   if (!seed || !result || !mission) {
     return (
@@ -359,15 +376,13 @@ export default function LifeLabView() {
         <details><summary>Source evidence</summary><p>{seed.seed_kind === "blank" ? "No Goal or Retirement money was copied." : "The source was copied once; later edits do not alter this experiment."}</p><dl><div><dt>Source fingerprint</dt><dd><code>{seed.source_fingerprint ?? "No copied source"}</code></dd></div><div><dt>Experiment fingerprint</dt><dd><code>{result.experiment_fingerprint}</code></dd></div></dl></details>
       </section>
 
-      <section className="panel lab-mission-summary" aria-labelledby="lab-mission-heading">
-        <header><div><span className="eyebrow">Current mission</span><h2 id="lab-mission-heading">{currency(mission.target_amount)} by {String(mission.target_date).slice(0, 10)}</h2></div><button ref={missionButtonRef} className="secondary-button print-hidden" onClick={() => setMissionOpen(true)}>Edit experiment</button></header>
-        <dl><div><dt>Work-optional age</dt><dd>{mission.selected_age}</dd></div><div><dt>Path</dt><dd>{String(mission.path).replaceAll("_", " ")}</dd></div></dl>
-      </section>
-
       {selected && projection && (
         <>
-          <section className="panel lab-reverse-summary"><span className="eyebrow">Reverse-solved capital</span><h2>{currency(result.reverse_solver.mission_capital)}</h2><p data-prose>{selected.status.replaceAll("_", " ")}. Deterministic arithmetic, not a probability or recommendation.</p></section>
-          <details className="panel lab-paths evidence-disclosure"><summary>Explore paths</summary><DriveCalculator projection={projection} path={selected} goals={projection.goals} startingPoint={projection.starting_point} /></details>
+          <section className="panel lab-mission-summary lab-primary-result" aria-labelledby="lab-mission-heading">
+            <header><div><span className="eyebrow">Experiment result</span><h2 id="lab-mission-heading">{currency(mission.target_amount)} by {missionTargetDate}</h2><p data-prose>{selected.status.replaceAll("_", " ")}. Deterministic arithmetic, not a probability or recommendation.</p>{Number(mission.target_amount) > 0 && missionMonths > 0 && <p className="lab-summary-convention">Life Lab route convention · {missionMonths} whole-month intervals</p>}</div><button ref={missionButtonRef} className="secondary-button print-hidden" onClick={() => setMissionOpen(true)}>Edit experiment</button></header>
+            <dl><div><dt>Work-optional age</dt><dd>{mission.selected_age}</dd></div><div><dt>Path</dt><dd>{String(mission.path).replaceAll("_", " ")}</dd></div></dl>
+          </section>
+          <details className="panel lab-paths evidence-disclosure"><summary>Route formulas and time convention</summary><DriveCalculator projection={projection} path={selected} goals={projection.goals} startingPoint={projection.starting_point} seedKind={seed.seed_kind} seededGoalLabel={seed.source_label} selectionContext={routeSelectionContext} /></details>
         </>
       )}
 

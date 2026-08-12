@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 
+import type { LabExperimentSeedKind } from "../v2-contracts";
 import type {
   LifeGoal,
   LifeProjection,
   LifeStartingPoint,
   PathResult,
 } from "./life-lab-types";
+import {
+  availableMissionOptions,
+  initialMissionKey,
+} from "./mission-selection";
 
 function currency(value: number, digits = 0) {
   return value.toLocaleString("en-US", {
@@ -35,11 +40,11 @@ function weeksBetween(start: string, end: string) {
   return Math.max(1, Math.ceil((endDate - startDate) / (7 * 24 * 60 * 60 * 1000)));
 }
 
-function monthsBetween(start: string, end: string) {
+export function wholeMonthIntervals(start: string, end: string) {
   const from = new Date(`${start.slice(0, 10)}T12:00:00`);
   const to = new Date(`${end.slice(0, 10)}T12:00:00`);
   const months = (to.getFullYear() - from.getFullYear()) * 12 + to.getMonth() - from.getMonth();
-  return Number.isFinite(months) ? Math.max(1, months) : 1;
+  return Number.isFinite(months) ? Math.max(0, months) : 0;
 }
 
 export function weeklySprint(seed: number, target: number, weeks: number, weeklyPct: number) {
@@ -127,14 +132,26 @@ export function DriveCalculator({
   path,
   goals,
   startingPoint,
+  seedKind,
+  seededGoalLabel,
+  selectionContext,
 }: {
   projection: LifeProjection;
   path: PathResult;
   goals: LifeGoal[];
   startingPoint: LifeStartingPoint;
+  seedKind: LabExperimentSeedKind;
+  seededGoalLabel: string | null;
+  selectionContext: string;
 }) {
-  const [missionKey, setMissionKey] = useState("freedom");
-  const [deadline, setDeadline] = useState(path.make_it_happen.retirement_deadline.slice(0, 10));
+  const missionOptions = useMemo(() => availableMissionOptions(goals, path), [goals, path]);
+  const initialKey = useMemo(
+    () => initialMissionKey({ seedKind, seededGoalLabel, options: missionOptions }),
+    [missionOptions, seedKind, seededGoalLabel],
+  );
+  const initialOption = missionOptions.find((option) => option.key === initialKey) ?? null;
+  const [missionKey, setMissionKey] = useState(initialKey);
+  const [deadline, setDeadline] = useState(initialOption?.targetDate ?? "");
   const [seed, setSeed] = useState(5000);
   const [weeklyPct, setWeeklyPct] = useState(0.9);
   const [takeHomePct, setTakeHomePct] = useState(60);
@@ -147,25 +164,31 @@ export function DriveCalculator({
   const [currentLoan, setCurrentLoan] = useState(0);
   const [highestPriorLoan, setHighestPriorLoan] = useState(0);
 
-  const selectedGoal = goals.find((goal) => missionKey === `goal-${goal.id}`) ?? null;
-  const planTarget = selectedGoal
-    ? Math.max(0, Number(selectedGoal.target_amount) - Number(selectedGoal.reserved_amount))
-    : Number(path.make_it_happen.retirement_capital_needed ?? 0);
+  const selectedMission = missionOptions.find((option) => option.key === missionKey) ?? null;
+  const planTarget = selectedMission?.targetAmount ?? 0;
   const [targetAmount, setTargetAmount] = useState(planTarget);
-  const defaultDeadline = selectedGoal?.target_date ?? path.make_it_happen.retirement_deadline.slice(0, 10);
-  useEffect(() => setDeadline(defaultDeadline), [defaultDeadline]);
-  useEffect(() => setTargetAmount(planTarget), [planTarget]);
+  const defaultDeadline = selectedMission?.targetDate ?? "";
   useEffect(() => {
-    if (missionKey !== "freedom" && !selectedGoal) setMissionKey("freedom");
-  }, [missionKey, selectedGoal]);
+    setMissionKey(initialKey);
+    const next = missionOptions.find((option) => option.key === initialKey) ?? null;
+    setDeadline(next?.targetDate ?? "");
+    setTargetAmount(next?.targetAmount ?? 0);
+  }, [initialKey, missionOptions, selectionContext]);
+  useEffect(() => {
+    setDeadline(defaultDeadline);
+    setTargetAmount(planTarget);
+  }, [defaultDeadline, planTarget]);
+  useEffect(() => {
+    if (missionKey && !selectedMission) setMissionKey("");
+  }, [missionKey, selectedMission]);
 
-  const targetIsSolvable = selectedGoal !== null || path.make_it_happen.retirement_capital_needed !== null;
-  const missionLabel = selectedGoal?.name ?? `Age ${path.target_age} work-optional capital`;
+  const targetIsSolvable = selectedMission !== null;
+  const missionLabel = selectedMission?.label ?? "No mission selected";
   const targetCustomized = Math.abs(targetAmount - planTarget) >= 0.5;
   const deadlineCustomized = deadline !== defaultDeadline;
   const preRetirementShortfall = path.make_it_happen.pre_retirement_shortfall_month;
-  const weeks = weeksBetween(projection.as_of, deadline);
-  const months = monthsBetween(projection.as_of, deadline);
+  const weeks = deadline ? weeksBetween(projection.as_of, deadline) : 0;
+  const months = deadline ? wholeMonthIntervals(projection.as_of, deadline) : 0;
   const sprint = useMemo(
     () => weeklySprint(seed, targetAmount, weeks, weeklyPct),
     [seed, targetAmount, weeks, weeklyPct],
@@ -178,7 +201,7 @@ export function DriveCalculator({
     () => loanMath(eligibleBalance, currentLoan, highestPriorLoan, loanRatePct, loanYears),
     [eligibleBalance, currentLoan, highestPriorLoan, loanRatePct, loanYears],
   );
-  const afterTaxMonthly = targetAmount / months;
+  const afterTaxMonthly = months > 0 ? targetAmount / months : 0;
   const grossAnnual = afterTaxMonthly * 12 / Math.max(0.01, takeHomePct / 100);
   const loanCoverage = targetAmount > 0 ? Math.min(100, loan.newLoan / targetAmount * 100) : 100;
 
@@ -187,11 +210,15 @@ export function DriveCalculator({
       <header className="drive-heading">
         <div>
           <span className="eyebrow">Here’s what you’ve gotta do</span>
-          <h2>{targetAmount === 0 && targetIsSolvable
-            ? "This path is already funded."
+          <h2>{!selectedMission
+            ? "Choose a mission"
+            : targetAmount === 0
+            ? "This mission is funded."
             : targetIsSolvable ? `Build ${currency(targetAmount)} by ${readableDate(deadline)}.` : "No finite retirement target solves this path."}</h2>
-          <p>{targetAmount === 0 && targetIsSolvable
-            ? `${missionLabel} works under the selected assumptions. Add a dated goal if you want a bigger mission.`
+          <p>{!selectedMission
+            ? "Select a valid mission before Life Lab calculates any routes."
+            : targetAmount === 0
+            ? `${missionLabel} has no remaining capital target. No $0 route cards are shown.`
             : targetIsSolvable && (targetCustomized || deadlineCustomized)
             ? `Custom math mode. The plan-calculated target is ${currency(planTarget)} by ${readableDate(defaultDeadline)}. Every route below now uses your edited number and date.`
             : targetIsSolvable
@@ -202,11 +229,11 @@ export function DriveCalculator({
           <label>
             Mission
             <select value={missionKey} onChange={(event) => setMissionKey(event.target.value)}>
-              <option value="freedom">Age {path.target_age} work optional · {path.path_label}</option>
-              {goals.filter((goal) => goal.enabled).map((goal) => <option key={goal.id} value={`goal-${goal.id}`}>{goal.name}</option>)}
+              <option value="">Choose a mission</option>
+              {missionOptions.map((option) => <option key={option.key} value={option.key}>{option.label}{option.funded ? " · funded" : ""}</option>)}
             </select>
           </label>
-          <label>
+          {selectedMission && <label>
             Build / exit deadline
             <input
               type="date"
@@ -215,21 +242,27 @@ export function DriveCalculator({
               onInput={(event) => setDeadline(event.currentTarget.value)}
               onChange={(event) => setDeadline(event.target.value)}
             />
-          </label>
-          <label>
+          </label>}
+          {selectedMission && <label>
             Capital target
             <input type="number" min="0" step="1000" value={targetAmount} onChange={(event) => setTargetAmount(Math.max(0, Number(event.target.value)))} />
-          </label>
+          </label>}
         </div>
       </header>
 
-      {!selectedGoal && preRetirementShortfall && (
+      {selectedMission?.kind === "work_optional" && preRetirementShortfall && (
         <aside className="drive-prerequisite">
           <strong>Separate runway problem · {readableDate(preRetirementShortfall)}</strong>
           <span>Your current cash flow breaks before age {path.target_age}. That does not shorten the retirement math above. Solve it separately; the full-path recurring-income fix is {currency(Number(path.make_it_happen.additional_monthly_after_tax_income ?? 0))}/month after tax.</span>
         </aside>
       )}
 
+      {selectedMission && targetAmount > 0 && months > 0 && <>
+      <p className="route-convention-label">Life Lab route · {months} whole-month intervals · {readableDate(projection.as_of)} to {readableDate(deadline)}</p>
+      <details className="route-time-evidence">
+        <summary>Life Lab whole-month convention</summary>
+        <p>The linear route uses exactly {months} whole month intervals from {readableDate(projection.as_of)} to {readableDate(deadline)}. This is an independent experimental route convention, not the operational Goal&apos;s inclusive actual-calendar fractional-month pace.</p>
+      </details>
       <div className="drive-routes">
         <article className="drive-route cash-route">
           <span className="route-number">01 · Earn it linearly</span>
@@ -277,6 +310,8 @@ export function DriveCalculator({
           <small>Arithmetic only; this is not approval, eligibility, advice, or a borrowing action. Money Map’s retirement total is not proof that the plan permits a loan or that every dollar is eligible and vested. General-purpose loans are normally limited to five years; leaving the employer can trigger a plan offset or taxable distribution. <a href="https://www.irs.gov/retirement-plans/retirement-plans-faqs-regarding-loans" target="_blank" rel="noreferrer">Current IRS boundary</a>.</small>
         </article>
       </div>
+      </>}
+      {selectedMission && targetAmount > 0 && months === 0 && <p className="drive-prerequisite">Choose a deadline after {readableDate(projection.as_of)} to calculate route formulas.</p>}
     </section>
   );
 }

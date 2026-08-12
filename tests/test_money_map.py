@@ -271,7 +271,7 @@ def test_bank_review_distinguishes_same_day_timing_from_loan_accrual(
     loan = Account(
         institution_id=institution.id,
         external_key="loan",
-        display_name="Personal loan",
+        display_name="SoFi Personal Loan",
         account_type="loan",
     )
     session.add_all([checking, loan])
@@ -297,14 +297,14 @@ def test_bank_review_distinguishes_same_day_timing_from_loan_accrual(
                 artifact_id=artifact.id,
                 snapshot_date=date(2026, 7, 1),
                 kind="opening",
-                amount=Decimal("10000.00"),
+                amount=Decimal("46071.56"),
             ),
             BalanceSnapshot(
                 account_id=loan.id,
                 artifact_id=artifact.id,
                 snapshot_date=date(2026, 7, 31),
                 kind="closing",
-                amount=Decimal("10014.41"),
+                amount=Decimal("43918.05"),
             ),
             AccountTransaction(
                 account_id=checking.id,
@@ -335,7 +335,11 @@ def test_bank_review_distinguishes_same_day_timing_from_loan_accrual(
     review = exceptions(session)
     assert len(review) == 1
     assert review[0]["entity_id"] == str(loan.id)
-    assert review[0]["residual"] == "-14.41"
+    assert review[0]["residual"] == "2153.51"
+    assert review[0]["details"]["account_name"] == "SoFi Personal Loan"
+    assert review[0]["details"]["opening_balance"] == "46071.56"
+    assert review[0]["details"]["expected_closing_balance"] == "46071.56"
+    assert review[0]["details"]["closing_balance"] == "43918.05"
     assert review[0]["details"]["likely_cause"] == "interest_or_balance_adjustment"
     assert len(review[0]["details"]["next_steps"]) == 3
 

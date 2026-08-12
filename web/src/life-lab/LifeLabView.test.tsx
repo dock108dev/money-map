@@ -8,12 +8,16 @@ import {
   labResult,
   labSeed,
   legacySnapshot,
+  lifeProjection,
   promotionApplied,
   promotionPreview,
   retirementProfile,
+  retirementPath,
   retirementSnapshot,
 } from "../retirement/test-fixtures";
-import { exitMath, loanMath, weeklySprint } from "./DriveCalculator";
+import { DriveCalculator, exitMath, loanMath, weeklySprint, wholeMonthIntervals } from "./DriveCalculator";
+import type { LifeGoal } from "./life-lab-types";
+import { availableMissionOptions, initialMissionKey } from "./mission-selection";
 import LifeLabView from "./LifeLabView";
 
 const json = (value: unknown, status = 200) =>
@@ -97,6 +101,9 @@ describe("isolated Life Lab", () => {
     await start(kind);
     expect(screen.getByRole("heading", { name: source })).toBeInTheDocument();
     expect(screen.getByText("Isolated experiment")).toBeInTheDocument();
+    if (kind === "current goal") {
+      expect(screen.getByText("Life Lab route convention · 51 whole-month intervals")).toBeInTheDocument();
+    }
     fireEvent.click(screen.getByText("Source evidence"));
     expect(screen.getByText(copyText)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("goal_mutation=false");
@@ -120,7 +127,8 @@ describe("isolated Life Lab", () => {
     fireEvent.change(within(missionDialog).getByLabelText("Mission capital"), { target: { value: "2000000.00" } });
     fireEvent.click(within(missionDialog).getByRole("button", { name: "Save experiment" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit experiment" })).not.toBeInTheDocument());
-    fireEvent.click(screen.getByText("Explore paths"));
+    fireEvent.click(screen.getByText("Route formulas and time convention"));
+    fireEvent.change(screen.getByLabelText("Mission"), { target: { value: "freedom" } });
     expect(screen.getByText(/01 · Earn it linearly/)).toBeInTheDocument();
     expect(screen.getByText(/02 · Compound sprint/)).toBeInTheDocument();
     expect(screen.getByText(/03 · Build it and sell it/)).toBeInTheDocument();
@@ -218,5 +226,100 @@ describe("Life Lab arithmetic helpers", () => {
     expect(sprint.assumed_annualized_pct).toBeCloseTo(59.35, 2);
     expect(exitMath(1000000, 20, 30, 5).companyExit).toBeCloseTo(7142857.14, 1);
     expect(loanMath(547426, 0, 0, 8.5, 5).newLoan).toBe(50000);
+  });
+
+  it("uses the exact independent whole-month interval convention", () => {
+    expect(wholeMonthIntervals("2026-08-10", "2030-11-18")).toBe(51);
+  });
+});
+
+function missionGoal(overrides: Partial<LifeGoal> = {}): LifeGoal {
+  return {
+    id: 1,
+    profile_id: 0,
+    name: "Unfinished current mission",
+    target_date: "2030-11-18",
+    target_amount: "1000000.00",
+    reserved_amount: "0.00",
+    annual_cost: "0.00",
+    priority: "required",
+    enabled: true,
+    notes: "Synthetic mission",
+    created_at: "2026-08-10T12:00:00Z",
+    updated_at: "2026-08-10T12:00:00Z",
+    provenance: "user_entered",
+    ...overrides,
+  };
+}
+
+describe("Life Lab mission-selection policy", () => {
+  it("prefers the seeded unfinished current Goal without relying on source order", () => {
+    const funded = missionGoal({ id: 2, name: "Funded first", target_amount: "500.00", reserved_amount: "500.00" });
+    const current = missionGoal({ id: 3, name: "Seeded current Goal" });
+    const unrelated = missionGoal({ id: 4, name: "Unrelated projection goal" });
+    const options = availableMissionOptions([funded, unrelated, current], retirementPath());
+    expect(initialMissionKey({ seedKind: "current_goal", seededGoalLabel: "Seeded current Goal", options })).toBe("goal-3");
+  });
+
+  it("auto-selects only one valid unfinished current-goal mission and rejects funded, disabled, invalid, blank, and Retirement defaults", () => {
+    const unfinished = missionGoal();
+    const funded = missionGoal({ id: 2, target_amount: "500.00", reserved_amount: "500.00" });
+    const disabled = missionGoal({ id: 3, enabled: false });
+    const invalid = missionGoal({ id: 4, target_amount: "not-money" });
+    const options = availableMissionOptions([funded, disabled, invalid, unfinished], retirementPath());
+    expect(options.map((option) => option.key)).toEqual(["freedom", "goal-2", "goal-1"]);
+    expect(initialMissionKey({ seedKind: "current_goal", seededGoalLabel: null, options })).toBe("goal-1");
+    expect(initialMissionKey({ seedKind: "blank", seededGoalLabel: null, options })).toBe("");
+    expect(initialMissionKey({ seedKind: "retirement_result", seededGoalLabel: null, options })).toBe("");
+    const fundedOnly = availableMissionOptions([funded], retirementPath());
+    expect(initialMissionKey({ seedKind: "current_goal", seededGoalLabel: "Funded first", options: fundedOnly })).toBe("");
+  });
+});
+
+describe("Life Lab mission route states", () => {
+  const baseProps = {
+    projection: lifeProjection,
+    path: retirementPath(),
+    startingPoint: lifeProjection.starting_point,
+    seededGoalLabel: null,
+  };
+
+  it("requires explicit selection for blank seeds, hides $0 routes, and renders all formulas only for positive capital", async () => {
+    const funded = missionGoal({ id: 2, name: "Already funded", target_amount: "500.00", reserved_amount: "500.00" });
+    const positive = missionGoal({ id: 3, name: "Positive mission" });
+    render(<DriveCalculator {...baseProps} goals={[funded, positive]} seedKind="blank" selectionContext="experiment-a" />);
+    expect(screen.getByRole("heading", { name: "Choose a mission" })).toBeInTheDocument();
+    expect(screen.queryByText(/01 · Earn it linearly/)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Mission"), { target: { value: "goal-2" } });
+    expect(await screen.findByRole("heading", { name: "This mission is funded." })).toBeInTheDocument();
+    expect(screen.getByText(/No \$0 route cards are shown/)).toBeInTheDocument();
+    expect(screen.queryByText(/01 · Earn it linearly/)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Mission"), { target: { value: "goal-3" } });
+    expect(await screen.findByText(/01 · Earn it linearly/)).toBeInTheDocument();
+    expect(screen.getByText(/02 · Compound sprint/)).toBeInTheDocument();
+    expect(screen.getByText(/03 · Build it and sell it/)).toBeInTheDocument();
+    expect(screen.getByText(/04 · 401\(k\) fuel/)).toBeInTheDocument();
+  });
+
+  it("labels the accepted 51-whole-month comparison and keeps the full convention in named evidence", () => {
+    const current = missionGoal({ name: "Seeded current Goal" });
+    render(<DriveCalculator {...baseProps} goals={[current]} seedKind="current_goal" seededGoalLabel="Seeded current Goal" selectionContext="current-goal-a" />);
+    expect(screen.getByText(/51 whole-month intervals/)).toHaveTextContent("Aug 10, 2026 to Nov 18, 2030");
+    const evidence = screen.getByText("Life Lab whole-month convention").closest("details");
+    expect(evidence).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("Life Lab whole-month convention"));
+    expect(screen.getByText(/independent experimental route convention/)).toHaveTextContent("not the operational Goal's inclusive actual-calendar fractional-month pace");
+  });
+
+  it("resets an explicit mission when the experiment, path, projection, or available mission context changes", async () => {
+    const goals = [missionGoal()];
+    const view = render(<DriveCalculator {...baseProps} goals={goals} seedKind="blank" selectionContext="experiment-a" />);
+    fireEvent.change(screen.getByLabelText("Mission"), { target: { value: "goal-1" } });
+    expect(await screen.findByText(/01 · Earn it linearly/)).toBeInTheDocument();
+    view.rerender(<DriveCalculator {...baseProps} path={retirementPath("rough")} goals={goals} seedKind="blank" selectionContext="experiment-b" />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Choose a mission" })).toBeInTheDocument());
+    expect(screen.queryByText(/01 · Earn it linearly/)).not.toBeInTheDocument();
   });
 });

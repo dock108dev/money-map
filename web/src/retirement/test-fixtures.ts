@@ -150,11 +150,24 @@ export const lifeProjection: LifeProjection = {
 export function retirementRun(
   status: RetirementProjectionResult["bridge_verdict"] = "works",
   included = false,
+  overrides: Partial<Omit<PathResult, "end_assets" | "make_it_happen">> & {
+    end_assets?: PathResult["end_assets"];
+    make_it_happen?: Partial<PathResult["make_it_happen"]>;
+  } = {},
 ): RetirementProjectionResult {
-  const selected = retirementPath(
+  const base = retirementPath(
     status === "works_essentials_only" ? "rough" : status === "insufficient_accessible_bridge" ? "early_crash" : "middle",
     status,
   );
+  const selected: PathResult = {
+    ...base,
+    ...overrides,
+    end_assets: { ...base.end_assets, ...overrides.end_assets },
+    make_it_happen: { ...base.make_it_happen, ...overrides.make_it_happen },
+  };
+  if (status === "insufficient_accessible_bridge" && overrides.make_it_happen?.pre_retirement_shortfall_month === undefined) {
+    selected.make_it_happen.pre_retirement_shortfall_month = null;
+  }
   const projection = { ...lifeProjection, results: [{ target_age: 43, paths: lifeProjection.results[0].paths.map((row) => row.path_key === selected.path_key ? selected : row) }] };
   return {
     run_selection: {
@@ -182,13 +195,28 @@ export function retirementRun(
     bridge_verdict: status,
     accessible_assets_at_work_stop: "100000.00",
     retirement_assets_at_work_stop: "650000.00",
-    end_spendable_assets: "410000.00",
+    end_spendable_assets: selected.end_assets.total_spendable as RetirementProjectionResult["end_spendable_assets"],
     required_money_runway_months: status === "works" ? null : 48,
     warnings: lifeProjection.warnings,
     selected_result: selected as unknown as Record<string, unknown>,
     projection: projection as unknown as Record<string, unknown>,
   };
 }
+
+export const retainedAssetsRegressionRun = retirementRun("shortfall", false, {
+  first_shortfall_month: "2028-06-01",
+  end_assets: {
+    cash: "10000.00",
+    accessible_investments: "120000.00",
+    pretax_retirement: "1300000.00",
+    total_spendable: "1170000.00",
+  },
+  make_it_happen: { pre_retirement_shortfall_month: "2028-06-01" },
+  periods: [
+    period("2026-08-01", 427, true, "400000.00"),
+    period("2085-01-01", 1128, false, "1170000.00"),
+  ],
+});
 
 export const retirementSnapshot: PlanningSnapshot = {
   id: 11,
@@ -199,7 +227,7 @@ export const retirementSnapshot: PlanningSnapshot = {
   target_age: 43,
   path_key: "middle",
   status: "works",
-  summary: {}, input_snapshot: {}, warnings: [],
+  summary: Object.fromEntries(Object.entries(retirementPath()).filter(([key]) => key !== "periods")), input_snapshot: {}, warnings: [],
   engine_version: "life-lab-v0.3.0", assumption_version: "life-lab-drive-paths-v3", benchmark_version: "benchmark-v1",
   source_fingerprint: "d".repeat(64), stale: false, created_at: "2026-08-10T12:00:00Z", periods: lifeProjection.results[0].paths[0].periods as unknown as Array<Record<string, unknown>>,
 };
@@ -215,6 +243,21 @@ export const legacySnapshot: PlanningSnapshot = {
 };
 
 export function labSeed(kind: LabExperimentSeedKind = "blank"): LifeLabExperimentSeed {
+  const copiedGoal = {
+    id: 7,
+    profile_id: 0,
+    name: goalProgram.name,
+    target_date: "2030-11-18",
+    target_amount: "1000000.00",
+    reserved_amount: "0.00",
+    annual_cost: "0.00",
+    priority: "required" as const,
+    enabled: true,
+    notes: "Copied current GoalProgram snapshot",
+    created_at: "2026-08-10T12:00:00Z",
+    updated_at: "2026-08-10T12:00:00Z",
+    provenance: "user_entered" as const,
+  };
   return {
     experiment_id: `lab-${kind}`,
     seed_kind: kind,
@@ -224,8 +267,8 @@ export function labSeed(kind: LabExperimentSeedKind = "blank"): LifeLabExperimen
     draft: {
       profile: lifeProjection.profile,
       starting_point: lifeProjection.starting_point,
-      goals: lifeProjection.goals,
-      mission: { target_amount: "1000000.00", target_date: "2034-01-01", selected_age: 43, path: "middle", starting_stake: "5000.00" },
+      goals: kind === "current_goal" ? [copiedGoal] : lifeProjection.goals,
+      mission: { target_amount: "1000000.00", target_date: kind === "current_goal" ? "2030-11-18" : "2034-01-01", selected_age: 43, path: "middle", starting_stake: "5000.00" },
       promotable_values: { goal_target: "14000.00", retirement_essential_monthly_spend: "4000.00" },
     },
     experiment_fingerprint: "e".repeat(64),
@@ -236,13 +279,14 @@ export function labSeed(kind: LabExperimentSeedKind = "blank"): LifeLabExperimen
 }
 
 export function labResult(seed = labSeed()): LifeLabExperimentResult {
+  const projection = { ...lifeProjection, goals: seed.draft.goals as LifeProjection["goals"] };
   return {
     experiment_id: seed.experiment_id,
     experiment_fingerprint: seed.experiment_fingerprint,
     seed_kind: seed.seed_kind,
     snapshot_context: seed.seed_kind === "blank" ? "lab_blank" : seed.seed_kind === "current_goal" ? "lab_current_goal" : "lab_retirement_result",
     draft: seed.draft,
-    projection: lifeProjection as unknown as Record<string, unknown>,
+    projection: projection as unknown as Record<string, unknown>,
     reverse_solver: { mission_capital: "1000000.00", selected_result: retirementPath() },
     snapshot_context_evidence: {},
     edit_scope: "isolated_draft",

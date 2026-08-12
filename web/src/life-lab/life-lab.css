@@ -256,10 +256,13 @@
 .lab-mission-summary { padding: 21px 22px; }
 .lab-mission-summary > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .lab-mission-summary h2 { margin: 6px 0 0; font-family: Georgia, serif; font-size: clamp(28px, 4vw, 40px); font-weight: 500; }
+.lab-summary-convention { color: var(--green); font-size: 11px; font-weight: 750; letter-spacing: .02em; }
 .lab-mission-summary dl { margin: 14px 0 0; display: flex; gap: 10px; }
 .lab-mission-summary dl div { min-width: 150px; padding: 10px 12px; border-radius: 9px; background: #f1f4f1; }
 .lab-mission-summary dt { color: var(--muted); font-size: 9px; }
 .lab-mission-summary dd { margin: 4px 0 0; font-weight: 700; text-transform: capitalize; }
+.lab-primary-result { border-color: #bad6c8; background: linear-gradient(135deg, #f4faf6, #ffffff); }
+.lab-primary-result h2 + p { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
 .lab-reverse-summary { display: grid; grid-template-columns: minmax(180px, auto) 1fr; align-items: center; gap: 5px 24px; }
 .lab-reverse-summary > span { grid-column: 1 / -1; color: #b8d5c8; }
 .lab-reverse-summary h2 { margin: 0; }
@@ -268,6 +271,10 @@
 .lab-paths > summary { cursor: pointer; padding: 18px 22px; font-weight: 800; }
 .lab-paths[open] > summary { border-bottom: 1px solid var(--line); }
 .lab-paths > .drive-panel { border: 0; border-radius: 0; box-shadow: none; }
+.route-convention-label { margin: 0; padding: 12px 22px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #315e4d; background: #eef6f1; font-size: 11px; font-weight: 800; }
+.route-time-evidence { margin: 12px 22px 0; padding: 10px 12px; border: 1px solid #d9e2dc; border-radius: 9px; background: #fafcfb; }
+.route-time-evidence summary { cursor: pointer; font-size: 11px; font-weight: 800; }
+.route-time-evidence p { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .lab-primary-actions { display: flex; gap: 10px; }
 .lab-primary-actions button { width: auto; min-height: 44px; margin: 0; }
 .boundary-action { border-left: 5px solid #d88f79; }

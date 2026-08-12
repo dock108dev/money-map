@@ -108,10 +108,12 @@ from any investment account's detail view.
 
 ## Main views
 
-- **Goals:** the default return loop for closer/same/farther, the distinct financial change,
+- **Cash Flow:** the default frequent-use loop for the selected period, recurring baseline,
+  current goal gap, and one next action
+- **Goals:** supporting planning for closer/same/farther, the distinct financial change,
   and one binding milestone
-- **Retirement:** separate deterministic work-optional and accessible-bridge projections
-- **Life Lab:** isolated alternative-path experiments with explicit reviewed promotion
+- **Retirement:** an occasional deterministic solvency and accessible-bridge view
+- **Life Lab:** an optional isolated experiment with explicit reviewed promotion
 - **Overview:** net worth, trailing 12 complete months, paycheck flow, and monthly history
 - **Accounts:** any connected bank, loan, or investment account with generic drill-down
 - **Income:** all 42 completed paychecks from 2025-01-01 through 2026-07-29
@@ -121,7 +123,7 @@ from any investment account's detail view.
 
 ## Life Lab
 
-Open **Plan** and enter only the assumptions Money Map cannot observe: date of birth,
+Open **Life Lab** only when you want an isolated experiment, then enter the assumptions Money Map cannot observe: date of birth,
 state, essential and flexible monthly life, a protected cash floor, a visible pretax
 withdrawal haircut, and any work-optional ages you want to test. Ages are ordinary
 inputs rather than named templates.

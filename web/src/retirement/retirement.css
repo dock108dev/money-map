@@ -14,6 +14,7 @@
 .retirement-verdict { margin-top: 18px; padding: 20px; border-radius: 15px; display: grid; grid-template-columns: minmax(230px, .8fr) minmax(450px, 1.5fr); gap: 20px; background: #edf8f2; border: 1px solid #c7e1d4; }
 .retirement-verdict.essentials { background: #fff7e9; border-color: #ead8b7; }
 .retirement-verdict.bridge, .retirement-verdict.shortfall { background: #fff0f1; border-color: #e8c4c8; }
+.retirement-verdict.unavailable { background: #f2f4f3; border-color: #d8ddda; }
 .retirement-verdict h2 { margin: 4px 0; font-family: Georgia, serif; font-size: clamp(28px, 4vw, 43px); font-weight: 500; }
 .retirement-verdict p { margin: 0 0 10px; font-size: 12px; }
 .retirement-goal-state { display: block; font-size: 11px; }
@@ -58,9 +59,12 @@
 .show-older-button { width: fit-content; margin: 12px 22px 0; }
 .retirement-stored-evidence { margin: 14px 22px 0; padding: 14px; border-radius: 12px; background: #f1f4f2; }
 .retirement-stored-evidence p { margin: 5px 0; }
-.retirement-stored-evidence dl { display: flex; gap: 20px; }
+.retirement-stored-evidence dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
 .retirement-stored-evidence dd { margin: 3px 0 0; }
 .retirement-stored-evidence code { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.stored-retirement-outcome { margin: 12px 0; padding: 11px 12px; border-radius: 9px; background: #e5f3eb; }
+.stored-retirement-outcome.bridge, .stored-retirement-outcome.shortfall { background: #f8e7e9; }
+.stored-retirement-outcome.unavailable { background: #e8ecea; }
 .retirement-sheet { width: min(880px, 100%); }
 .retirement-profile-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
 .retirement-profile-form label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }

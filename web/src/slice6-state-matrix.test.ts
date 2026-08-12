@@ -8,9 +8,11 @@ import {
 
 describe("Slice 6 state-matrix contract", () => {
   it("commits every required synthetic state without duplicate labels", () => {
+    expect(slice6StateMatrix.navigation).toHaveLength(6);
     expect(slice6StateMatrix.goals).toHaveLength(12);
     expect(slice6StateMatrix.retirement).toHaveLength(9);
-    expect(slice6StateMatrix.lab).toHaveLength(9);
+    expect(slice6StateMatrix.lab).toHaveLength(13);
+    expect(slice6StateMatrix.presentation).toHaveLength(7);
     expect(slice6StateMatrix.moneyUtilities).toHaveLength(7);
     for (const states of Object.values(slice6StateMatrix)) {
       expect(new Set(states).size).toBe(states.length);

@@ -278,9 +278,27 @@ describe("application states", () => {
     await screen.findByRole("heading", { name: "Cash Flow" });
     const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
     expect(Array.from(navigation.querySelectorAll("button")).map((button) => button.getAttribute("aria-label")?.replace(/, \d+ issues$/u, ""))).toEqual([
-      "Cash Flow", "Goals", "Accounts", "Income", "Activity", "Wealth", "Retirement", "Lab", "Add account", "Review",
+      "Cash Flow", "Goals", "Activity", "Accounts", "Income", "Wealth", "Retirement", "Lab", "Add account", "Review",
     ]);
+    expect(within(screen.getByRole("group", { name: "Everyday" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Cash Flow", "Goals", "Activity"]);
+    expect(within(screen.getByRole("group", { name: "Details" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Accounts", "Income", "Wealth"]);
+    expect(within(screen.getByRole("group", { name: "Planning" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Retirement", "Lab"]);
+    expect(within(screen.getByRole("group", { name: "Data" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Add account", "Review, 2 issues"]);
     expect(screen.getByRole("button", { name: "Review, 2 issues" })).toHaveTextContent("Review2");
+  });
+
+  it("reveals an active mobile item and keeps every grouped route reachable", async () => {
+    const reveal = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: reveal });
+    vi.stubGlobal("fetch", workingFetch(false, 2, { issues: [{ id: 1 }] }));
+    render(<App />);
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    const expectedRoutes = ["Cash Flow", "Goals", "Activity", "Accounts", "Income", "Wealth", "Retirement", "Lab", "Add account", "Review, 1 issues"];
+    for (const name of expectedRoutes) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Accounts" }));
+    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    await waitFor(() => expect(reveal).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Accounts" })).toHaveAttribute("aria-current", "page");
   });
 
   it("preserves the plaid setup hash route", async () => {

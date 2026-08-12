@@ -18,6 +18,7 @@ import {
   saveRetirementSnapshot,
   type PlanningSnapshot,
 } from "./api";
+import { classifyRetirementRun, classifyRetirementSnapshot } from "./retirement-presentation";
 import "./retirement.css";
 
 function currency(value: string | null | undefined) {
@@ -29,11 +30,12 @@ function currency(value: string | null | undefined) {
   });
 }
 
-function verdict(status: RetirementProjectionResult["bridge_verdict"]) {
-  if (status === "works") return { title: "Works", detail: "Essential and flexible retirement life stays funded.", next: "Save this run if you want a durable checkpoint.", tone: "works" };
-  if (status === "works_essentials_only") return { title: "Essentials hold", detail: "Flexible retirement spending runs short.", next: "Test another age, path, or assumption.", tone: "essentials" };
-  if (status === "insufficient_accessible_bridge") return { title: "Bridge breaks", detail: "Accessible money runs out before retirement assets can carry the plan.", next: "Test another age, path, or assumption.", tone: "bridge" };
-  return { title: "Shortfall", detail: "Required retirement spending cannot remain funded.", next: "Test another age, path, or assumption.", tone: "shortfall" };
+function readableDate(value: string | null) {
+  if (!value) return "Supported through plan";
+  return new Date(`${value}T12:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function recentFirst(snapshots: PlanningSnapshot[]) {
@@ -157,7 +159,8 @@ export default function RetirementView() {
   const projection = run?.projection as unknown as LifeProjection | undefined;
   const target = projection?.results.find((row) => row.target_age === selectedAge);
   const path = target?.paths.find((row) => row.path_key === selectedPath) as PathResult | undefined;
-  const status = run ? verdict(run.bridge_verdict) : null;
+  const status = run ? classifyRetirementRun(run) : null;
+  const storedStatus = openedSnapshot ? classifyRetirementSnapshot(openedSnapshot) : null;
   const search = snapshotSearch.trim().toLocaleLowerCase();
   const filteredSnapshots = snapshots.filter(
     (snapshot) => !search || `${snapshot.name} ${snapshot.context_label}`.toLocaleLowerCase().includes(search),
@@ -198,6 +201,7 @@ export default function RetirementView() {
             <dl>
               <div><dt>Accessible at work stop</dt><dd>{currency(run.accessible_assets_at_work_stop)}</dd></div>
               <div><dt>Retirement at work stop</dt><dd>{currency(run.retirement_assets_at_work_stop)}</dd></div>
+              <div><dt>First unsupported month</dt><dd>{readableDate(status.firstUnsupportedMonth)}</dd></div>
               <div><dt>End spendable assets</dt><dd>{currency(run.end_spendable_assets)}</dd></div>
               <div><dt>Required-money runway</dt><dd>{run.required_money_runway_months === null ? "Through plan" : `${run.required_money_runway_months} month${run.required_money_runway_months === 1 ? "" : "s"}`}</dd></div>
             </dl>
@@ -249,7 +253,13 @@ export default function RetirementView() {
           <article className="retirement-stored-evidence">
             <h3>{openedSnapshot.name}</h3>
             <p>Stored snapshot · original result with {openedSnapshot.periods.length} monthly rows.</p>
-            <dl><div><dt>Context</dt><dd>{openedSnapshot.context_label}</dd></div><div><dt>Status</dt><dd>{openedSnapshot.status}</dd></div></dl>
+            {storedStatus && <div className={`stored-retirement-outcome ${storedStatus.tone}`}><strong>{storedStatus.title}</strong><p>{storedStatus.detail}</p></div>}
+            <dl>
+              <div><dt>Context</dt><dd>{openedSnapshot.context_label}</dd></div>
+              <div><dt>First unsupported month</dt><dd>{readableDate(storedStatus?.firstUnsupportedMonth ?? null)}</dd></div>
+              <div><dt>Required-money runway</dt><dd>{storedStatus?.requiredMoneyRunwayMonths === null || storedStatus?.requiredMoneyRunwayMonths === undefined ? "Through plan or unavailable" : `${storedStatus.requiredMoneyRunwayMonths} months`}</dd></div>
+              <div><dt>End spendable assets</dt><dd>{currency(storedStatus?.endSpendableAssets)}</dd></div>
+            </dl>
             {openedSnapshot.warnings.length > 0 && <ul>{openedSnapshot.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
             <code>{openedSnapshot.source_fingerprint}</code>
           </article>
