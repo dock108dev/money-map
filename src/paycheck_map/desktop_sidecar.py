@@ -11,6 +11,7 @@ from pathlib import Path
 
 import uvicorn
 
+from paycheck_map.data_home import DataHomePaths
 from paycheck_map.desktop_lock import WriterLock
 
 
@@ -30,8 +31,18 @@ def _synthetic_root() -> Path:
     return root
 
 
+def _desktop_root() -> Path:
+    mode = os.environ.get("PAYCHECK_MAP_DESKTOP_DATA_MODE")
+    if mode == "disposable-synthetic":
+        return _synthetic_root()
+    if mode in {"production-v1", "acceptance-synthetic-v1"}:
+        paths = DataHomePaths.from_trusted_environment()
+        return paths.application
+    raise RuntimeError("Desktop data mode is required")
+
+
 def main() -> None:
-    root = _synthetic_root()
+    root = _desktop_root()
     if os.environ.get("PAYCHECK_MAP_DESKTOP_MODE") != "true":
         raise RuntimeError("Desktop mode is required")
     if not os.environ.get("PAYCHECK_MAP_DESKTOP_SESSION"):
@@ -41,7 +52,8 @@ def main() -> None:
     )
     if delay_ms:
         time.sleep(delay_ms / 1000)
-    root.mkdir(parents=True, exist_ok=True)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    root.chmod(0o700)
     with WriterLock(root):
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

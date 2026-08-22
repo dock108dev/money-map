@@ -58,3 +58,10 @@ CPI periods, normalization factor, and artifact version travel with the data.
 - Restore validates integrity and keeps a pre-restore backup.
 - The trailing-12 report is deterministic for unchanged data and remains under
   `.local/reports/`.
+
+The packaged macOS runtime replaces repository `.local` with the centralized
+`money-map-macos-data-home-v1` provider: Application Support owns data/inbox/reports/backups/
+migration/state, while macOS Cache and Logs remain distinct. Tauri resolves those roots and Python
+alone owns SQLite initialization, online backup, staging migration, manifest validation, atomic
+activation, restore, and digest-only recovery state. Repository-mode CLI behavior remains available
+for development and does not become a packaged-runtime fallback.

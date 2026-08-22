@@ -16,10 +16,21 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8765
     desktop_mode: bool = False
+    desktop_data_mode: str | None = None
+    desktop_app_root: Path | None = None
+    desktop_cache_root: Path | None = None
+    desktop_log_root: Path | None = None
     desktop_test_project_root: Path | None = None
 
     @property
     def private_dir(self) -> Path:
+        if self.desktop_mode and self.desktop_data_mode in {
+            "production-v1",
+            "acceptance-synthetic-v1",
+        }:
+            if self.desktop_app_root is None:
+                raise RuntimeError("The trusted desktop application-data root is required")
+            return self.desktop_app_root
         return self.local_dir or self.project_root / ".local"
 
     @property

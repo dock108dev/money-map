@@ -1,5 +1,5 @@
 {
-  "contract": "money-map-desktop-runtime-v2",
+  "contract": "money-map-desktop-runtime-v3",
   "python": {
     "entrypoint": "paycheck_map.desktop_sidecar:main",
     "package": "src/paycheck_map",
@@ -10,7 +10,7 @@
       "paycheck_map.api", "paycheck_map.app", "paycheck_map.balances",
       "paycheck_map.business_time", "paycheck_map.cash_flow_service",
       "paycheck_map.cash_months", "paycheck_map.cli", "paycheck_map.config",
-      "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_lock", "paycheck_map.desktop_sidecar",
+      "paycheck_map.data_home", "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_data_api", "paycheck_map.desktop_lock", "paycheck_map.desktop_sidecar",
       "paycheck_map.forecasting", "paycheck_map.goal_gap_service",
       "paycheck_map.goal_observation", "paycheck_map.goal_operations",
       "paycheck_map.goal_service", "paycheck_map.ingestion", "paycheck_map.keychain",
@@ -42,7 +42,7 @@
   "approvedResources": ["config/contribution_limits.json"],
   "reportAndPrint": ["paycheck_map.reporting", "compiled React print CSS", "native WKWebView print panel"],
   "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore",
-  "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_SESSION"],
+  "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_SESSION"],
   "subprocesses": ["one supervised money-map-sidecar process group owned by the Tauri process"],
   "forbidden": [".local", "*.sqlite*", "statements", "reports", "backups", "credentials", "tokens", "source maps", "repository paths", "owner screenshots"]
 }

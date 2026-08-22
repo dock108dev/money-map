@@ -8,11 +8,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
-use tempfile::TempDir;
-
+use crate::data_home::DataHomePaths;
 use crate::lifecycle::{LifecycleMachine, LifecycleState};
 use crate::proxy::health_ready;
+use serde::Serialize;
 
 const READY_SIGNAL_TIMEOUT: Duration = Duration::from_secs(30);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(45);
@@ -46,8 +45,7 @@ struct RuntimeInner {
 pub struct RuntimeController {
     inner: Mutex<RuntimeInner>,
     operation: Mutex<()>,
-    data_parent: Mutex<Option<TempDir>>,
-    data_root: PathBuf,
+    paths: DataHomePaths,
     sidecar_path: PathBuf,
 }
 
@@ -64,12 +62,7 @@ enum ReadinessResult {
 }
 
 impl RuntimeController {
-    pub fn new(sidecar_path: PathBuf) -> Result<Arc<Self>, String> {
-        let data_parent = tempfile::Builder::new()
-            .prefix("money-map-runtime-")
-            .tempdir()
-            .map_err(|_| "Disposable runtime setup failed.".to_string())?;
-        let data_root = data_parent.path().join("money-map-synthetic-data");
+    pub fn new(sidecar_path: PathBuf, paths: DataHomePaths) -> Result<Arc<Self>, String> {
         Ok(Arc::new(Self {
             inner: Mutex::new(RuntimeInner {
                 lifecycle: LifecycleMachine::default(),
@@ -79,8 +72,7 @@ impl RuntimeController {
                 message: None,
             }),
             operation: Mutex::new(()),
-            data_parent: Mutex::new(Some(data_parent)),
-            data_root,
+            paths,
             sidecar_path,
         }))
     }
@@ -95,6 +87,10 @@ impl RuntimeController {
             generation: inner.lifecycle.generation(),
             message: inner.message,
         }
+    }
+
+    pub fn backup_root(&self) -> PathBuf {
+        self.paths.backup_root()
     }
 
     pub fn target(&self) -> Result<(u16, String), String> {
@@ -170,11 +166,6 @@ impl RuntimeController {
         let _ = inner.lifecycle.stopped();
         inner.message = None;
         drop(inner);
-        if let Ok(mut parent) = self.data_parent.lock() {
-            if let Some(parent) = parent.take() {
-                let _ = parent.close();
-            }
-        }
     }
 
     fn start_generation(self: &Arc<Self>, generation: u64) -> Result<RuntimeStatus, String> {
@@ -263,12 +254,23 @@ impl RuntimeController {
             .env_clear()
             .env("LC_ALL", "C")
             .env("PAYCHECK_MAP_DESKTOP_MODE", "true")
-            .env("PAYCHECK_MAP_DESKTOP_DATA_MODE", "disposable-synthetic")
-            .env("PAYCHECK_MAP_LOCAL_DIR", &self.data_root)
+            .env("PAYCHECK_MAP_DESKTOP_DATA_MODE", self.paths.mode)
+            .env("PAYCHECK_MAP_DESKTOP_APP_ROOT", &self.paths.application)
+            .env("PAYCHECK_MAP_DESKTOP_CACHE_ROOT", &self.paths.cache)
+            .env("PAYCHECK_MAP_DESKTOP_LOG_ROOT", &self.paths.logs)
+            .env("PAYCHECK_MAP_LOCAL_DIR", &self.paths.application)
             .env("PAYCHECK_MAP_DESKTOP_SESSION", session)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        if let Some(bundle_root) = self
+            .sidecar_path
+            .parent()
+            .and_then(|path| path.parent())
+            .and_then(|path| path.parent())
+        {
+            command.env("PAYCHECK_MAP_DESKTOP_BUNDLE_ROOT", bundle_root);
+        }
         if requested_generation("MONEY_MAP_RUNTIME_DELAY_GENERATION") == Some(generation) {
             if let Ok(delay) = std::env::var("MONEY_MAP_RUNTIME_DELAY_MS") {
                 command.env("PAYCHECK_MAP_DESKTOP_STARTUP_DELAY_MS", delay);
@@ -558,13 +560,20 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_explicitly_removes_the_owned_synthetic_parent() {
+    fn shutdown_preserves_the_persistent_data_home() {
+        let parent = tempfile::Builder::new()
+            .prefix("money-map-runtime-test-")
+            .tempdir_in("/private/tmp")
+            .unwrap();
+        let paths =
+            crate::data_home::DataHomePaths::from_home(parent.path(), "acceptance-synthetic-v1")
+                .unwrap();
         let controller =
-            super::RuntimeController::new("/missing/synthetic-sidecar".into()).unwrap();
-        let parent = controller.data_root.parent().unwrap().to_path_buf();
-        assert!(parent.is_dir());
+            super::RuntimeController::new("/missing/synthetic-sidecar".into(), paths.clone())
+                .unwrap();
         assert!(controller.start_initial().is_err());
         controller.shutdown();
-        assert!(!parent.exists());
+        assert!(parent.path().exists());
+        assert_eq!(controller.paths.application, paths.application);
     }
 }

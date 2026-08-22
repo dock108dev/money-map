@@ -183,3 +183,19 @@ Slice 1 is not complete until empty, all synthetic, and isolated-restored paths 
 and full tests; upgrade/downgrade/re-upgrade and injected-failure tests pass; manifests prove
 lossless v1.2.1 preservation; backups and restores verify; privacy scan passes; no active
 database was touched; and the repository is clean at one local checkpoint.
+
+## V3 macOS relocation contract
+
+V3 Slice 2 reuses the proven v2 logical-manifest and online-backup rules without changing schema or
+financial semantics. Relocation to Application Support is not a filesystem copy: even a current
+`0009_goal_persistence` source is opened read-only, backed up with SQLite's online API, verified,
+restored into an isolated same-filesystem staging database, compared logically, fsynced, and only
+then atomically activated. An older supported synthetic revision is upgraded only in staging and
+all of its pre-existing tables must equal the source manifest.
+
+The digest-only `money-map-recovery-journal-v1` persists each material phase. Before activation,
+restart resumes only a fully verified staging artifact. During replacement, the previous active
+database remains a rollback artifact until the new active digest is verified. After the activation
+rename, matching active bytes finalize the journal; a missing or mismatched active database exposes
+rollback rather than guessing. No recovery path reruns imports, refresh, payroll generation, Plaid,
+or corrective SQL.

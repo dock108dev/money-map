@@ -23,6 +23,7 @@ import {
 } from "./components";
 import CashFlowView from "./cash-flow/CashFlowView";
 import { openPlaidLink } from "./plaid-link";
+import DataHomePanel, { loadDataHomeStatus, type DataHomeStatus } from "./data-home";
 const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
 const RetirementView = lazy(() => import("./retirement/RetirementView"));
 const GoalsView = lazy(() => import("./goals/GoalsView"));
@@ -36,6 +37,8 @@ declare global {
       runtimeStatus(): Promise<DesktopRuntimeStatus>;
       restart(): Promise<DesktopRuntimeStatus>;
       about(): Promise<DesktopAboutInfo>;
+      selectImport(): Promise<DataHomeStatus | null>;
+      revealBackup(backupId: string): Promise<void>;
     };
   }
 }
@@ -89,6 +92,8 @@ export default function App() {
   const [desktopRuntime, setDesktopRuntime] = useState<DesktopRuntimeStatus | null>(() =>
     desktopMode ? { state: "starting", generation: 0 } : null,
   );
+  const [dataHome, setDataHome] = useState<DataHomeStatus | null>(null);
+  const [showDataHome, setShowDataHome] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>(() =>
     window.location.hash === "#plaid-live-setup"
@@ -142,8 +147,15 @@ export default function App() {
   }, [refresh]);
 
   useEffect(() => {
-    if (!desktopMode || desktopRuntime?.state === "ready") void refresh();
-  }, [desktopMode, desktopRuntime?.generation, desktopRuntime?.state, refresh]);
+    if (!desktopMode || (desktopRuntime?.state === "ready" && dataHome?.ready)) void refresh();
+  }, [dataHome?.ready, desktopMode, desktopRuntime?.generation, desktopRuntime?.state, refresh]);
+
+  useEffect(() => {
+    if (!desktopMode || desktopRuntime?.state !== "ready") return;
+    void loadDataHomeStatus()
+      .then(setDataHome)
+      .catch(() => setDataHome({ phase: "already_migrated", ready: true }));
+  }, [desktopMode, desktopRuntime?.generation, desktopRuntime?.state]);
 
   useEffect(() => {
     if (!desktopMode) return;
@@ -355,6 +367,10 @@ export default function App() {
     );
   }
 
+  if (desktopMode && dataHome && !dataHome.ready) {
+    return <DataHomePanel initial={dataHome} onStatus={setDataHome} />;
+  }
+
   if (error && !data) {
     return (
       <main className="fatal-state">
@@ -467,17 +483,10 @@ export default function App() {
                 <button
                   className="refresh-button"
                   type="button"
-                  onClick={() => document.getElementById("desktop-file-proof")?.click()}
+                  onClick={() => setShowDataHome(true)}
                 >
-                  Choose file
+                  Data safety
                 </button>
-                <input
-                  id="desktop-file-proof"
-                  aria-label="Choose a synthetic import file"
-                  type="file"
-                  accept=".csv,.json,.pdf"
-                  hidden
-                />
               </>
             )}
           </div>
@@ -543,6 +552,9 @@ export default function App() {
           )}
         </div>
       </main>
+      {showDataHome && dataHome && (
+        <DataHomePanel initial={dataHome} onStatus={setDataHome} onClose={() => setShowDataHome(false)} />
+      )}
     </div>
   );
 }

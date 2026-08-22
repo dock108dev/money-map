@@ -33,7 +33,7 @@ def test_runtime_inventory_is_complete_through_schema_head() -> None:
         for path in (root / "src" / "paycheck_map").rglob("*.py")
     }
     assert set(inventory["python"]["modules"]) == modules
-    assert inventory["contract"] == "money-map-desktop-runtime-v2"
+    assert inventory["contract"] == "money-map-desktop-runtime-v3"
     assert (root / "web" / "dist" / "index.html").is_file()
 
 

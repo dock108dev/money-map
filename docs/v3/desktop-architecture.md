@@ -1,7 +1,7 @@
 # Money Map v3 desktop architecture
 
-Status: frozen by Slice 0 and productionized by Slice 1 on 2026-08-21 for the Apple Silicon owner
-beta.
+Status: frozen by Slice 0, productionized by Slice 1, and extended with the accepted Slice 2
+macOS data-home and recovery contract on 2026-08-21 for the Apple Silicon owner beta.
 
 ## Decision
 
@@ -99,22 +99,67 @@ Responses are `no-store`. An ordinary browser does not possess the session, whil
 origin and a misleading host are rejected even if a session were supplied. The Python boundary
 also independently rejects non-API and traversal paths, unsupported methods, and oversized bodies.
 
-## Persistent storage contract for later slices
+## Persistent macOS storage contract
 
-Slice 0 never uses persistent owner state. Slice 2 must create these macOS-owned locations without
-changing their meaning:
+Slice 2 makes Tauri the one path provider. It derives the production home from the macOS user
+Library and passes only the resolved application, cache, and log roots through the cleared child
+environment. Python validates that trusted boundary again and remains the only SQLite process.
+Production launch accepts no repository or current-working-directory fallback. Signed synthetic
+acceptance uses a build-time-only fake-home value rooted below `/private/tmp`; ordinary production
+builds contain no runtime path override.
+
+The versioned `money-map-macos-data-home-v1` layout is:
 
 - application root: `~/Library/Application Support/Money Map/`
 - SQLite: `data/paycheck-map.sqlite3`
-- manual-import inbox: `inbox/`
+- manual-import inbox: `inbox/payroll/`, `inbox/sofi/`, and `inbox/fidelity/`
 - reports: `reports/`
-- backups and migration recovery material: `backups/`
+- verified SQLite backups: `backups/`
+- isolated staging and rollback material: `migration/`
+- digest-only recovery journal and backup catalog: `state/`
 - cache: `~/Library/Caches/com.moneymap.desktop/`
 - safe diagnostic logs: `~/Library/Logs/Money Map/`
 
 Only the Python sidecar opens SQLite. It remains the sole writer and retains exact decimals,
 provenance, reconciliation, goal, retirement, Life Lab, payroll-baseline, and read-only Plaid
 semantics. Runtime files are never written into the application bundle or repository.
+
+Every owned directory is mode `0700` and every accepted database/backup is mode `0600`. Existing
+symlinks in any root or artifact chain are rejected. Source/destination identity and hard links,
+app-bundle/repository relationships, non-approved backup parents, and cache/log/data overlap fail
+closed. Diagnostics contain safe codes and classifications only.
+
+## Initialization, migration, and recovery
+
+The durable state machine covers fresh setup, explicit candidate selection, read-only inspection,
+preview and confirmation, online backup, isolated restore, staging validation, optional packaged
+Alembic migration, logical-manifest validation, activation, completed/idempotent state,
+recoverable failure, resume, rollback, restore preview, restore, and completion.
+
+Fresh setup upgrades only a staging database through `0009_goal_persistence`, verifies integrity,
+foreign keys, schema, and its logical manifest, fsyncs the staged file and directory, then atomically
+renames it into the active data directory. It creates no financial rows.
+
+Existing-data import never scans. A native chooser sends the selected database directly from Rust
+to the authenticated Python boundary; the frontend receives only safe classification, revision,
+size, required space, and confirmation state. Inspection uses SQLite read-only/query-only mode and
+records no journal. Confirmation creates and verifies an online SQLite backup, restores that backup
+to isolated staging, upgrades only staging when required, compares every pre-existing logical
+domain, fsyncs, and activates only the verified result. The source identity and bytes are checked
+again after activation and the source is retained.
+
+Replacement keeps three distinct artifacts: the verified pre-replacement backup under `backups/`,
+the old accepted database as the rollback pointer under `migration/`, and the fully verified
+staging database. The old active file is atomically renamed to rollback, staging is atomically
+renamed active, the directory is fsynced, and post-activation digest/schema/manifest verification
+must pass before journal completion. Restart uses the journal and digests to choose exactly one of
+finalize, resume, or rollback.
+
+Manual backup uses SQLite's online backup API and verifies distinct inode, nonzero size, SHA-256,
+integrity, foreign keys, revision, and logical manifest before cataloging it. Restore re-verifies
+the chosen approved backup, creates and verifies a pre-restore safety backup, restores into staging,
+and uses the same replacement contract. Finder reveal accepts only a backend-verified catalog ID
+and a basename under the Tauri-resolved backup root.
 
 Plaid credentials and access tokens remain in macOS Keychain under versioned Money Map service
 names. They may be requested only by the Python boundary, must never enter SQLite, frontend
@@ -165,8 +210,8 @@ and it would mix shell and service responsibilities while providing a weaker pac
 
 ## Deferred risks
 
-- Slice 2: production Application Support paths, previewed owner-data migration, backup/restore,
-  atomic activation, and interruption recovery. No owner data was opened in Slice 0 or Slice 1.
+- Slice 3: broader desktop product-experience polish beyond the minimal functional Slice 2 setup,
+  migration, backup, and restore controls.
 - Slice 4: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
 - Slice 5: deterministic release build, DMG, Developer ID, hardened runtime, notarization,
   stapling, installed-app/Gatekeeper tests, and final artifact-size/performance budgets.

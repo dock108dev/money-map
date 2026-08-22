@@ -17,8 +17,16 @@ from .db import initialize_database
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     del app
-    settings.ensure_private_dirs()
-    initialize_database()
+    if settings.desktop_mode and settings.desktop_data_mode in {
+        "production-v1",
+        "acceptance-synthetic-v1",
+    }:
+        from .desktop_data_api import prepare_desktop_data_home
+
+        prepare_desktop_data_home()
+    else:
+        settings.ensure_private_dirs()
+        initialize_database()
     yield
 
 
@@ -30,6 +38,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(router)
+if settings.desktop_mode and settings.desktop_data_mode in {
+    "production-v1",
+    "acceptance-synthetic-v1",
+}:
+    from .desktop_data_api import router as desktop_data_router
+
+    app.include_router(desktop_data_router)
 
 web_dist = settings.web_dist_dir
 assets = web_dist / "assets"

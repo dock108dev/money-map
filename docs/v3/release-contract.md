@@ -72,6 +72,13 @@ macOS builds. Slice 0 freezes the gates; it does not claim the beta release is c
 - Prove backup creation, reveal-in-Finder, restore preview, destructive-replacement warning,
   restored logical equality, idempotent repeated restore, and recovery when the latest backup is
   corrupt. Keep an accepted prior database until the restored copy is verified.
+- Slice 2 acceptance and all automated migration work use a build-time fake macOS home and checked-in
+  synthetic factories only. The production Application Support home, active developer `.local`,
+  owner database, and financial Keychain namespace are forbidden until Slice 7.
+- The journal may contain only operation IDs/kinds, safe classifications, approved-root basenames,
+  schema revisions, sizes, digests, logical-manifest digests, timestamps, failure codes, and
+  activation state. Raw paths, rows, descriptions, identifiers, credentials, and exceptions are
+  forbidden.
 
 ## Accessibility and product acceptance
 

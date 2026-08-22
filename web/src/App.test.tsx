@@ -171,6 +171,66 @@ afterEach(() => {
 });
 
 describe("application states", () => {
+  it("restores the durable fresh-setup state before requesting financial APIs", async () => {
+    Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", {
+      configurable: true,
+      value: {
+        mode: true,
+        reload: vi.fn(),
+        print: vi.fn(),
+        runtimeStatus: vi.fn(async () => ({ state: "ready" as const, generation: 1 })),
+        restart: vi.fn(),
+        about: vi.fn(),
+        selectImport: vi.fn(),
+        revealBackup: vi.fn(),
+      },
+    });
+    const fetch = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/desktop/data-home/status") {
+        return json({ phase: "fresh_setup_available", ready: false });
+      }
+      return new Response("Not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Set up Money Map" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start fresh" })).toBeEnabled();
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+      "/api/desktop/data-home/status",
+    ]);
+  });
+
+  it("restores durable recovery actions after a desktop reload", async () => {
+    Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", {
+      configurable: true,
+      value: {
+        mode: true,
+        reload: vi.fn(),
+        print: vi.fn(),
+        runtimeStatus: vi.fn(async () => ({ state: "ready" as const, generation: 3 })),
+        restart: vi.fn(),
+        about: vi.fn(),
+        selectImport: vi.fn(),
+        revealBackup: vi.fn(),
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => json({
+      phase: "recoverable_failure",
+      ready: false,
+      recoverable: true,
+      resume_available: true,
+      rollback_available: true,
+    })));
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "The operation paused safely." })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Roll back" })).toBeEnabled();
+  });
+
   it("blocks stale controls after desktop service failure and restores the current route after one deliberate restart", async () => {
     window.location.hash = "#view=goals";
     let ready = false;

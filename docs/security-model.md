@@ -51,6 +51,17 @@
   ordinary external link opened only when the user chooses it; the app does not transmit
   plan values, balances, or calculator inputs to the IRS or another service.
 - No telemetry, screen scraping, trading, or money movement exists.
+- Packaged macOS paths are supplied only by the Tauri path authority after its inherited child
+  environment is cleared. Data, cache, and logs are separate; private directories use `0700` and
+  accepted database/backup files use `0600`.
+- Import is explicit and read-only until a second confirmation. Symlink chains, active-file hard
+  links, repository/app-bundle relationships, unapproved backup parents, corrupt or incompatible
+  revisions, and insufficient space fail closed.
+- Migration and restore operate on isolated online-backup restores. Atomic activation retains the
+  prior accepted database and a verified safety backup until post-activation digest, integrity,
+  foreign-key, revision, and logical-manifest verification succeeds.
+- Recovery journals and UI errors contain safe codes/classifications only; they exclude raw paths,
+  rows, descriptions, identifiers, credentials, tokens, and unsanitized exceptions.
 
 ## Operator responsibility
 
