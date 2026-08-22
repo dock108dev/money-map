@@ -280,18 +280,9 @@ class DataHomeManager:
         if journal:
             if journal.get("completed"):
                 try:
-                    active = verify_database(self.paths.database, expected_revision=SCHEMA_HEAD)
+                    verify_database(self.paths.database, expected_revision=SCHEMA_HEAD)
                 except DataHomeError as error:
                     return self._failure(error)
-                expected = journal.get("expected_active_digest")
-                if expected and active.sha256 != expected:
-                    return self._failure(
-                        DataHomeError(
-                            "active_digest_mismatch",
-                            "The current database needs recovery before Money Map can open.",
-                            recoverable=bool(journal.get("rollback_name")),
-                        )
-                    )
             return self._public_journal(journal)
         if self.paths.database.exists():
             try:

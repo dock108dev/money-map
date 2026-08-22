@@ -53,7 +53,7 @@
 }
 
 .focused-dialog :is(button, input, select, textarea, summary, a):focus-visible {
-  outline: 3px solid rgba(31, 114, 89, 0.35);
+  outline: 3px solid #1f7259;
   outline-offset: 3px;
 }
 

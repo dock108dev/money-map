@@ -9,6 +9,9 @@ from .config import Settings, settings
 from .forecasting import ensure_baseline
 from .services import accounts_dashboard, overview, scenarios, timeline
 
+REPORT_ID = "trailing-12-month"
+REPORT_FILENAME = "trailing-12-month-money-map.html"
+
 
 def _money(value: object) -> str:
     return "—" if value in (None, "") else f"${escape(str(value))}"
@@ -138,6 +141,24 @@ th:first-child,td:first-child{{text-align:left}}
 <p class="source">Statement values remain immutable. Calculated payroll allocations and reconstructed balances use versioned deterministic arithmetic. Investment result appears only for a sufficiently long period with unambiguous boundary activity. Assumed forecast returns are separate from contributions.</p>
 </body></html>"""
     runtime_settings.reports_dir.mkdir(parents=True, exist_ok=True)
-    output = runtime_settings.reports_dir / "trailing-12-month-money-map.html"
-    output.write_text(html, encoding="utf-8")
+    output = runtime_settings.reports_dir / REPORT_FILENAME
+    temporary = runtime_settings.reports_dir / f".{REPORT_FILENAME}.tmp"
+    temporary.write_text(html, encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(output)
+    output.chmod(0o600)
     return output
+
+
+def approved_report(report_id: str, runtime_settings: Settings = settings) -> Path:
+    """Resolve one generated report without accepting a caller-controlled path."""
+
+    if report_id != REPORT_ID:
+        raise ValueError("The selected report is unavailable.")
+    root = runtime_settings.reports_dir
+    report = root / REPORT_FILENAME
+    if not report.is_file() or report.is_symlink():
+        raise ValueError("The selected report is unavailable.")
+    if report.parent.resolve(strict=True) != root.resolve(strict=True):
+        raise ValueError("The selected report is unavailable.")
+    return report

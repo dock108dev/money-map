@@ -475,4 +475,73 @@ describe("application states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lab" }));
     await screen.findByRole("heading", { name: "Life Lab" });
   });
+
+  it("keeps local evidence usable offline and requires a deliberate update retry", async () => {
+    const fetch = workingFetch(false, 2);
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    window.dispatchEvent(new Event("offline"));
+    expect(await screen.findByText("Offline · local data available")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Update data" })).toBeEnabled();
+    expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/plaid/sync-all")).toHaveLength(0);
+    window.dispatchEvent(new Event("online"));
+    expect(await screen.findByText(/Updated/)).toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/plaid/sync-all")).toHaveLength(0);
+  });
+
+  it("dispatches native menus through the same routes and report/diagnostics operations", async () => {
+    const reportAction = vi.fn();
+    const diagnosticsPreview = vi.fn(async () => ({
+      contract: "money-map-sanitized-diagnostics-v1",
+      product_version: "2.1.0",
+      database_checks: { integrity: "pass", foreign_keys: "pass" },
+    }));
+    const setOperationsEnabled = vi.fn();
+    Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", {
+      configurable: true,
+      value: {
+        mode: true,
+        reload: vi.fn(),
+        print: vi.fn(),
+        runtimeStatus: vi.fn(async () => ({ state: "ready" as const, generation: 1 })),
+        restart: vi.fn(),
+        about: vi.fn(),
+        selectImport: vi.fn(),
+        revealBackup: vi.fn(),
+        reportAction,
+        diagnosticsPreview,
+        exportDiagnostics: vi.fn(async () => false),
+        setOperationsEnabled,
+      },
+    });
+    const base = workingFetch(false, 2);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/desktop/data-home/status") {
+        return json({ phase: "already_migrated", ready: true, schema_revision: "0009_goal_persistence" });
+      }
+      if (url === "/api/reports/trailing-12") {
+        return json({ report_id: "trailing-12-month", filename: "trailing-12-month-money-map.html" });
+      }
+      return base(input, init);
+    }));
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "view-wealth" }));
+    expect(await screen.findByRole("heading", { name: "Wealth" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#view=wealth");
+
+    window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "generate-report" }));
+    expect(await screen.findByText("Report ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Report" }));
+    expect(reportAction).toHaveBeenCalledWith("trailing-12-month", "open");
+
+    window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "export-diagnostics" }));
+    expect(await screen.findByRole("dialog", { name: "Sanitized diagnostics" })).toBeInTheDocument();
+    expect(diagnosticsPreview).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Financial records, paths, credentials, ports, and filenames are excluded\./)).toBeInTheDocument();
+    expect(setOperationsEnabled).toHaveBeenCalledWith(true);
+  });
 });

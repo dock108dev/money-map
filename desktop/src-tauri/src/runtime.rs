@@ -93,6 +93,46 @@ impl RuntimeController {
         self.paths.backup_root()
     }
 
+    pub fn report_root(&self) -> PathBuf {
+        self.paths.report_root()
+    }
+
+    pub fn data_mode(&self) -> &'static str {
+        self.paths.mode
+    }
+
+    pub fn revalidate(&self) -> RuntimeStatus {
+        let failed = {
+            let inner = self
+                .inner
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if inner.lifecycle.state() != LifecycleState::Ready {
+                false
+            } else {
+                match (&inner.process, inner.port, inner.session.as_ref()) {
+                    (Some(process), Some(port), Some(session)) => {
+                        !child_is_running(&process.child) || !health_ready(port, session)
+                    }
+                    _ => true,
+                }
+            }
+        };
+        if failed {
+            let mut inner = self
+                .inner
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if inner.lifecycle.state() == LifecycleState::Ready {
+                inner.port = None;
+                inner.session = None;
+                inner.message = Some(FAILURE_MESSAGE);
+                let _ = inner.lifecycle.fail();
+            }
+        }
+        self.status()
+    }
+
     pub fn target(&self) -> Result<(u16, String), String> {
         let inner = self.inner.lock().map_err(|_| FAILURE_MESSAGE.to_string())?;
         if inner.lifecycle.state() != LifecycleState::Ready {

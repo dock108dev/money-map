@@ -44,5 +44,10 @@
   "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore",
   "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_SESSION"],
   "subprocesses": ["one supervised money-map-sidecar process group owned by the Tauri process"],
-  "forbidden": [".local", "*.sqlite*", "statements", "reports", "backups", "credentials", "tokens", "source maps", "repository paths", "owner screenshots"]
+  "forbidden": [".local", "*.sqlite*", "statements", "reports", "backups", "credentials", "tokens", "source maps", "repository paths", "owner screenshots"],
+  "desktop_experience": {
+    "menus": ["application", "file", "view", "window"],
+    "reports": {"identity": "trailing-12-month", "root": "application-support/reports"},
+    "diagnostics": "money-map-sanitized-diagnostics-v1"
+  }
 }

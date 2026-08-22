@@ -187,4 +187,27 @@ describe("desktop data-home workflow", () => {
     expect(within(alert).getByRole("button", { name: "Roll back" })).toBeEnabled();
     expect(alert).not.toHaveTextContent("Traceback");
   });
+
+  it("moves focus into the modal, closes with Escape, and restores invoking focus", async () => {
+    nativeShell();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ backups: [] }));
+    const invoking = document.createElement("button");
+    invoking.textContent = "Open data safety";
+    document.body.append(invoking);
+    invoking.focus();
+    const onClose = vi.fn();
+    render(
+      <DataHomePanel
+        initial={{ phase: "already_migrated", ready: true, schema_revision: "0009_goal_persistence" }}
+        onStatus={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create backup" })).toHaveFocus());
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+    cleanup();
+    expect(invoking).toHaveFocus();
+    invoking.remove();
+  });
 });

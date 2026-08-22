@@ -1,5 +1,18 @@
 # Security model
 
+## Desktop reports and sanitized diagnostics
+
+React receives opaque report identities, never filesystem authority. The backend approves the one
+supported report filename under the report root; Rust independently rejects traversal, symlinks,
+non-files, and parent mismatches before Quick Look or Finder access. Report writes are atomic,
+private, and local.
+
+Diagnostics cross the native/backend boundary only as allowlisted health classifications. They
+exclude financial data, account or institution identifiers, credentials, sessions, ports, paths,
+database hashes, private filenames, raw exceptions, request/response bodies, report contents,
+screenshots, and environment dumps. Export requires a native destination panel, writes mode `0600`,
+and performs no write when canceled.
+
 ## Threats in scope
 
 - Accidentally committing statements or extracted personal information.

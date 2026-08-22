@@ -1,5 +1,13 @@
 # Product charter
 
+## Desktop ordinary loop
+
+The installed macOS application opens to Cash Flow so the owner can see the current supported
+financial state and next binding action, inspect or update evidence only when needed, and leave.
+Supporting import, connection, backup, restore, report, print, diagnostics, and recovery operations
+are visible but secondary. Ordinary use never requires a terminal, browser, framework knowledge,
+manual file discovery, or interpretation of internal errors.
+
 ## Purpose
 
 Money Map reconstructs where gross compensation went, what happened after funds

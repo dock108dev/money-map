@@ -1,7 +1,7 @@
 # Money Map v3 desktop architecture
 
-Status: frozen by Slice 0, productionized by Slice 1, and extended with the accepted Slice 2
-macOS data-home and recovery contract on 2026-08-21 for the Apple Silicon owner beta.
+Status: frozen by Slice 0, productionized by Slice 1, extended by Slice 2 data-home recovery, and
+completed at the Slice 3 product-experience boundary for the Apple Silicon owner beta.
 
 ## Decision
 
@@ -181,6 +181,12 @@ through the native transport without exposing secrets.
 sheet. The desktop-only file input displayed the real macOS open panel. No file was selected and
 no print output was created during the proof.
 
+Slice 3 adds the complete native File, View, Window, and application menus; route-synchronized
+keyboard navigation; explicit hide-on-close and reopen behavior; resume health validation; approved
+report identities with Quick Look/Finder actions; and native sanitized-diagnostics export. The
+complete interaction, focus, printing, and allowlist contracts are in
+`docs/v3/desktop-product-experience.md`.
+
 ## Signing and distribution
 
 The bundle contains the native executable, the target-triple external binary copied to the final
@@ -210,8 +216,6 @@ and it would mix shell and service responsibilities while providing a weaker pac
 
 ## Deferred risks
 
-- Slice 3: broader desktop product-experience polish beyond the minimal functional Slice 2 setup,
-  migration, backup, and restore controls.
 - Slice 4: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
 - Slice 5: deterministic release build, DMG, Developer ID, hardened runtime, notarization,
   stapling, installed-app/Gatekeeper tests, and final artifact-size/performance budgets.

@@ -221,6 +221,30 @@ def test_reopening_completed_migration_is_idempotent(revision: str, tmp_path: Pa
     )
 
 
+def test_completed_migration_accepts_legitimate_post_activation_writes(tmp_path: Path) -> None:
+    manager = _manager(tmp_path)
+    manager.paths.ensure_directories()
+    source = _source(tmp_path, populated=True)
+    preview = manager.inspect_candidate(source)
+    manager.confirm_migration(preview["candidate_token"])
+
+    with sqlite3.connect(manager.paths.database) as connection:
+        connection.execute(
+            "INSERT INTO life_plan_profiles "
+            "(birth_date, state, end_age, current_monthly_outflow, essential_monthly_spend, "
+            "flexible_monthly_spend, cash_floor, retirement_tax_rate_pct, target_ages, notes, "
+            "created_at, updated_at) "
+            "VALUES ('1990-01-01', 'MA', 90, '1.00', '1.00', '0.00', '1.00', '20.0000', "
+            "'[]', 'Synthetic post-activation write', "
+            "'2026-08-21T00:00:00+00:00', '2026-08-21T00:00:00+00:00')"
+        )
+
+    status = manager.status()
+
+    assert status["phase"] == Phase.ACTIVATION_COMPLETE
+    assert status["ready"] is True
+
+
 def test_backup_and_restore_verify_manifest_and_retain_pre_restore_safety_copy(
     tmp_path: Path,
 ) -> None:

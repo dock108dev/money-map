@@ -44,7 +44,7 @@ from .goal_service import (
     select_primary_goal,
 )
 from .ingestion import rollback_import_batch
-from .keychain import SecretStore, SecretStoreError, keychain
+from .keychain import MemorySecretStore, SecretStore, SecretStoreError, keychain
 from .life_plan import (
     LifeGoalInput,
     LifePlanProfileInput,
@@ -87,7 +87,7 @@ from .refresh import (
     set_auto_refresh_enabled,
     sync_all_connections,
 )
-from .reporting import generate_trailing_report
+from .reporting import REPORT_FILENAME, REPORT_ID, approved_report, generate_trailing_report
 from .retirement_lab import (
     PlanningNotFoundError,
     PlanningStaleError,
@@ -202,7 +202,12 @@ class AutoRefreshPreferenceInput(BaseModel):
     enabled: bool
 
 
+_acceptance_secret_store = MemorySecretStore()
+
+
 def get_secret_store() -> SecretStore:
+    if settings.desktop_mode and settings.desktop_data_mode == "acceptance-synthetic-v1":
+        return _acceptance_secret_store
     return keychain
 
 
@@ -1007,8 +1012,17 @@ def create_correction(
 
 @router.post("/reports/trailing-12")
 def create_report(session: Session = Depends(get_session)) -> dict[str, str]:
-    path = generate_trailing_report(session, settings)
-    return {"path": str(path)}
+    generate_trailing_report(session, settings)
+    return {"report_id": REPORT_ID, "filename": REPORT_FILENAME}
+
+
+@router.get("/reports/{report_id}/approved")
+def get_approved_report(report_id: str) -> dict[str, str | bool]:
+    try:
+        path = approved_report(report_id, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"report_id": report_id, "filename": path.name, "approved": True}
 
 
 @router.get("/plaid/status")

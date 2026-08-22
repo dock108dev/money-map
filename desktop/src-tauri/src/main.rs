@@ -6,14 +6,48 @@ mod runtime;
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::{fs, os::unix::fs::PermissionsExt};
 
 use data_home::DataHomePaths;
-use metadata::{about_info, native_about_metadata, AboutInfo};
+use metadata::{about_info_for_mode, native_about_metadata, AboutInfo};
 use proxy::{forward, DesktopRequest, DesktopResponse};
 use runtime::{RuntimeController, RuntimeStatus};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+
+const OPERATION_MENU_IDS: &[&str] = &[
+    "import-private-inbox",
+    "import-existing-data",
+    "create-backup",
+    "restore-backup",
+    "generate-report",
+    "export-diagnostics",
+];
+
+const MENU_ACTION_IDS: &[&str] = &[
+    "import-private-inbox",
+    "import-existing-data",
+    "create-backup",
+    "restore-backup",
+    "generate-report",
+    "print-current-view",
+    "reload-safe",
+    "export-diagnostics",
+    "view-cash-flow",
+    "view-goals",
+    "view-activity",
+    "view-accounts",
+    "view-income",
+    "view-wealth",
+    "view-retirement",
+    "view-lab",
+    "view-connections",
+    "view-review",
+];
+
+static WEBVIEW_ZOOM: AtomicU64 = AtomicU64::new(1.0_f64.to_bits());
 
 fn initialization_script() -> &'static str {
     r#"(() => {
@@ -27,7 +61,11 @@ fn initialization_script() -> &'static str {
             restart: () => invoke("desktop_restart"),
             about: () => invoke("desktop_about"),
             selectImport: () => invoke("desktop_select_import"),
-            revealBackup: (backupId) => invoke("desktop_reveal_backup", { backupId })
+            revealBackup: (backupId) => invoke("desktop_reveal_backup", { backupId }),
+            reportAction: (reportId, action) => invoke("desktop_report_action", { reportId, action }),
+            diagnosticsPreview: () => invoke("desktop_diagnostics_preview"),
+            exportDiagnostics: () => invoke("desktop_export_diagnostics"),
+            setOperationsEnabled: (enabled) => invoke("desktop_set_operations_enabled", { enabled })
           }), configurable: false });
           window.print = () => { void invoke("desktop_print"); };
           window.fetch = async (input, init = {}) => {
@@ -69,6 +107,24 @@ fn desktop_runtime_status(state: tauri::State<'_, Arc<RuntimeController>>) -> Ru
     state.status()
 }
 
+fn fetch_json(controller: &RuntimeController, path: String) -> Result<serde_json::Value, String> {
+    let (port, session) = controller.target()?;
+    let response = forward(
+        port,
+        &session,
+        DesktopRequest {
+            path,
+            method: "GET".to_string(),
+            body: None,
+        },
+    )?;
+    if response.status != 200 {
+        return Err("The requested local artifact was rejected safely.".to_string());
+    }
+    serde_json::from_str(&response.body)
+        .map_err(|_| "The requested local artifact could not be verified.".to_string())
+}
+
 #[tauri::command]
 async fn desktop_restart(
     state: tauri::State<'_, Arc<RuntimeController>>,
@@ -80,8 +136,8 @@ async fn desktop_restart(
 }
 
 #[tauri::command]
-fn desktop_about() -> AboutInfo {
-    about_info()
+fn desktop_about(state: tauri::State<'_, Arc<RuntimeController>>) -> AboutInfo {
+    about_info_for_mode(state.data_mode())
 }
 
 #[tauri::command]
@@ -192,6 +248,161 @@ async fn desktop_reveal_backup(
     Ok(())
 }
 
+fn approved_child(root: &std::path::Path, filename: &str) -> Result<PathBuf, String> {
+    if PathBuf::from(filename)
+        .file_name()
+        .and_then(|value| value.to_str())
+        != Some(filename)
+    {
+        return Err("The selected local artifact was rejected.".to_string());
+    }
+    let path = root.join(filename);
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|_| "The selected local artifact is unavailable.".to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("The selected local artifact was rejected.".to_string());
+    }
+    let approved = root
+        .canonicalize()
+        .map_err(|_| "The local artifact location could not be verified.".to_string())?;
+    let parent = path
+        .parent()
+        .and_then(|value| value.canonicalize().ok())
+        .ok_or_else(|| "The local artifact location could not be verified.".to_string())?;
+    if parent != approved {
+        return Err("The selected local artifact was rejected.".to_string());
+    }
+    Ok(path)
+}
+
+#[tauri::command]
+async fn desktop_report_action(
+    state: tauri::State<'_, Arc<RuntimeController>>,
+    report_id: String,
+    action: String,
+) -> Result<(), String> {
+    if report_id != "trailing-12-month" || !matches!(action.as_str(), "open" | "reveal") {
+        return Err("The selected report action was rejected.".to_string());
+    }
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        let payload = fetch_json(&controller, format!("/api/reports/{report_id}/approved"))?;
+        let filename = payload
+            .get("filename")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "The selected report could not be verified.".to_string())?;
+        let path = approved_child(&controller.report_root(), filename)?;
+        if action == "reveal" {
+            if !Command::new("/usr/bin/open")
+                .arg("-R")
+                .arg(path)
+                .status()
+                .map_err(|_| "The report could not be revealed.".to_string())?
+                .success()
+            {
+                return Err("The report could not be revealed.".to_string());
+            }
+        } else {
+            Command::new("/usr/bin/qlmanage")
+                .arg("-p")
+                .arg(path)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .map_err(|_| "The report preview could not be opened.".to_string())?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| "The report could not be opened.".to_string())?
+}
+
+fn diagnostic_payload(controller: &RuntimeController) -> Result<serde_json::Value, String> {
+    let backend = fetch_json(controller, "/api/desktop/data-home/diagnostics".to_string())?;
+    let status = controller.status();
+    let about = about_info_for_mode(controller.data_mode());
+    let macos = Command::new("/usr/bin/sw_vers")
+        .arg("-productVersion")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| "unavailable".to_string());
+    Ok(serde_json::json!({
+        "contract": "money-map-sanitized-diagnostics-v1",
+        "product_version": about.runtime_version,
+        "schema_revision": backend.get("schema_revision").cloned().unwrap_or(serde_json::json!("unavailable")),
+        "desktop_build": about.desktop_build,
+        "source_commit": about.source_commit,
+        "target_architecture": about.target,
+        "macos_version": macos,
+        "data_mode": about.data_mode,
+        "runtime": { "state": status.state, "generation": status.generation },
+        "data_home_phase": backend.get("data_home_phase").cloned().unwrap_or(serde_json::json!("unavailable")),
+        "backup_verification": backend.get("backup_verification").cloned().unwrap_or(serde_json::json!({"count": 0, "all_verified": true})),
+        "database_checks": backend.get("database_checks").cloned().unwrap_or(serde_json::json!({"integrity": "unavailable", "foreign_keys": "unavailable"})),
+        "network_mode": "local_data; connected updates are explicit",
+        "artifact_identity": { "build": about.desktop_build, "source": about.source_commit }
+    }))
+}
+
+#[tauri::command]
+async fn desktop_diagnostics_preview(
+    state: tauri::State<'_, Arc<RuntimeController>>,
+) -> Result<serde_json::Value, String> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || diagnostic_payload(&controller))
+        .await
+        .map_err(|_| "Sanitized diagnostics are unavailable.".to_string())?
+}
+
+#[tauri::command]
+async fn desktop_export_diagnostics(
+    state: tauri::State<'_, Arc<RuntimeController>>,
+) -> Result<bool, String> {
+    let controller = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        let payload = diagnostic_payload(&controller)?;
+        let selected = rfd::FileDialog::new()
+            .set_file_name("Money-Map-Sanitized-Diagnostics.json")
+            .add_filter("JSON", &["json"])
+            .save_file();
+        let Some(selected) = selected else {
+            return Ok(false);
+        };
+        if fs::symlink_metadata(&selected)
+            .map(|metadata| metadata.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            return Err("The diagnostics destination was rejected.".to_string());
+        }
+        let bytes = serde_json::to_vec_pretty(&payload)
+            .map_err(|_| "Sanitized diagnostics could not be prepared.".to_string())?;
+        fs::write(&selected, bytes)
+            .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
+        fs::set_permissions(&selected, fs::Permissions::from_mode(0o600))
+            .map_err(|_| "Sanitized diagnostics permissions could not be secured.".to_string())?;
+        Ok(true)
+    })
+    .await
+    .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?
+}
+
+#[tauri::command]
+fn desktop_set_operations_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let menu = app
+        .menu()
+        .ok_or_else(|| "The application menu is unavailable.".to_string())?;
+    for id in OPERATION_MENU_IDS {
+        if let Some(item) = menu.get(*id).and_then(|item| item.as_menuitem().cloned()) {
+            item.set_enabled(enabled)
+                .map_err(|_| "The application menu could not be updated.".to_string())?;
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn desktop_fetch(
     state: tauri::State<'_, Arc<RuntimeController>>,
@@ -216,8 +427,8 @@ fn sidecar_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn install_native_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let about = PredefinedMenuItem::about(app, None, Some(native_about_metadata()))?;
+fn install_native_menu(app: &tauri::AppHandle, data_mode: &str) -> tauri::Result<()> {
+    let about = PredefinedMenuItem::about(app, None, Some(native_about_metadata(data_mode)))?;
     let restart = MenuItem::with_id(
         app,
         "restart-local-service",
@@ -238,8 +449,85 @@ fn install_native_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::hide(app, None)?,
             &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::show_all(app, None)?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+    let file = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &MenuItem::with_id(
+                app,
+                "import-private-inbox",
+                "Import Private Inbox",
+                true,
+                Some("Cmd+I"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "import-existing-data",
+                "Import Existing Money Map Data",
+                true,
+                Some("Cmd+Shift+I"),
+            )?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(
+                app,
+                "create-backup",
+                "Create Verified Backup",
+                true,
+                Some("Cmd+Shift+B"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "restore-backup",
+                "Restore from Backup",
+                true,
+                None::<&str>,
+            )?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(
+                app,
+                "generate-report",
+                "Generate Report",
+                true,
+                Some("Cmd+Shift+R"),
+            )?,
+            &MenuItem::with_id(
+                app,
+                "export-diagnostics",
+                "Export Diagnostics…",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(app, "print-current-view", "Print…", true, Some("Cmd+P"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+    let view = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+            &MenuItem::with_id(app, "view-cash-flow", "Cash Flow", true, Some("Cmd+1"))?,
+            &MenuItem::with_id(app, "view-goals", "Goals", true, Some("Cmd+2"))?,
+            &MenuItem::with_id(app, "view-activity", "Activity", true, Some("Cmd+3"))?,
+            &MenuItem::with_id(app, "view-accounts", "Accounts", true, Some("Cmd+4"))?,
+            &MenuItem::with_id(app, "view-income", "Income", true, Some("Cmd+5"))?,
+            &MenuItem::with_id(app, "view-wealth", "Wealth", true, Some("Cmd+6"))?,
+            &MenuItem::with_id(app, "view-retirement", "Retirement", true, Some("Cmd+7"))?,
+            &MenuItem::with_id(app, "view-lab", "Life Lab", true, Some("Cmd+8"))?,
+            &MenuItem::with_id(app, "view-connections", "Add Account", true, Some("Cmd+9"))?,
+            &MenuItem::with_id(app, "view-review", "Review", true, Some("Cmd+Shift+9"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "reload-safe", "Reload", true, Some("Cmd+R"))?,
+            &MenuItem::with_id(app, "zoom-reset", "Actual Size", true, Some("Cmd+0"))?,
+            &MenuItem::with_id(app, "zoom-in", "Zoom In", true, Some("Cmd+Plus"))?,
+            &MenuItem::with_id(app, "zoom-out", "Zoom Out", true, Some("Cmd+-"))?,
         ],
     )?;
     let window = Submenu::with_items(
@@ -249,11 +537,24 @@ fn install_native_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         &[
             &PredefinedMenuItem::minimize(app, None)?,
             &PredefinedMenuItem::maximize(app, None)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::bring_all_to_front(app, None)?,
         ],
     )?;
-    app.set_menu(Menu::with_items(app, &[&application, &window])?)?;
+    app.set_menu(Menu::with_items(
+        app,
+        &[&application, &file, &view, &window],
+    )?)?;
     Ok(())
+}
+
+fn dispatch_menu_action(app: &tauri::AppHandle, id: &str) {
+    if let Some(window) = app.get_webview_window("main") {
+        let script = format!(
+            "window.dispatchEvent(new CustomEvent('money-map-menu', {{ detail: '{id}' }}));"
+        );
+        let _ = window.eval(&script);
+    }
 }
 
 fn main() {
@@ -273,43 +574,114 @@ fn main() {
             desktop_restart,
             desktop_about,
             desktop_select_import,
-            desktop_reveal_backup
+            desktop_reveal_backup,
+            desktop_report_action,
+            desktop_diagnostics_preview,
+            desktop_export_diagnostics,
+            desktop_set_operations_enabled
         ])
         .setup(|app| {
-            install_native_menu(app.handle())?;
             let paths = DataHomePaths::resolve(app.handle()).map_err(std::io::Error::other)?;
+            install_native_menu(app.handle(), paths.mode)?;
             let controller =
                 RuntimeController::new(sidecar_path().map_err(std::io::Error::other)?, paths)
                     .map_err(std::io::Error::other)?;
             app.manage(Arc::clone(&controller));
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("Money Map")
-                .inner_size(1280.0, 820.0)
-                .min_inner_size(900.0, 640.0)
-                .initialization_script(initialization_script())
-                .build()?;
+            let window =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .title("Money Map")
+                    .inner_size(1280.0, 820.0)
+                    .min_inner_size(900.0, 640.0)
+                    .zoom_hotkeys_enabled(false)
+                    .initialization_script(initialization_script())
+                    .build()?;
+            let close_window = window.clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = close_window.hide();
+                }
+            });
             std::thread::spawn(move || {
                 let _ = controller.start_initial();
             });
             Ok(())
         })
         .on_menu_event(|app, event| {
-            if event.id().as_ref() == "restart-local-service" {
+            let id = event.id().as_ref();
+            if id == "restart-local-service" {
                 if let Some(controller) = app.try_state::<Arc<RuntimeController>>() {
                     let controller = Arc::clone(controller.inner());
                     std::thread::spawn(move || {
                         let _ = controller.restart();
                     });
                 }
+            } else if matches!(id, "zoom-reset" | "zoom-in" | "zoom-out") {
+                if let Some(window) = app.get_webview_window("main") {
+                    let current = f64::from_bits(WEBVIEW_ZOOM.load(Ordering::Relaxed));
+                    let zoom = match id {
+                        "zoom-in" => (current + 0.25).min(2.0),
+                        "zoom-out" => (current - 0.25).max(0.75),
+                        _ => 1.0,
+                    };
+                    WEBVIEW_ZOOM.store(zoom.to_bits(), Ordering::Relaxed);
+                    let _ = window.set_zoom(zoom);
+                }
+            } else if MENU_ACTION_IDS.contains(&id) {
+                dispatch_menu_action(app, id);
             }
         })
         .build(tauri::generate_context!())
         .expect("Money Map native shell could not initialize");
-    app.run(|handle, event| {
-        if let RunEvent::Exit = event {
+    app.run(|handle, event| match event {
+        RunEvent::Exit => {
             if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
                 controller.shutdown();
             }
         }
+        RunEvent::Reopen { .. } => {
+            if let Some(window) = handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }
+        RunEvent::Resumed => {
+            if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
+                let status = controller.revalidate();
+                if status.state == lifecycle::LifecycleState::Failed {
+                    dispatch_menu_action(handle, "runtime-failed");
+                }
+            }
+        }
+        _ => {}
     });
+}
+
+#[cfg(test)]
+mod menu_tests {
+    use super::{MENU_ACTION_IDS, OPERATION_MENU_IDS};
+
+    #[test]
+    fn native_menu_dispatch_covers_principal_operations_and_navigation() {
+        for required in [
+            "import-private-inbox",
+            "import-existing-data",
+            "create-backup",
+            "restore-backup",
+            "generate-report",
+            "print-current-view",
+            "reload-safe",
+            "export-diagnostics",
+            "view-cash-flow",
+            "view-goals",
+            "view-retirement",
+            "view-lab",
+        ] {
+            assert!(MENU_ACTION_IDS.contains(&required));
+        }
+        assert!(OPERATION_MENU_IDS
+            .iter()
+            .all(|id| MENU_ACTION_IDS.contains(id)));
+    }
 }

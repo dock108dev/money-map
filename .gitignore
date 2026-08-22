@@ -28,6 +28,9 @@ desktop/src-tauri/gen/
 .slice0-evidence/
 .slice1-evidence/
 .slice2-evidence/
+.slice3-evidence/
+output/pdf/
+tmp/pdfs/
 money-map-sidecar.spec
 
 # Editors and operating systems

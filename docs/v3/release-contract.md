@@ -75,6 +75,8 @@ macOS builds. Slice 0 freezes the gates; it does not claim the beta release is c
 - Slice 2 acceptance and all automated migration work use a build-time fake macOS home and checked-in
   synthetic factories only. The production Application Support home, active developer `.local`,
   owner database, and financial Keychain namespace are forbidden until Slice 7.
+- The `acceptance-synthetic-v1` runtime substitutes an in-memory secret store, so a signed
+  synthetic campaign cannot read or modify the owner's macOS Keychain.
 - The journal may contain only operation IDs/kinds, safe classifications, approved-root basenames,
   schema revisions, sizes, digests, logical-manifest digests, timestamps, failure codes, and
   activation state. Raw paths, rows, descriptions, identifiers, credentials, and exceptions are
@@ -91,6 +93,12 @@ macOS builds. Slice 0 freezes the gates; it does not claim the beta release is c
 - Perform a fresh installed-app synthetic walkthrough without patching during the run. Then the
   owner alone performs the bounded live acceptance, choosing every connection, import, support,
   and recovery action. Never simulate owner feedback or infer acceptance from automated traversal.
+
+Slice 3 formalizes the installed-app state matrix, native menus, close/reopen and sleep/wake
+lifecycle, offline-local behavior, report/print path approval, diagnostics allowlist, focus
+restoration, keyboard/VoiceOver inspection, reduced motion, contrast, minimum-size layout, and 200%
+zoom in `docs/v3/desktop-product-experience.md`. These remain required gates for every later beta
+artifact; automated accessibility assertions do not replace manual inspection.
 
 ## Security gates
 

@@ -226,7 +226,9 @@ export function createScenario(payload: Record<string, string | number | null>) 
 }
 
 export function createReport() {
-  return request<{ path: string }>("/api/reports/trailing-12", { method: "POST" });
+  return request<{ report_id: string; filename: string }>("/api/reports/trailing-12", {
+    method: "POST",
+  });
 }
 
 export function configurePlaid(payload: {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { request } from "./api";
 
@@ -75,6 +75,43 @@ export default function DataHomePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [restore, setRestore] = useState<DataHomeStatus | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const restoreRef = useRef<HTMLDivElement>(null);
+  const needsSetup = !status.ready;
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    dialog?.querySelector<HTMLElement>("button:not([disabled])")?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && onClose && !busy && !restore) {
+        event.preventDefault();
+        onClose();
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>("button:not([disabled])"));
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      if (onClose) previous?.focus();
+    };
+  }, [busy, needsSetup, onClose, restore]);
+
+  useEffect(() => {
+    if (!restore) return;
+    restoreRef.current?.querySelector<HTMLElement>("button")?.focus();
+  }, [restore]);
 
   const update = useCallback(
     (next: DataHomeStatus) => {
@@ -129,13 +166,14 @@ export default function DataHomePanel({
     }
   };
 
-  const needsSetup = !status.ready;
   return (
     <section
+      ref={dialogRef}
       className={needsSetup ? "data-home-setup" : "data-home-dialog"}
       role={needsSetup ? "main" : "dialog"}
       aria-modal={needsSetup ? undefined : true}
       aria-labelledby="data-home-title"
+      aria-busy={busy}
     >
       <div className="data-home-card">
         <span className="eyebrow">Private data</span>
@@ -145,6 +183,9 @@ export default function DataHomePanel({
           locations. It never scans for existing data.
         </p>
         {error && <div className="error-banner" role="alert">{error}</div>}
+        {busy && <div className="data-operation-state" role="status" aria-live="polite">Working safely… Controls will return after verification.</div>}
+        {!busy && status.phase === "backup_verified" && <div className="data-operation-state success" role="status">Verified backup created.</div>}
+        {!busy && status.phase === "restore_complete" && <div className="data-operation-state success" role="status">Restore verified and complete.</div>}
 
         {status.phase === "fresh_setup_available" && (
           <div className="data-home-actions">
@@ -225,7 +266,7 @@ export default function DataHomePanel({
         )}
 
         {restore?.backup_id && (
-          <div className="restore-warning" role="alertdialog" aria-modal="true" aria-labelledby="restore-title">
+          <div ref={restoreRef} className="restore-warning" role="alertdialog" aria-modal="true" aria-labelledby="restore-title">
             <h2 id="restore-title">Replace the current database?</h2>
             <p>{restore.replacement_warning}</p>
             <p>A verified safety backup of the current database will be created first. Rollback remains available.</p>

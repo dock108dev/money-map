@@ -132,3 +132,30 @@ def rollback() -> dict[str, Any]:
 def reveal_backup(backup_id: str) -> dict[str, Any]:
     path = _call(data_home_manager().backup_path, backup_id)
     return {"backup_id": backup_id, "filename": path.name, "approved": True}
+
+
+@router.get("/diagnostics")
+def diagnostics() -> dict[str, Any]:
+    """Return only support-safe, allowlisted backend health categories."""
+
+    manager = data_home_manager()
+    status = _call(manager.status)
+    backups = _call(manager.list_backups) if status.get("ready") else []
+    integrity = False
+    foreign_keys = False
+    if status.get("ready"):
+        with engine.connect() as connection:
+            integrity = connection.exec_driver_sql("PRAGMA integrity_check").scalar_one() == "ok"
+            foreign_keys = not connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+    return {
+        "schema_revision": status.get("schema_revision", "unavailable"),
+        "data_home_phase": status.get("phase", "unavailable"),
+        "backup_verification": {
+            "count": len(backups),
+            "all_verified": all(bool(item.get("verified")) for item in backups),
+        },
+        "database_checks": {
+            "integrity": "pass" if integrity else "unavailable",
+            "foreign_keys": "pass" if foreign_keys else "unavailable",
+        },
+    }

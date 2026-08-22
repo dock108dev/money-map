@@ -52,6 +52,10 @@ impl DataHomePaths {
     pub fn backup_root(&self) -> PathBuf {
         self.application.join("backups")
     }
+
+    pub fn report_root(&self) -> PathBuf {
+        self.application.join("reports")
+    }
 }
 
 fn lexical_normalize(path: &Path) -> Result<PathBuf, String> {

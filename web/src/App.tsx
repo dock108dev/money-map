@@ -24,6 +24,7 @@ import {
 import CashFlowView from "./cash-flow/CashFlowView";
 import { openPlaidLink } from "./plaid-link";
 import DataHomePanel, { loadDataHomeStatus, type DataHomeStatus } from "./data-home";
+import { FocusedDialog } from "./FocusedDialog";
 const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
 const RetirementView = lazy(() => import("./retirement/RetirementView"));
 const GoalsView = lazy(() => import("./goals/GoalsView"));
@@ -39,6 +40,10 @@ declare global {
       about(): Promise<DesktopAboutInfo>;
       selectImport(): Promise<DataHomeStatus | null>;
       revealBackup(backupId: string): Promise<void>;
+      reportAction?(reportId: string, action: "open" | "reveal"): Promise<void>;
+      diagnosticsPreview?(): Promise<Record<string, unknown>>;
+      exportDiagnostics?(): Promise<boolean>;
+      setOperationsEnabled?(enabled: boolean): Promise<void>;
     };
   }
 }
@@ -107,9 +112,18 @@ export default function App() {
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState("");
   const [dataReloadVersion, setDataReloadVersion] = useState(0);
+  const [report, setReport] = useState<{ report_id: string; filename: string } | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
+  const [online, setOnline] = useState(() => navigator.onLine);
   const [activityPeriod, setActivityPeriod] = useState<{ startDate: string; endDate: string } | null>(null);
   const autoRefreshStarted = useRef(false);
   const activeNavButtonRef = useRef<HTMLButtonElement>(null);
+
+  const navigateTo = useCallback((next: View) => {
+    if (next === "activity") setActivityPeriod(null);
+    if (desktopMode) window.history.replaceState(null, "", `#view=${next}`);
+    setView(next);
+  }, [desktopMode]);
 
   const refresh = useCallback(async () => {
     try {
@@ -176,6 +190,23 @@ export default function App() {
       window.clearTimeout(timer);
     };
   }, [desktopMode]);
+
+  useEffect(() => {
+    const wentOffline = () => setOnline(false);
+    const cameOnline = () => setOnline(true);
+    window.addEventListener("offline", wentOffline);
+    window.addEventListener("online", cameOnline);
+    return () => {
+      window.removeEventListener("offline", wentOffline);
+      window.removeEventListener("online", cameOnline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!desktopMode) return;
+    const enabled = desktopRuntime?.state === "ready" && dataHome?.ready === true && !busy && !updating;
+    void window.__MONEY_MAP_DESKTOP__?.setOperationsEnabled?.(enabled);
+  }, [busy, dataHome?.ready, desktopMode, desktopRuntime?.state, updating]);
 
   useEffect(() => {
     if (!data || autoRefreshStarted.current || !data.plaid.refresh.automatic_refresh_due) return;
@@ -325,9 +356,11 @@ export default function App() {
 
   const runReport = async () => {
     setBusy(true);
+    setMessage("Generating report…");
     try {
       const result = await createReport();
-      setMessage(`Report saved to ${result.path}`);
+      setReport(result);
+      setMessage("Report ready.");
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Report failed.");
     } finally {
@@ -345,6 +378,42 @@ export default function App() {
       setDesktopRuntime({ state: "failed", generation: generation + 1 });
     }
   };
+
+  const previewDiagnostics = useCallback(async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const preview = await window.__MONEY_MAP_DESKTOP__?.diagnosticsPreview?.();
+      if (preview) setDiagnostics(preview);
+    } catch {
+      setMessage("Sanitized diagnostics are unavailable.");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!desktopMode) return;
+    const onMenu = (event: Event) => {
+      const action = (event as CustomEvent<string>).detail;
+      const routes: Record<string, View> = {
+        "view-cash-flow": "cash-flow", "view-goals": "goals", "view-activity": "activity",
+        "view-accounts": "accounts", "view-income": "income", "view-wealth": "wealth",
+        "view-retirement": "retirement", "view-lab": "lab", "view-connections": "connections",
+        "view-review": "review",
+      };
+      if (routes[action]) navigateTo(routes[action]);
+      else if (action === "import-private-inbox") void runImport();
+      else if (action === "import-existing-data" || action === "create-backup" || action === "restore-backup") setShowDataHome(true);
+      else if (action === "generate-report") void runReport();
+      else if (action === "print-current-view") void window.__MONEY_MAP_DESKTOP__?.print();
+      else if (action === "reload-safe") void window.__MONEY_MAP_DESKTOP__?.reload();
+      else if (action === "export-diagnostics") void previewDiagnostics();
+      else if (action === "runtime-failed") setDesktopRuntime((current) => ({ state: "failed", generation: current?.generation ?? 0 }));
+    };
+    window.addEventListener("money-map-menu", onMenu);
+    return () => window.removeEventListener("money-map-menu", onMenu);
+  }, [desktopMode, navigateTo, previewDiagnostics]);
 
   if (desktopMode && desktopRuntime?.state !== "ready") {
     if (desktopRuntime?.state === "failed") {
@@ -426,9 +495,7 @@ export default function App() {
                       aria-current={view === item.id ? "page" : undefined}
                       aria-label={item.id === "review" && data.issues.length > 0 ? `Review, ${data.issues.length} issues` : item.label}
                       onClick={() => {
-                        if (item.id === "activity") setActivityPeriod(null);
-                        if (desktopMode) window.history.replaceState(null, "", `#view=${item.id}`);
-                        setView(item.id);
+                        navigateTo(item.id);
                       }}
                     >
                       <span aria-hidden="true">{item.glyph}</span>
@@ -456,6 +523,8 @@ export default function App() {
               <span className="privacy-dot" aria-hidden="true" />
               <span className="data-state-label">{updating
                 ? "Updating…"
+                : !online
+                  ? "Offline · local data available"
                 : latestSync
                   ? `Updated ${new Date(latestSync).toLocaleString()}`
                   : "Local data"}</span>
@@ -465,7 +534,7 @@ export default function App() {
               className="refresh-button"
               disabled={updating}
               onClick={() => {
-                if (data.plaid.refresh.active_connections === 0) setView("connections");
+                if (data.plaid.refresh.active_connections === 0) navigateTo("connections");
                 else void runGlobalRefresh(false);
               }}
             >
@@ -487,6 +556,12 @@ export default function App() {
                 >
                   Data safety
                 </button>
+                <button className="refresh-button" type="button" disabled={busy} onClick={() => void runReport()}>
+                  Generate report
+                </button>
+                <button className="refresh-button" type="button" disabled={busy} onClick={() => void previewDiagnostics()}>
+                  Diagnostics
+                </button>
               </>
             )}
           </div>
@@ -499,12 +574,13 @@ export default function App() {
               reloadVersion={dataReloadVersion}
               onShowActivity={(period) => {
                 setActivityPeriod(period);
+                if (desktopMode) window.history.replaceState(null, "", "#view=activity");
                 setView("activity");
               }}
-              onShowAccounts={() => setView("accounts")}
-              onShowIncome={() => setView("income")}
-              onShowWealth={() => setView("wealth")}
-              onShowGoals={() => setView("goals")}
+              onShowAccounts={() => navigateTo("accounts")}
+              onShowIncome={() => navigateTo("income")}
+              onShowWealth={() => navigateTo("wealth")}
+              onShowGoals={() => navigateTo("goals")}
             />
           )}
           {view === "goals" && (
@@ -547,13 +623,44 @@ export default function App() {
               issues={data.issues}
               busy={busy || updating}
               onUpdateData={() => void runGlobalRefresh(false)}
-              onOpenAccounts={() => setView("accounts")}
+              onOpenAccounts={() => navigateTo("accounts")}
             />
           )}
         </div>
       </main>
       {showDataHome && dataHome && (
         <DataHomePanel initial={dataHome} onStatus={setDataHome} onClose={() => setShowDataHome(false)} />
+      )}
+      {report && (
+        <div className="desktop-completion" role="status">
+          <span>Report ready</span>
+          <button type="button" onClick={() => void window.__MONEY_MAP_DESKTOP__?.reportAction?.(report.report_id, "open")}>Open Report</button>
+          <button type="button" onClick={() => void window.__MONEY_MAP_DESKTOP__?.reportAction?.(report.report_id, "reveal")}>Reveal in Finder</button>
+          <button type="button" aria-label="Dismiss report confirmation" onClick={() => setReport(null)}>×</button>
+        </div>
+      )}
+      {diagnostics && (
+        <FocusedDialog
+          title="Sanitized diagnostics"
+          description="Review the support-safe categories before choosing where to save. Financial records, paths, credentials, ports, and filenames are excluded."
+          onClose={() => setDiagnostics(null)}
+        >
+          <dl className="diagnostics-preview">
+            {Object.entries(diagnostics).map(([key, value]) => (
+              <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{typeof value === "object" ? "Included safe status" : String(value)}</dd></div>
+            ))}
+          </dl>
+          <div className="dialog-actions">
+            <button type="button" onClick={() => setDiagnostics(null)}>Cancel</button>
+            <button className="primary-button" type="button" onClick={async () => {
+              const saved = await window.__MONEY_MAP_DESKTOP__?.exportDiagnostics?.();
+              if (saved) {
+                setDiagnostics(null);
+                setMessage("Sanitized diagnostics exported.");
+              }
+            }}>Export Diagnostics</button>
+          </div>
+        </FocusedDialog>
       )}
     </div>
   );

@@ -25,7 +25,15 @@ pub struct AboutInfo {
     pub boundary: &'static str,
 }
 
-pub fn about_info() -> AboutInfo {
+pub fn about_info_for_mode(mode: &str) -> AboutInfo {
+    let (data_mode, data_location) = if mode == "production-v1" {
+        ("private local data", "Private macOS application data")
+    } else {
+        (
+            "disposable synthetic",
+            "Private disposable runtime directory",
+        )
+    };
     AboutInfo {
         product: "Money Map",
         runtime_version: RUNTIME_VERSION,
@@ -33,14 +41,14 @@ pub fn about_info() -> AboutInfo {
         desktop_build: BUILD_ID,
         source_commit: BUILD_COMMIT,
         target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
-        data_mode: "disposable synthetic",
-        data_location: "Private disposable runtime directory",
+        data_mode,
+        data_location,
         boundary: "Local only; Plaid is optional and read-only",
     }
 }
 
-pub fn native_about_metadata() -> tauri::menu::AboutMetadata<'static> {
-    let info = about_info();
+pub fn native_about_metadata(mode: &str) -> tauri::menu::AboutMetadata<'static> {
+    let info = about_info_for_mode(mode);
     AboutMetadataBuilder::new()
         .name(Some(info.product))
         .version(Some(info.runtime_version))
@@ -59,11 +67,11 @@ pub fn native_about_metadata() -> tauri::menu::AboutMetadata<'static> {
 
 #[cfg(test)]
 mod tests {
-    use super::{about_info, RUNTIME_VERSION, SCHEMA_REVISION};
+    use super::{about_info_for_mode, RUNTIME_VERSION, SCHEMA_REVISION};
 
     #[test]
     fn about_metadata_uses_build_and_runtime_constants() {
-        let about = about_info();
+        let about = about_info_for_mode("acceptance-synthetic-v1");
         assert_eq!(about.product, "Money Map");
         assert_eq!(about.runtime_version, RUNTIME_VERSION);
         assert_eq!(about.schema_revision, SCHEMA_REVISION);
@@ -72,5 +80,8 @@ mod tests {
         assert_eq!(about.data_mode, "disposable synthetic");
         assert!(about.boundary.contains("read-only"));
         assert!(!about.data_location.contains('/'));
+        let production = about_info_for_mode("production-v1");
+        assert_eq!(production.data_mode, "private local data");
+        assert!(!production.data_location.contains('/'));
     }
 }

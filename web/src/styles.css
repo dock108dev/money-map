@@ -106,7 +106,7 @@ button {
 }
 
 :is(button, input, select, textarea, summary, a):focus-visible {
-  outline: 3px solid rgba(31, 114, 89, 0.35);
+  outline: 3px solid #1f7259;
   outline-offset: 3px;
 }
 
@@ -182,11 +182,15 @@ button {
 
 .nav-group-label {
   padding: 0 12px;
-  color: #789087;
+  color: #7f978e;
   font-size: 9px;
   font-weight: 750;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.sidebar :is(button, summary, a):focus-visible {
+  outline-color: #a9e5c8;
 }
 
 .sidebar nav button {
@@ -3810,4 +3814,86 @@ tbody tr[tabindex]:hover {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+/* Slice 3 desktop product operations */
+.desktop-completion {
+  position: fixed;
+  z-index: 45;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 48px);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 12px 36px rgba(13, 24, 19, 0.18);
+}
+
+.desktop-completion button,
+.dialog-actions button {
+  min-height: 44px;
+}
+
+.diagnostics-preview {
+  display: grid;
+  gap: 0;
+  margin: 20px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.diagnostics-preview div {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.diagnostics-preview div:last-child { border-bottom: 0; }
+.diagnostics-preview dt { color: var(--muted); text-transform: capitalize; }
+.diagnostics-preview dd { margin: 0; overflow-wrap: anywhere; }
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.data-operation-state {
+  margin: 12px 0;
+  padding: 11px 12px;
+  border: 1px solid #d5b96c;
+  border-radius: 10px;
+  background: #fff9e8;
+  color: #594a20;
+}
+
+.data-operation-state.success {
+  border-color: #8db9a7;
+  background: #eff9f4;
+  color: #174d3b;
+}
+
+.refresh-controls { flex-wrap: wrap; }
+
+@media (max-width: 760px) {
+  .desktop-completion {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-wrap: wrap;
+    max-width: none;
+  }
+  .diagnostics-preview div { grid-template-columns: 1fr; gap: 3px; }
+}
+
+@media print {
+  .desktop-completion,
+  .diagnostics-preview,
+  .dialog-actions { display: none !important; }
 }
