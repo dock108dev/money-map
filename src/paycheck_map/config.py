@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8765
     desktop_mode: bool = False
+    desktop_test_project_root: Path | None = None
 
     @property
     def private_dir(self) -> Path:
@@ -51,12 +52,18 @@ class Settings(BaseSettings):
 
         if self.desktop_mode:
             frozen_root = getattr(sys, "_MEIPASS", None)
-            return Path(frozen_root) / "paycheck_map" if frozen_root else self.package_root
+            if frozen_root:
+                return Path(frozen_root) / "paycheck_map"
+            if self.desktop_test_project_root is not None:
+                return self.desktop_test_project_root
+            return self.package_root
         return self.project_root
 
     @property
     def migration_dir(self) -> Path:
         if self.desktop_mode:
+            if self.desktop_test_project_root is not None:
+                return self.runtime_root / "alembic"
             return self.runtime_root / "_alembic"
         project_migrations = self.project_root / "alembic"
         if project_migrations.is_dir():
@@ -66,6 +73,8 @@ class Settings(BaseSettings):
     @property
     def web_dist_dir(self) -> Path:
         if self.desktop_mode:
+            if self.desktop_test_project_root is not None:
+                return self.runtime_root / "web" / "dist"
             return self.runtime_root / "web_dist"
         project_dist = self.project_root / "web" / "dist"
         if project_dist.is_dir():

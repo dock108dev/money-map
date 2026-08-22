@@ -22,9 +22,11 @@ def main() -> None:
     ]
     if bad_names:
         raise SystemExit(f"Forbidden private-data filenames: {bad_names}")
+    project_root = Path(__file__).resolve().parents[1]
+    forbidden_bytes = (*FORBIDDEN_BYTES, str(project_root).encode("utf-8"))
     for path in files:
         content = path.read_bytes()
-        if any(marker in content for marker in FORBIDDEN_BYTES):
+        if any(marker in content for marker in forbidden_bytes):
             raise SystemExit(f"Forbidden private-data marker in {path.relative_to(app)}")
     required = {
         "Contents/MacOS/money-map-desktop",

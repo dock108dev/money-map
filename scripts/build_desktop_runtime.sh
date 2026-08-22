@@ -4,11 +4,13 @@ set -euo pipefail
 repo_root=${0:A:h:h}
 target_triple=$(rustc --print host-tuple)
 if [[ "$target_triple" != "aarch64-apple-darwin" ]]; then
-  print -u2 "Slice 0 supports only aarch64-apple-darwin"
+  print -u2 "The Money Map owner runtime supports only aarch64-apple-darwin"
   exit 1
 fi
 
 cd "$repo_root"
+export MONEY_MAP_BUILD_COMMIT=${MONEY_MAP_BUILD_COMMIT:-$(git rev-parse HEAD)}
+export MONEY_MAP_BUILD_ID=${MONEY_MAP_BUILD_ID:-"slice1-$MONEY_MAP_BUILD_COMMIT"}
 pnpm --dir web build
 uv run pyinstaller \
   --noconfirm \

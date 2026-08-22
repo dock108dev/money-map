@@ -166,10 +166,58 @@ function workingFetch(
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  delete window.__MONEY_MAP_DESKTOP__;
   window.location.hash = "";
 });
 
 describe("application states", () => {
+  it("blocks stale controls after desktop service failure and restores the current route after one deliberate restart", async () => {
+    window.location.hash = "#view=goals";
+    let ready = false;
+    const runtimeStatus = vi.fn(async () =>
+      ready ? { state: "ready" as const, generation: 2 } : { state: "failed" as const, generation: 1 },
+    );
+    const restart = vi.fn(async () => {
+      ready = true;
+      return { state: "ready" as const, generation: 2 };
+    });
+    Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", {
+      configurable: true,
+      value: { mode: true, reload: vi.fn(), print: vi.fn(), runtimeStatus, restart, about: vi.fn() },
+    });
+    const fetch = workingFetch();
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Money Map paused safely." })).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Restart local service" }));
+    expect(await screen.findByRole("heading", { name: "Goals" })).toBeInTheDocument();
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe("#view=goals");
+  });
+
+  it("shows bounded desktop restart progress without issuing API requests", async () => {
+    let finishRestart: ((value: { state: "failed"; generation: number }) => void) | undefined;
+    Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", {
+      configurable: true,
+      value: {
+        mode: true,
+        reload: vi.fn(),
+        print: vi.fn(),
+        runtimeStatus: vi.fn(async () => ({ state: "failed" as const, generation: 1 })),
+        restart: vi.fn(() => new Promise((resolve) => { finishRestart = resolve; })),
+        about: vi.fn(),
+      },
+    });
+    const fetch = workingFetch();
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Restart local service" }));
+    expect(await screen.findByText("Restarting safely…")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+    finishRestart?.({ state: "failed", generation: 2 });
+  });
+
   it("shows a loading state while local endpoints are pending", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
     render(<App />);

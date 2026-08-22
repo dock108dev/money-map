@@ -1,6 +1,7 @@
 # Money Map v3 desktop architecture
 
-Status: frozen by Slice 0 on 2026-08-21 for the Apple Silicon owner beta.
+Status: frozen by Slice 0 and productionized by Slice 1 on 2026-08-21 for the Apple Silicon owner
+beta.
 
 ## Decision
 
@@ -12,9 +13,9 @@ Money Map uses one native shell and one sidecar builder:
 - **Authority:** SQLite remains the financial-data authority and macOS Keychain remains the
   secret authority. Rust does not reproduce financial logic and React is not rewritten.
 
-The Slice 0 artifact is a disposable architecture proof. It intentionally stays at application
-version `2.1.0` and schema `0009_goal_persistence`; production data-home and migration work begin
-only in later slices.
+The Slice 1 runtime remains deliberately disposable and synthetic. It stays at application version
+`2.1.0` and schema `0009_goal_persistence`; production data-home and migration work begin only in
+Slice 2.
 
 ## Ownership and process lifecycle
 
@@ -27,30 +28,37 @@ Money Map.app/Contents/MacOS/money-map-desktop
      -> PyInstaller-extracted Python/FastAPI runtime
 ```
 
-At launch, Tauri creates a private temporary parent and a child whose basename starts with
-`money-map-slice0-`. It generates a cryptographically random 256-bit session value, starts the
-sidecar without command-line arguments, clears inherited environment variables, and supplies
-only the locale, desktop-mode marker, disposable data root, and session through the child's
-environment. The session is never put in a URL, WebView storage, a log, or a process-list
-argument.
+At launch, Tauri creates one private temporary parent named `money-map-runtime-*`, selects its
+`money-map-synthetic-data` child, generates a cryptographically random 256-bit session, and starts
+the sidecar without command-line arguments. It clears inherited environment variables and supplies
+only the locale, desktop-mode and synthetic-mode markers, data root, and session through the child
+environment. The session is never put in a URL, WebView storage, log, database, crash message, or
+process-list argument.
 
-The sidecar refuses a missing or non-Slice-0 data root. It creates the root exclusively, reserves
-an OS-selected port by binding an IPv4 socket to `127.0.0.1:0`, and gives that already-bound
-socket to Uvicorn. It prints only `MONEY_MAP_READY <port>`. Tauri bounds that signal wait to 30
-seconds and then bounds authenticated health readiness to 45 seconds. A failure creates a local
-safe-error window which states that financial data was not opened or changed; it never displays
-the session or an internal exception.
+The shell owns an explicit `Starting`, `Ready`, `Failed`, `Restarting`, `Stopping`, and `Stopped`
+state machine. Every generation receives a new session and exactly one process group. The sidecar
+reserves an OS-selected port by binding `127.0.0.1:0`, then prints only `MONEY_MAP_READY <port>`.
+The shell bounds the signal wait to 30 seconds and authenticated health readiness to 45 seconds,
+while continuing to monitor process termination after readiness. Unexpected death clears the dead
+port and session, hides stale controls, and shows one deliberate restart action; there is no
+automatic retry loop.
 
-On application exit, Tauri writes `shutdown` to the child stdin, gives it 1.5 seconds for a
-graceful Uvicorn/SQLite shutdown, and then calls the child kill operation as a forced-cleanup
-fallback. The temporary directory is owned by the shell for the process lifetime. Slice 1 will
-add single-instance activation and the production restart experience; a second writer is not yet
-allowed against owner data.
+On restart or application exit, Tauri writes `shutdown` to stdin and allows 1.5 seconds for clean
+Uvicorn, SQLite, and writer-lock shutdown. It then kills the entire isolated process group as a
+fallback and independently waits up to five seconds for the group and listener to disappear. The
+shell explicitly removes its temporary parent after shutdown rather than relying on process-exit
+destructors.
+
+The official Tauri single-instance plugin is registered before setup. A second launch shows,
+unminimizes, and focuses the existing window before any second sidecar can start. Independently,
+the Python boundary takes a nonblocking OS file lock scoped to the selected data root before the
+database is initialized. Clean shutdown removes the lock file; a stale file is replaced only after
+the OS lock is successfully acquired, which proves that no active owner holds it.
 
 ## Bundle and immutable resources
 
 `desktop/runtime-resources.json` is the checked-in inventory and an automated test compares its
-Python module and migration lists with the source tree. `scripts/build_desktop_spike.sh`:
+Python module and migration lists with the source tree. `scripts/build_desktop_runtime.sh`:
 
 1. compiles the React production assets;
 2. freezes every `paycheck_map` submodule plus locked third-party dependencies, Keychain
@@ -63,19 +71,23 @@ metadata/version, all migration revisions through `0009_goal_persistence`, SQLit
 the approved contribution-limit configuration, report code, and required native libraries.
 There is no Python, Node, source checkout, or network download requirement at runtime.
 
-Desktop settings resolve immutable resources only from the frozen PyInstaller root (or the
-installed Python package during tests). They never fall back to the repository. The artifact scan
-rejects databases, `.local`, statements, backups, source maps, repository-private path markers,
-and required-resource omissions.
+Desktop settings resolve immutable resources only from the frozen PyInstaller root. Focused tests
+may supply an explicit synthetic test-project root; the production shell clears inherited
+environment and never supplies that override. There is no production repository fallback. The
+artifact scan rejects databases, `.local`, statements, backups, source maps, repository-private
+path markers, and required-resource omissions.
 
 ## React and API transport
 
 Tauri's asset protocol loads `index.html`; desktop navigation is hash based (`#view=...`) so a
 deep view survives WebView reload without asking the sidecar to serve frontend files. The native
 initialization script intercepts only relative `/api/` fetches. It invokes a narrow Rust command
-that accepts GET, POST, PUT, and DELETE, rejects non-API paths/newlines and bodies over 1 MiB,
-adds the secret session header inside Rust, and contacts the selected loopback port. JavaScript
-can neither read the session nor choose the host or port.
+that accepts GET, POST, PUT, and DELETE; rejects traversal, encoded traversal, newlines, malformed
+paths, unsupported methods, and bodies over 1 MiB; and adds the secret session inside Rust. A
+maintained HTTP client handles content-length and chunked framing with a two-second connect bound,
+a ten-second I/O and total bound, an 8 MiB response cap, a safe response-header allowlist,
+hop-by-hop header exclusion, and `no-store`. JavaScript can neither read the session nor choose the
+host, port, arbitrary headers, or destination.
 
 The FastAPI wrapper independently requires:
 
@@ -84,9 +96,8 @@ The FastAPI wrapper independently requires:
 - a constant-time match of `X-Money-Map-Session` for every non-preflight request.
 
 Responses are `no-store`. An ordinary browser does not possess the session, while a hostile
-origin and a misleading host are rejected even if a session were supplied. Slice 0 live tests
-proved unauthenticated GET and POST return 401, an untrusted origin returns 403, and an invalid
-host returns 400.
+origin and a misleading host are rejected even if a session were supplied. The Python boundary
+also independently rejects non-API and traversal paths, unsupported methods, and oversized bodies.
 
 ## Persistent storage contract for later slices
 
@@ -154,10 +165,8 @@ and it would mix shell and service responsibilities while providing a weaker pac
 
 ## Deferred risks
 
-- Slice 1: production Application Support paths, single-instance activation, restart UX, ten-cycle
-  lifecycle proof, forced-death recovery, About/build metadata, and narrower capability review.
-- Slice 2: previewed owner-data migration, backup/restore, atomic activation, and interruption
-  recovery. No owner data was opened in Slice 0.
+- Slice 2: production Application Support paths, previewed owner-data migration, backup/restore,
+  atomic activation, and interruption recovery. No owner data was opened in Slice 0 or Slice 1.
 - Slice 4: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
 - Slice 5: deterministic release build, DMG, Developer ID, hardened runtime, notarization,
   stapling, installed-app/Gatekeeper tests, and final artifact-size/performance budgets.

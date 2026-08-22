@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "No frontend shell or filesystem authority is granted in Slice 0.",
+  "description": "No frontend shell or filesystem authority is granted to the Money Map runtime.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

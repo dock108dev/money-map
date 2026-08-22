@@ -6,9 +6,12 @@ import os
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
 
 import uvicorn
+
+from paycheck_map.desktop_lock import WriterLock
 
 
 def _synthetic_root() -> Path:
@@ -16,8 +19,14 @@ def _synthetic_root() -> Path:
     if not raw:
         raise RuntimeError("Disposable desktop data root is required")
     root = Path(raw).resolve()
-    if not root.name.startswith("money-map-slice0-"):
-        raise RuntimeError("Slice 0 refuses a non-disposable data root")
+    if os.environ.get("PAYCHECK_MAP_DESKTOP_DATA_MODE") != "disposable-synthetic":
+        raise RuntimeError("Disposable synthetic desktop mode is required")
+    if root.name != "money-map-synthetic-data" or not root.parent.name.startswith(
+        "money-map-runtime-"
+    ):
+        raise RuntimeError("Desktop runtime refuses a non-disposable data root")
+    if root.is_symlink() or ".local" in root.parts:
+        raise RuntimeError("Desktop runtime refuses an unsafe data root")
     return root
 
 
@@ -27,31 +36,41 @@ def main() -> None:
         raise RuntimeError("Desktop mode is required")
     if not os.environ.get("PAYCHECK_MAP_DESKTOP_SESSION"):
         raise RuntimeError("Desktop session is required")
-    root.mkdir(parents=True, exist_ok=False)
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(128)
-    port = int(listener.getsockname()[1])
-    print(f"MONEY_MAP_READY {port}", flush=True)
-    config = uvicorn.Config(
-        "paycheck_map.desktop_app:desktop_app",
-        host="127.0.0.1",
-        port=port,
-        access_log=False,
-        log_level="warning",
+    delay_ms = min(
+        max(int(os.environ.get("PAYCHECK_MAP_DESKTOP_STARTUP_DELAY_MS", "0")), 0), 30_000
     )
-    server = uvicorn.Server(config)
+    if delay_ms:
+        time.sleep(delay_ms / 1000)
+    root.mkdir(parents=True, exist_ok=True)
+    with WriterLock(root):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(128)
+        port = int(listener.getsockname()[1])
+        print(f"MONEY_MAP_READY {port}", flush=True)
+        config = uvicorn.Config(
+            "paycheck_map.desktop_app:desktop_app",
+            host="127.0.0.1",
+            port=port,
+            access_log=False,
+            log_level="warning",
+        )
+        server = uvicorn.Server(config)
 
-    def await_shutdown() -> None:
-        for line in sys.stdin:
-            if line.strip() == "shutdown":
-                server.should_exit = True
-                return
+        def await_shutdown() -> None:
+            for line in sys.stdin:
+                if line.strip() == "shutdown":
+                    server.should_exit = True
+                    return
 
-    threading.Thread(target=await_shutdown, name="desktop-shutdown", daemon=True).start()
-    server.run(sockets=[listener])
+        threading.Thread(target=await_shutdown, name="desktop-shutdown", daemon=True).start()
+        server.run(sockets=[listener])
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        print("MONEY_MAP_FAILED", flush=True)
+        raise SystemExit(1) from None

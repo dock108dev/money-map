@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Money Map Slice 0",
+  "productName": "Money Map",
   "version": "2.1.0",
-  "identifier": "com.moneymap.slice0",
+  "identifier": "com.moneymap.desktop",
   "build": {
     "frontendDist": "../../web/dist"
   },

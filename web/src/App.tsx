@@ -33,8 +33,31 @@ declare global {
       mode: true;
       reload(): Promise<void>;
       print(): Promise<void>;
+      runtimeStatus(): Promise<DesktopRuntimeStatus>;
+      restart(): Promise<DesktopRuntimeStatus>;
+      about(): Promise<DesktopAboutInfo>;
     };
   }
+}
+
+type DesktopRuntimeState = "starting" | "ready" | "failed" | "restarting" | "stopping" | "stopped";
+
+interface DesktopRuntimeStatus {
+  state: DesktopRuntimeState;
+  generation: number;
+  message?: string | null;
+}
+
+interface DesktopAboutInfo {
+  product: string;
+  runtime_version: string;
+  schema_revision: string;
+  desktop_build: string;
+  source_commit: string;
+  target: string;
+  data_mode: string;
+  data_location: string;
+  boundary: string;
 }
 
 type View = "cash-flow" | "goals" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
@@ -63,6 +86,9 @@ const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; lab
 export default function App() {
   const desktopMode = window.__MONEY_MAP_DESKTOP__?.mode === true;
   const [data, setData] = useState<ApplicationData | null>(null);
+  const [desktopRuntime, setDesktopRuntime] = useState<DesktopRuntimeStatus | null>(() =>
+    desktopMode ? { state: "starting", generation: 0 } : null,
+  );
   const [error, setError] = useState("");
   const [view, setView] = useState<View>(() =>
     window.location.hash === "#plaid-live-setup"
@@ -116,8 +142,28 @@ export default function App() {
   }, [refresh]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (!desktopMode || desktopRuntime?.state === "ready") void refresh();
+  }, [desktopMode, desktopRuntime?.generation, desktopRuntime?.state, refresh]);
+
+  useEffect(() => {
+    if (!desktopMode) return;
+    let active = true;
+    let timer = 0;
+    const checkRuntime = async () => {
+      try {
+        const status = await window.__MONEY_MAP_DESKTOP__?.runtimeStatus();
+        if (active && status) setDesktopRuntime(status);
+      } catch {
+        if (active) setDesktopRuntime({ state: "failed", generation: 0 });
+      }
+      if (active) timer = window.setTimeout(() => void checkRuntime(), 250);
+    };
+    void checkRuntime();
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [desktopMode]);
 
   useEffect(() => {
     if (!data || autoRefreshStarted.current || !data.plaid.refresh.automatic_refresh_due) return;
@@ -276,6 +322,38 @@ export default function App() {
       setBusy(false);
     }
   };
+
+  const restartDesktopRuntime = async () => {
+    const generation = desktopRuntime?.generation ?? 0;
+    setDesktopRuntime({ state: "restarting", generation });
+    try {
+      const status = await window.__MONEY_MAP_DESKTOP__?.restart();
+      if (status) setDesktopRuntime(status);
+    } catch {
+      setDesktopRuntime({ state: "failed", generation: generation + 1 });
+    }
+  };
+
+  if (desktopMode && desktopRuntime?.state !== "ready") {
+    if (desktopRuntime?.state === "failed") {
+      return (
+        <main className="fatal-state" role="alert">
+          <span>Local service unavailable</span>
+          <h1>Money Map paused safely.</h1>
+          <p>Financial data was not silently repaired or changed. Controls stay unavailable until the local service restarts.</p>
+          <button className="primary-button" onClick={() => void restartDesktopRuntime()}>
+            Restart local service
+          </button>
+        </main>
+      );
+    }
+    return (
+      <main className="loading-state" aria-live="polite">
+        <div className="loading-mark">M</div>
+        <p>{desktopRuntime?.state === "restarting" ? "Restarting safely…" : "Starting local service…"}</p>
+      </main>
+    );
+  }
 
   if (error && !data) {
     return (
