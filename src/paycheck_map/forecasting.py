@@ -346,7 +346,7 @@ def _baseline_fingerprint(session: Session, as_of: date) -> str:
 
 
 def _contribution_limits(runtime_settings: Settings) -> dict[str, dict[str, str]]:
-    path = runtime_settings.project_root / "config" / "contribution_limits.json"
+    path = runtime_settings.config_dir / "contribution_limits.json"
     if not path.exists():
         return {}
     return cast(dict[str, dict[str, str]], json.loads(path.read_text(encoding="utf-8")))

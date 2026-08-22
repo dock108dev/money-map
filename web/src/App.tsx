@@ -27,6 +27,16 @@ const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
 const RetirementView = lazy(() => import("./retirement/RetirementView"));
 const GoalsView = lazy(() => import("./goals/GoalsView"));
 
+declare global {
+  interface Window {
+    __MONEY_MAP_DESKTOP__?: {
+      mode: true;
+      reload(): Promise<void>;
+      print(): Promise<void>;
+    };
+  }
+}
+
 type View = "cash-flow" | "goals" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
 
 const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; label: string; glyph: string }> }> = [
@@ -51,10 +61,15 @@ const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; lab
 ];
 
 export default function App() {
+  const desktopMode = window.__MONEY_MAP_DESKTOP__?.mode === true;
   const [data, setData] = useState<ApplicationData | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>(() =>
-    window.location.hash === "#plaid-live-setup" ? "connections" : "cash-flow",
+    window.location.hash === "#plaid-live-setup"
+      ? "connections"
+      : desktopMode && window.location.hash.startsWith("#view=")
+        ? (window.location.hash.slice(6) as View)
+        : "cash-flow",
   );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -318,6 +333,7 @@ export default function App() {
                       aria-label={item.id === "review" && data.issues.length > 0 ? `Review, ${data.issues.length} issues` : item.label}
                       onClick={() => {
                         if (item.id === "activity") setActivityPeriod(null);
+                        if (desktopMode) window.history.replaceState(null, "", `#view=${item.id}`);
                         setView(item.id);
                       }}
                     >
@@ -361,6 +377,31 @@ export default function App() {
             >
               {updating ? "Updating…" : "Update data"}
             </button>
+            {desktopMode && (
+              <>
+                <button
+                  className="refresh-button"
+                  type="button"
+                  onClick={() => void window.__MONEY_MAP_DESKTOP__?.reload()}
+                >
+                  Reload
+                </button>
+                <button
+                  className="refresh-button"
+                  type="button"
+                  onClick={() => document.getElementById("desktop-file-proof")?.click()}
+                >
+                  Choose file
+                </button>
+                <input
+                  id="desktop-file-proof"
+                  aria-label="Choose a synthetic import file"
+                  type="file"
+                  accept=".csv,.json,.pdf"
+                  hidden
+                />
+              </>
+            )}
           </div>
         </header>
         {error && <div className="error-banner">{error}</div>}

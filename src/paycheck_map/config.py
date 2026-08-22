@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,6 +15,7 @@ class Settings(BaseSettings):
     local_dir: Path | None = None
     host: str = "127.0.0.1"
     port: int = 8765
+    desktop_mode: bool = False
 
     @property
     def private_dir(self) -> Path:
@@ -40,7 +42,22 @@ class Settings(BaseSettings):
         return Path(__file__).resolve().parent
 
     @property
+    def runtime_root(self) -> Path:
+        """Root for immutable packaged resources.
+
+        Desktop mode intentionally has no repository fallback. PyInstaller places
+        the packaged resources beside the frozen package under ``sys._MEIPASS``.
+        """
+
+        if self.desktop_mode:
+            frozen_root = getattr(sys, "_MEIPASS", None)
+            return Path(frozen_root) / "paycheck_map" if frozen_root else self.package_root
+        return self.project_root
+
+    @property
     def migration_dir(self) -> Path:
+        if self.desktop_mode:
+            return self.runtime_root / "_alembic"
         project_migrations = self.project_root / "alembic"
         if project_migrations.is_dir():
             return project_migrations
@@ -48,10 +65,16 @@ class Settings(BaseSettings):
 
     @property
     def web_dist_dir(self) -> Path:
+        if self.desktop_mode:
+            return self.runtime_root / "web_dist"
         project_dist = self.project_root / "web" / "dist"
         if project_dist.is_dir():
             return project_dist
         return self.package_root / "web_dist"
+
+    @property
+    def config_dir(self) -> Path:
+        return self.runtime_root / "config"
 
     def ensure_private_dirs(self) -> None:
         for path in (

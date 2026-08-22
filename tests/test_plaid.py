@@ -584,7 +584,9 @@ def test_goal_observation_counts_for_global_partial_and_individual_refreshes(
     session = migrated_session
     store, sofi_client, fidelity_client, sofi_id, fidelity_id = _connect_synthetic_items(session)
     _add_primary_goal(session)
-    observed = datetime(2026, 8, 11, 16, tzinfo=UTC)
+    latest_synthetic_date = session.scalar(select(func.max(BalanceSnapshot.snapshot_date)))
+    assert latest_synthetic_date is not None
+    observed = datetime.combine(latest_synthetic_date + timedelta(days=1), datetime.min.time(), UTC)
 
     first = sync_all_connections(
         session,

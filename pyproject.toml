@@ -70,3 +70,8 @@ packages = ["paycheck_map"]
 [[tool.mypy.overrides]]
 module = ["pdfplumber", "pdfplumber.*"]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.15,<7",
+]

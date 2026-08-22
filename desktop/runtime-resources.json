@@ -1,0 +1,48 @@
+{
+  "contract": "money-map-desktop-runtime-v1",
+  "python": {
+    "entrypoint": "paycheck_map.desktop_sidecar:main",
+    "package": "src/paycheck_map",
+    "modules": [
+      "paycheck_map.__init__", "paycheck_map.adapters.__init__", "paycheck_map.adapters.base",
+      "paycheck_map.adapters.canonical_ledger", "paycheck_map.adapters.canonical_payroll",
+      "paycheck_map.adapters.payroll_oracle", "paycheck_map.allocations", "paycheck_map.analytics",
+      "paycheck_map.api", "paycheck_map.app", "paycheck_map.balances",
+      "paycheck_map.business_time", "paycheck_map.cash_flow_service",
+      "paycheck_map.cash_months", "paycheck_map.cli", "paycheck_map.config",
+      "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_sidecar",
+      "paycheck_map.forecasting", "paycheck_map.goal_gap_service",
+      "paycheck_map.goal_observation", "paycheck_map.goal_operations",
+      "paycheck_map.goal_service", "paycheck_map.ingestion", "paycheck_map.keychain",
+      "paycheck_map.life_plan", "paycheck_map.logical_manifest", "paycheck_map.models",
+      "paycheck_map.money", "paycheck_map.payroll", "paycheck_map.plaid_client",
+      "paycheck_map.plaid_service", "paycheck_map.reconciliation",
+      "paycheck_map.recurring_outflow_service", "paycheck_map.refresh",
+      "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.services",
+      "paycheck_map.v21_contracts", "paycheck_map.v2_contracts"
+    ],
+    "dependencies": [
+      "alembic", "fastapi", "httpx", "keyring", "openpyxl", "pdfplumber",
+      "pydantic", "pydantic-settings", "python-multipart", "sqlalchemy", "uvicorn"
+    ],
+    "builder": "PyInstaller one-file 6.x",
+    "metadata": ["pyproject.toml", "src/paycheck_map/__init__.py"],
+    "nativeLibraries": ["CPython arm64 runtime", "SQLite", "cryptography/keyring transitive libraries"]
+  },
+  "frontend": {
+    "source": "web/src",
+    "compiledAssets": "web/dist",
+    "owner": "Tauri asset protocol"
+  },
+  "database": {
+    "alembicEnvironment": ["alembic/env.py", "alembic/script.py.mako"],
+    "revisions": ["0001_local_v01", "0002_plaid_read_only", "0003_payroll_detail", "0004_completed_payroll_schedule", "0005_money_map_v1", "0006_daily_data_refresh", "0007_refresh_timestamp_integrity", "0008_life_lab_v01", "0009_goal_persistence"],
+    "initialization": "paycheck_map.db.initialize_database"
+  },
+  "approvedResources": ["config/contribution_limits.json"],
+  "reportAndPrint": ["paycheck_map.reporting", "compiled React print CSS", "native WKWebView print panel"],
+  "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore",
+  "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_SESSION"],
+  "subprocesses": ["one money-map-sidecar child owned by the Tauri process"],
+  "forbidden": [".local", "*.sqlite*", "statements", "reports", "backups", "credentials", "tokens", "source maps", "repository paths", "owner screenshots"]
+}

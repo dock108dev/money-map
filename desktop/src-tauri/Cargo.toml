@@ -1,0 +1,16 @@
+[package]
+name = "money-map-desktop"
+version = "2.1.0"
+description = "Money Map Slice 0 native lifecycle spike"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.5.6", features = [] }
+
+[dependencies]
+getrandom = "0.3.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-shell = "2.3.5"
+tempfile = "3.23"
