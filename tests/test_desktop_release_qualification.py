@@ -150,3 +150,7 @@ def test_required_campaign_matrix_is_checked_in_and_complete() -> None:
     assert len(matrix["runtime_failures"]) >= 25
     assert len(matrix["accessibility_and_zoom"]) >= 12
     assert matrix["owner_validations_performed"] == []
+
+
+def test_slice6_evidence_is_ignored() -> None:
+    assert ".slice6-evidence/" in (PROJECT_ROOT / ".gitignore").read_text().splitlines()
