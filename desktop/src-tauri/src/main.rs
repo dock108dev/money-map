@@ -695,7 +695,7 @@ fn qualification_observer_script(
               buttons: values("button", 64),
               disabled_buttons: Array.from(document.querySelectorAll("button:disabled"))
                 .map(text).filter(Boolean).slice(0, 64),
-              messages: values("main p,main small,main dt,main dd", 64),
+              messages: values("main p,main small,main dt,main dd,main strong,.simple-empty", 64),
               loading_visible: Boolean(document.querySelector(".loading-state")),
               dialog_count: document.querySelectorAll('[role="dialog"],[role="alertdialog"]').length,
               progress_count: document.querySelectorAll('[role="progressbar"],progress').length,

@@ -51,7 +51,7 @@
   "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore using com.moneymap.desktop.secrets.v1",
   "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD", "PAYCHECK_MAP_DESKTOP_CONTROL_FD", "PAYCHECK_MAP_DESKTOP_OWNER_PID", "MONEY_MAP_QUALIFICATION_CONTRACT"],
   "sessionBootstrap": "money-map-desktop-bootstrap-v1 over private inherited descriptor 3; never argv or environment",
-  "installedQualification": "money-map-installed-root-attestation-v1 over the private bootstrap descriptor; nonce, session, and generation bound before financial UI construction",
+  "installedQualification": "money-map-installed-root-attestation-v1 over the private bootstrap descriptor; nonce, session, and generation bound before financial UI construction; optional money-map-installed-matrix-observation-v1 is synthetic-contract-gated and writes sanitized state-route evidence only",
   "subprocesses": ["one supervised money-map-sidecar process group owned by the Tauri process"],
   "forbidden": [".local", "*.sqlite*", "statements", "reports", "backups", "credentials", "tokens", "source maps", "repository paths", "owner screenshots"],
   "desktop_experience": {

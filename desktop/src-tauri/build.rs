@@ -18,6 +18,7 @@ fn main() {
         "desktop_export_diagnostics",
         "desktop_set_operations_enabled",
         "desktop_open_external",
+        "desktop_qualification_observe",
     ];
     tauri_build::try_build(
         tauri_build::Attributes::new()

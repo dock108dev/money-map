@@ -11,7 +11,8 @@ sidecar. Trust boundaries are: ordinary browser to loopback; bundled main WebVie
 Plaid frame to bundled page; Rust to the private bootstrap pipe and sidecar; sidecar to SQLite and
 Keychain; filesystem input to import/recovery parsers; and build inputs to the signed bundle.
 
-Entry points are WebView navigation/new-window requests, the 13 permissioned Tauri commands,
+Entry points are WebView navigation/new-window requests, the 13 ordinary permissioned Tauri
+commands plus one qualification-only observation command,
 loopback HTTP, the inherited bootstrap descriptor, native file selection, the private inbox,
 SQLite/backup/catalog/journal files, Keychain calls, approved external links, and frozen build
 resources. Attackers include malicious web content, an unprivileged local process, crafted files,
@@ -24,7 +25,7 @@ a person modifying a copied bundle, and a same-user process able to inspect owne
 | 1 | Malicious ordinary website probes loopback or imitates the UI. | Ephemeral IPv4 `127.0.0.1`, 256-bit session, exact Host/origin/header rules, no credentialed CORS. | Campaign A and 78-request Campaign B. A fully compromised browser in the owner account can still attempt traffic but does not possess the session. |
 | 2 | Top-level WebView navigation to remote, `file:`, `data:`, `javascript:`, or custom content. | Rust accepts only the bundled Tauri origin and root/index paths; queries, credentials and new windows fail closed. | Rust navigation matrix plus signed-app bundled-origin observation. Denial leaves the accepted UI loaded. |
 | 3 | Malicious iframe or Plaid frame seeks native authority. | Capabilities match exact local window labels; Plaid receives CSP frame/script access, never a capable window label. | Live hostile iframe reported no Tauri internals. `OV-04` retains the real sandbox-Link CSP proof. |
-| 4 | Frontend script compromise invokes excessive native authority. | Thirteen typed, reviewed commands; no shell/fs/http/opener/window primitives; Rust adds session and fixed destination. Separate safe-error window has only status/restart/About. | Command/capability equality test. Compromised bundled script can invoke the reviewed main commands, so input and state validation remains mandatory. |
+| 4 | Frontend script compromise invokes excessive native authority. | Thirteen ordinary typed, reviewed commands plus one qualification-only observation command; no shell/fs/http/opener/window primitives; Rust adds session and fixed destination. The observer rejects launches without the signed synthetic qualification contract and retains only bounded UI/API classifications. Separate safe-error window has only status/restart/About. | Command/capability equality test. Compromised bundled script can invoke the reviewed main commands, so input and state validation remains mandatory. |
 | 5 | Unauthorized local process connects directly. | Secret pipe, constant-time authentication, exact port/Host, bounded methods/body/response/concurrency and ambiguity rejection. | Python header matrix and Campaign B. Same-user debugging rights remain an OS boundary. |
 | 6 | Same-user process inspects arguments, environment, files, output or logs. | Session is passed once over inherited descriptor 3, removed from child state, never supplied to JavaScript or files; safe event codes only. | Process inspection and canary scans. A fully compromised account can attach to memory or replace trusted user files and is not solved locally. |
 | 7 | Duplicate/replayed session or replay after restart. | One session per generation; process-private single install; restart clears old session/port before new generation. | Entropy/replacement Rust test, stale/wrong/duplicate probes, restart campaign. |

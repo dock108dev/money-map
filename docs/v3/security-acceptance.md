@@ -13,6 +13,7 @@ permission is present.
 | Command | Surface and typed data | Effect and safe failure |
 |---|---|---|
 | `desktop_fetch` | main; bounded method/path/optional JSON body -> bounded HTTP-shaped response | Fixed active loopback target only; adds session in Rust; generic unavailable error. |
+| `desktop_qualification_observe` | main; bounded synthetic state/route observation | Fails closed without the native qualification contract; fixed allowlisted GETs only; writes a sanitized result beneath the disposable campaign root. |
 | `desktop_reload` | main; none -> none | Reloads only bundled content under navigation policy. |
 | `desktop_print` | main; none -> none | Native print panel; no implicit file write. |
 | `desktop_runtime_status` | both; none -> safe lifecycle status | No port, PID, session, path or private value. |
