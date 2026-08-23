@@ -57,6 +57,29 @@ const accounts = {
   activity: [],
 };
 
+const observedAccounts = {
+  ...accounts,
+  accounts: [{
+    id: 1, institution: "Synthetic Bank", name: "Checking ••0001", type: "checking",
+    category: "cash", current_balance: "100.00", balance_as_of: "2026-07-29",
+    starting_balance: "100.00", starting_balance_as_of: "2026-07-01", change: "0.00",
+    inflows: "0.00", outflows: "0.00", contributions: "0.00", withdrawals: "0.00",
+    investment_result: "0.00", performance_status: "tracking", cost_basis: null,
+    unrealized_gain: null, balance_point_count: 1, transaction_count: 0, holding_count: 0,
+    holdings: [], source: "synthetic", last_synced_at: null, status: "current",
+  }],
+};
+
+const reviewIssue = {
+  id: 1,
+  entity_type: "synthetic",
+  entity_id: "fixture-1",
+  rule: "synthetic_review",
+  status: "open",
+  residual: "1.00",
+  details: { next_steps: ["Review synthetic evidence."] },
+};
+
 const wealth = {
   as_of: "2026-08-03",
   accessible: { total: "33014.92", cash: "6761.75", sellable_investments: "26253.17", accounts: [] },
@@ -112,7 +135,7 @@ function plaid(refreshDue: boolean, connectionCount = 1) {
 function workingFetch(
   refreshDue = false,
   connectionCount = 1,
-  options: { issues?: unknown[]; failedConnections?: number } = {},
+  options: { issues?: unknown[]; failedConnections?: number; accountData?: unknown; overviewData?: unknown } = {},
 ) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -133,10 +156,11 @@ function workingFetch(
       });
     }
     if (url.startsWith("/api/v2/cash-flow?")) return json(cashFlowFixture());
-    if (url === "/api/accounts") return json(accounts);
+    if (url === "/api/accounts") return json(options.accountData ?? accounts);
+    if (url.startsWith("/api/overview")) return json(options.overviewData ?? overview);
     if (url === "/api/wealth") return json(wealth);
     if (url === "/api/exceptions") return json(options.issues ?? []);
-    if (url === "/api/timeline" || url === "/api/scenarios" || url === "/api/imports") return json([]);
+    if (url.startsWith("/api/timeline") || url === "/api/scenarios" || url === "/api/imports") return json([]);
     if (url === "/api/plaid/status") return json(plaid(refreshDue, connectionCount));
     if (url === "/api/payroll") return json({ period: { start: "2025-01-01", end: "2026-07-29" }, count: 0, statement_count: 0, calculated_count: 0, totals: {}, rows: [] });
     if (url === "/api/v2/goals/primary") return json(primaryState);
@@ -160,6 +184,28 @@ function workingFetch(
       as_of: "2026-08-03", cash: "6761.75", accessible_investments: "26253.17", pretax_retirement: "459830.08", hsa: "0.00", restricted_assets: "0.00", debt: "0.00", accessible_total: "33014.92", tracked_total: "492845.00", observed_monthly_outflow: "5500.00", outflow_months: [], payroll: null, accounts: [], warnings: [],
     });
     return new Response("Not found", { status: 404 });
+  });
+}
+
+function installReadyDesktop() {
+  Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", {
+    configurable: true,
+    value: {
+      mode: true,
+      reload: vi.fn(), print: vi.fn(),
+      runtimeStatus: vi.fn(async () => ({ state: "ready" as const, generation: 1 })),
+      restart: vi.fn(), about: vi.fn(), selectImport: vi.fn(), revealBackup: vi.fn(),
+      setOperationsEnabled: vi.fn(),
+    },
+  });
+}
+
+function withReadyDataHome(base: ReturnType<typeof workingFetch>) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === "/api/desktop/data-home/status") {
+      return json({ phase: "already_migrated", ready: true, schema_revision: "0009_goal_persistence" });
+    }
+    return base(input, init);
   });
 }
 
@@ -386,10 +432,10 @@ describe("application states", () => {
     await screen.findByRole("heading", { name: "Cash Flow" });
     const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
     expect(Array.from(navigation.querySelectorAll("button")).map((button) => button.getAttribute("aria-label")?.replace(/, \d+ issues$/u, ""))).toEqual([
-      "Cash Flow", "Goals", "Activity", "Accounts", "Income", "Wealth", "Retirement", "Lab", "Add account", "Review",
+      "Cash Flow", "Goals", "Activity", "Overview", "Accounts", "Income", "Wealth", "Retirement", "Lab", "Add account", "Review",
     ]);
     expect(within(screen.getByRole("group", { name: "Everyday" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Cash Flow", "Goals", "Activity"]);
-    expect(within(screen.getByRole("group", { name: "Details" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Accounts", "Income", "Wealth"]);
+    expect(within(screen.getByRole("group", { name: "Details" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Overview", "Accounts", "Income", "Wealth"]);
     expect(within(screen.getByRole("group", { name: "Planning" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Retirement", "Lab"]);
     expect(within(screen.getByRole("group", { name: "Data" })).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual(["Add account", "Review, 2 issues"]);
     expect(screen.getByRole("button", { name: "Review, 2 issues" })).toHaveTextContent("Review2");
@@ -401,7 +447,7 @@ describe("application states", () => {
     vi.stubGlobal("fetch", workingFetch(false, 2, { issues: [{ id: 1 }] }));
     render(<App />);
     await screen.findByRole("heading", { name: "Cash Flow" });
-    const expectedRoutes = ["Cash Flow", "Goals", "Activity", "Accounts", "Income", "Wealth", "Retirement", "Lab", "Add account", "Review, 1 issues"];
+    const expectedRoutes = ["Cash Flow", "Goals", "Activity", "Overview", "Accounts", "Income", "Wealth", "Retirement", "Lab", "Add account", "Review, 1 issues"];
     for (const name of expectedRoutes) expect(screen.getByRole("button", { name })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Accounts" }));
     expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
@@ -414,6 +460,134 @@ describe("application states", () => {
     vi.stubGlobal("fetch", workingFetch(false, 2));
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
+  });
+
+  it("opens Overview lazily and renders its accepted heading", async () => {
+    const fetch = workingFetch(false, 2, { accountData: observedAccounts });
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/overview"))).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([input]) => String(input).startsWith("/api/overview"))).toHaveLength(1);
+  });
+
+  it("validates installed Overview deep routes and safely rejects unknown hashes", async () => {
+    installReadyDesktop();
+    window.location.hash = "#view=overview";
+    const base = workingFetch(false, 2, { accountData: observedAccounts });
+    vi.stubGlobal("fetch", withReadyDataHome(base));
+    const first = render(<App />);
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#view=overview");
+    first.unmount();
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(base.mock.calls.filter(([input]) => String(input).startsWith("/api/overview")).every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+    cleanup();
+    window.location.hash = "#view=not-a-route";
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Cash Flow" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cash Flow" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("seals empty Overview as unavailable and routes its next action through Add account", async () => {
+    vi.stubGlobal("fetch", workingFetch(false, 0, { accountData: { ...accounts, as_of: null } }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByText(/unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use Add account" }));
+    expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
+  });
+
+  it("shows accessible bounded Overview loading and a sanitized recoverable failure", async () => {
+    let resolveOverview: ((value: Response) => void) | undefined;
+    const base = workingFetch(false, 2, { accountData: observedAccounts });
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("/api/overview")) {
+        return new Promise<Response>((resolve) => { resolveOverview = resolve; });
+      }
+      return base(input, init);
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
+    expect(await screen.findByRole("status", { name: "Loading Overview" })).toBeInTheDocument();
+    resolveOverview?.(new Response(JSON.stringify({ detail: "/private/secret should not render" }), { status: 503, headers: { "Content-Type": "application/json" } }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Overview unavailable");
+    expect(screen.queryByText(/private\/secret/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
+  it("keeps Overview periods inclusive, read-only, route-retaining, and independent of Cash Flow", async () => {
+    const periodOverview = {
+      ...overview,
+      period_presets: { current_year: { start: "2026-01-01", end: "2026-12-31" } },
+    };
+    const fetch = workingFetch(false, 2, { accountData: observedAccounts, overviewData: periodOverview });
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Cash Flow" });
+    const cashFlowCalls = fetch.mock.calls.filter(([input]) => String(input).startsWith("/api/v2/cash-flow")).length;
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    await screen.findByRole("heading", { name: "Overview" });
+    fireEvent.click(screen.getByRole("button", { name: "2026" }));
+    await waitFor(() => expect(fetch.mock.calls.some(([input]) => String(input) === "/api/overview?start_date=2026-01-01&end_date=2026-12-31")).toBe(true));
+    expect(fetch.mock.calls.filter(([input]) => String(input).startsWith("/api/v2/cash-flow"))).toHaveLength(cashFlowCalls);
+    expect(fetch.mock.calls.filter(([input]) => String(input).startsWith("/api/overview")).every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+
+    fireEvent.click(screen.getByText("Custom range"));
+    fireEvent.change(screen.getByLabelText("Custom range start"), { target: { value: "2026-08-12" } });
+    fireEvent.change(screen.getByLabelText("Custom range end"), { target: { value: "2026-08-11" } });
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+  });
+
+  it("suppresses stale Overview period responses", async () => {
+    const periodOverview = {
+      ...overview,
+      period_presets: {
+        current_year: { start: "2026-01-01", end: "2026-12-31" },
+        previous_year: { start: "2025-01-01", end: "2025-12-31" },
+      },
+    };
+    let resolveCurrent: ((value: Response) => void) | undefined;
+    const base = workingFetch(false, 2, { accountData: observedAccounts, overviewData: periodOverview });
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/overview") && url.includes("start_date=2026-01-01")) return new Promise<Response>((resolve) => { resolveCurrent = resolve; });
+      return base(input, init);
+    });
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
+    await screen.findByRole("heading", { name: "Overview" });
+    fireEvent.click(screen.getByRole("button", { name: "2026" }));
+    fireEvent.click(screen.getByRole("button", { name: "Accounts" }));
+    expect(await screen.findByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    resolveCurrent?.(json({ ...periodOverview, period: { start: "2026-01-01", end: "2026-12-31" } }));
+    await Promise.resolve();
+    expect(screen.getByRole("heading", { name: "Accounts" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Overview" })).not.toBeInTheDocument();
+  });
+
+  it("routes every Overview support action and keeps Review distinct", async () => {
+    const fetch = workingFetch(false, 2, { accountData: observedAccounts, issues: [reviewIssue] });
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    for (const [button, heading] of [["Accounts", "Accounts"], ["Activity", "Activity"], ["Income", "Income"], ["Wealth", "Wealth"]] as const) {
+      fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
+      await screen.findByRole("heading", { name: "Overview" });
+      const details = screen.getByRole("region", { name: "Money detail views" });
+      fireEvent.click(within(details).getByRole("button", { name: new RegExp(`^${button}`) }));
+      await screen.findByRole("heading", { name: heading });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Review, 1 issues" }));
+    expect(await screen.findByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Overview" })).not.toBeInTheDocument();
   });
 
   it("opens closed evidence for print and restores its screen state afterward", async () => {
@@ -515,7 +689,7 @@ describe("application states", () => {
         setOperationsEnabled,
       },
     });
-    const base = workingFetch(false, 2);
+    const base = workingFetch(false, 2, { accountData: observedAccounts, issues: [reviewIssue] });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === "/api/desktop/data-home/status") {
@@ -532,6 +706,13 @@ describe("application states", () => {
     window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "view-wealth" }));
     expect(await screen.findByRole("heading", { name: "Wealth" })).toBeInTheDocument();
     expect(window.location.hash).toBe("#view=wealth");
+
+    window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "view-overview" }));
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#view=overview");
+    window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "view-review" }));
+    expect(await screen.findByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#view=review");
 
     window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "generate-report" }));
     expect(await screen.findByText("Report ready")).toBeInTheDocument();

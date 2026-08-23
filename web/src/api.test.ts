@@ -5,6 +5,7 @@ import {
   CashFlowUnavailableError,
   CashFlowValidationError,
   loadCashFlow,
+  loadOverviewRoute,
   loadRecurringOutflowCandidates,
   previewGoalGap,
 } from "./api";
@@ -20,6 +21,34 @@ const json = (value: unknown, status = 200) =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Cash Flow API", () => {
+  it("loads Overview period evidence with exact inclusive read-only requests", async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/overview")) return json({ period: { start: "2026-04-03", end: "2026-04-19" } });
+      if (url === "/api/accounts") return json({ as_of: "2026-04-19", accounts: [{}] });
+      if (url.startsWith("/api/timeline")) return json([]);
+      return json({}, 404);
+    });
+    vi.stubGlobal("fetch", fetch);
+    await loadOverviewRoute({ startDate: "2026-04-03", endDate: "2026-04-19" });
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+      "/api/overview?start_date=2026-04-03&end_date=2026-04-19",
+      "/api/accounts",
+      "/api/timeline?start_date=2026-04-03&end_date=2026-04-19",
+    ]);
+    expect(fetch.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+
+  it("does not invent timeline evidence for an empty Overview", async () => {
+    const fetch = vi.fn(async (input: RequestInfo | URL) => String(input) === "/api/accounts"
+      ? json({ as_of: null, accounts: [] })
+      : json({ period: { start: "2026-04-03", end: "2026-04-19" } }));
+    vi.stubGlobal("fetch", fetch);
+    const result = await loadOverviewRoute();
+    expect(result.timeline).toEqual([]);
+    expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/timeline"))).toBe(false);
+  });
+
   it.each([
     ["all_imported_history", "/api/v2/cash-flow?period_kind=all_imported_history"],
     ["trailing_12_months", "/api/v2/cash-flow?period_kind=trailing_12_months"],

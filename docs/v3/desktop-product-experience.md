@@ -7,7 +7,9 @@ Status: Slice 3 implementation contract for the signed Apple Silicon application
 Cash Flow is the initial and durable return route. The native View menu and the in-app grouped
 navigation use the same route controller, update the same `#view=` state, and preserve the current
 safe route across reload and runtime recovery. Command-1 through Command-9 navigate the principal
-views; Review uses Command-Shift-9.
+views; Review uses Command-Shift-9. Overview is the first supporting route in Details and is also
+available as an unmodified native View-menu action. It remains distinct from conditional Review and
+loads its read-only period evidence only when opened.
 
 The installed app exposes account update, connection management, optional read-only Plaid setup,
 private-inbox import, existing-data import, verified backup/restore, report generation and preview,

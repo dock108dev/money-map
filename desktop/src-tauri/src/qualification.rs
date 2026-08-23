@@ -828,6 +828,22 @@ mod tests {
     }
 
     #[test]
+    fn overview_is_an_exact_qualification_route_and_unknown_routes_are_rejected() {
+        let (campaign, contract, _attestation) = fixture();
+        let overview = QualificationContract {
+            matrix_state: Some("empty".into()),
+            matrix_route: Some("overview".into()),
+            matrix_contract_digest: Some("f".repeat(64)),
+            matrix_result_path: Some(campaign.path().join("matrix-observation.json")),
+            ..contract
+        };
+        overview.validate(Some(campaign.path())).unwrap();
+        let mut unknown = overview;
+        unknown.matrix_route = Some("overview-unknown".into());
+        assert!(unknown.validate(Some(campaign.path())).is_err());
+    }
+
+    #[test]
     fn matrix_observation_rejects_private_paths_and_route_substitution() {
         let (campaign, contract, _attestation) = fixture();
         let matrix = QualificationContract {

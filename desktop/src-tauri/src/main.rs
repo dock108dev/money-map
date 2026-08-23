@@ -42,6 +42,7 @@ const MENU_ACTION_IDS: &[&str] = &[
     "export-diagnostics",
     "view-cash-flow",
     "view-goals",
+    "view-overview",
     "view-activity",
     "view-accounts",
     "view-income",
@@ -803,6 +804,7 @@ fn install_native_menu(app: &tauri::AppHandle, data_mode: &str) -> tauri::Result
         &[
             &MenuItem::with_id(app, "view-cash-flow", "Cash Flow", true, Some("Cmd+1"))?,
             &MenuItem::with_id(app, "view-goals", "Goals", true, Some("Cmd+2"))?,
+            &MenuItem::with_id(app, "view-overview", "Overview", true, None::<&str>)?,
             &MenuItem::with_id(app, "view-activity", "Activity", true, Some("Cmd+3"))?,
             &MenuItem::with_id(app, "view-accounts", "Accounts", true, Some("Cmd+4"))?,
             &MenuItem::with_id(app, "view-income", "Income", true, Some("Cmd+5"))?,
@@ -838,11 +840,12 @@ fn install_native_menu(app: &tauri::AppHandle, data_mode: &str) -> tauri::Result
 
 fn dispatch_menu_action(app: &tauri::AppHandle, id: &str) {
     if let Some(window) = app.get_webview_window("main") {
-        let script = format!(
-            "window.dispatchEvent(new CustomEvent('money-map-menu', {{ detail: '{id}' }}));"
-        );
-        let _ = window.eval(&script);
+        let _ = window.eval(menu_action_script(id));
     }
+}
+
+fn menu_action_script(id: &str) -> String {
+    format!("window.dispatchEvent(new CustomEvent('money-map-menu', {{ detail: '{id}' }}));")
 }
 
 fn main() {
@@ -958,7 +961,8 @@ fn main() {
 #[cfg(test)]
 mod menu_tests {
     use super::{
-        approved_external_link, internal_navigation_allowed, MENU_ACTION_IDS, OPERATION_MENU_IDS,
+        approved_external_link, internal_navigation_allowed, menu_action_script, MENU_ACTION_IDS,
+        OPERATION_MENU_IDS,
     };
 
     #[test]
@@ -974,6 +978,7 @@ mod menu_tests {
             "export-diagnostics",
             "view-cash-flow",
             "view-goals",
+            "view-overview",
             "view-retirement",
             "view-lab",
         ] {
@@ -982,6 +987,19 @@ mod menu_tests {
         assert!(OPERATION_MENU_IDS
             .iter()
             .all(|id| MENU_ACTION_IDS.contains(id)));
+        assert_eq!(
+            MENU_ACTION_IDS
+                .iter()
+                .filter(|id| **id == "view-overview")
+                .count(),
+            1
+        );
+        assert!(!OPERATION_MENU_IDS.contains(&"view-overview"));
+        assert_eq!(
+            menu_action_script("view-overview"),
+            "window.dispatchEvent(new CustomEvent('money-map-menu', { detail: 'view-overview' }));"
+        );
+        assert!(!menu_action_script("view-overview").contains("view-review"));
     }
 
     #[test]

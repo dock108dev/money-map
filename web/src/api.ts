@@ -1,4 +1,12 @@
-import type { AccountDetail, DashboardData, PlaidRefreshResult, PlaidStatus } from "./types";
+import type {
+  AccountDetail,
+  AccountsDashboard,
+  DashboardData,
+  Overview,
+  PlaidRefreshResult,
+  PlaidStatus,
+  TimelineRow,
+} from "./types";
 import {
   validateCashFlowPeriodResult,
   validateGoalGapPreviewResponse,
@@ -90,6 +98,35 @@ export async function loadDashboard(): Promise<ApplicationData> {
     scenarios,
     imports,
   };
+}
+
+export interface OverviewRouteData {
+  overview: Overview;
+  accounts: AccountsDashboard;
+  timeline: TimelineRow[];
+}
+
+export async function loadOverviewRoute(
+  period?: { startDate: string; endDate: string },
+  signal?: AbortSignal,
+): Promise<OverviewRouteData> {
+  const query = new URLSearchParams();
+  if (period) {
+    query.set("start_date", period.startDate);
+    query.set("end_date", period.endDate);
+  }
+  const suffix = query.size > 0 ? `?${query}` : "";
+  const [overview, accounts] = await Promise.all([
+    request<Overview>(`/api/overview${suffix}`, { signal }),
+    request<AccountsDashboard>("/api/accounts", { signal }),
+  ]);
+  const timeline = accounts.accounts.length > 0 && accounts.as_of !== null
+    ? await request<TimelineRow[]>(
+      `/api/timeline?${new URLSearchParams({ start_date: overview.period.start, end_date: overview.period.end })}`,
+      { signal },
+    )
+    : [];
+  return { overview, accounts, timeline };
 }
 
 function detailMessage(detail: unknown, fallback: string): string {

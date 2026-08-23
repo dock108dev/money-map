@@ -28,6 +28,7 @@ import { FocusedDialog } from "./FocusedDialog";
 const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
 const RetirementView = lazy(() => import("./retirement/RetirementView"));
 const GoalsView = lazy(() => import("./goals/GoalsView"));
+const OverviewRoute = lazy(() => import("./overview/OverviewRoute"));
 
 declare global {
   interface Window {
@@ -68,7 +69,19 @@ interface DesktopAboutInfo {
   boundary: string;
 }
 
-type View = "cash-flow" | "goals" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
+type View = "cash-flow" | "goals" | "overview" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
+
+const routeByName: Readonly<Record<string, View>> = {
+  "cash-flow": "cash-flow", goals: "goals", overview: "overview", accounts: "accounts",
+  income: "income", activity: "activity", wealth: "wealth", retirement: "retirement",
+  lab: "lab", connections: "connections", review: "review",
+};
+
+function initialView(_desktopMode: boolean): View {
+  if (window.location.hash === "#plaid-live-setup") return "connections";
+  if (!window.location.hash.startsWith("#view=")) return "cash-flow";
+  return routeByName[window.location.hash.slice(6)] ?? "cash-flow";
+}
 
 const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; label: string; glyph: string }> }> = [
   { id: "everyday", label: "Everyday", items: [
@@ -77,6 +90,7 @@ const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; lab
     { id: "activity", label: "Activity", glyph: "↕" },
   ] },
   { id: "details", label: "Details", items: [
+    { id: "overview", label: "Overview", glyph: "⌂" },
     { id: "accounts", label: "Accounts", glyph: "▤" },
     { id: "income", label: "Income", glyph: "$" },
     { id: "wealth", label: "Wealth", glyph: "◇" },
@@ -100,13 +114,7 @@ export default function App() {
   const [dataHome, setDataHome] = useState<DataHomeStatus | null>(null);
   const [showDataHome, setShowDataHome] = useState(false);
   const [error, setError] = useState("");
-  const [view, setView] = useState<View>(() =>
-    window.location.hash === "#plaid-live-setup"
-      ? "connections"
-      : desktopMode && window.location.hash.startsWith("#view=")
-        ? (window.location.hash.slice(6) as View)
-        : "cash-flow",
-  );
+  const [view, setView] = useState<View>(() => initialView(desktopMode));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [updating, setUpdating] = useState(false);
@@ -396,6 +404,7 @@ export default function App() {
       const action = (event as CustomEvent<string>).detail;
       const routes: Record<string, View> = {
         "view-cash-flow": "cash-flow", "view-goals": "goals", "view-activity": "activity",
+        "view-overview": "overview",
         "view-accounts": "accounts", "view-income": "income", "view-wealth": "wealth",
         "view-retirement": "retirement", "view-lab": "lab", "view-connections": "connections",
         "view-review": "review",
@@ -584,6 +593,18 @@ export default function App() {
           {view === "goals" && (
             <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Goals…</p></div>}>
               <GoalsView reloadVersion={dataReloadVersion} />
+            </Suspense>
+          )}
+          {view === "overview" && (
+            <Suspense fallback={<div className="loading-state" role="status" aria-label="Loading Overview"><div className="loading-mark">M</div><p>Opening Overview…</p></div>}>
+              <OverviewRoute
+                reloadVersion={dataReloadVersion}
+                onShowAccounts={() => navigateTo("accounts")}
+                onShowActivity={() => navigateTo("activity")}
+                onShowIncome={() => navigateTo("income")}
+                onShowWealth={() => navigateTo("wealth")}
+                onAddAccount={() => navigateTo("connections")}
+              />
             </Suspense>
           )}
           {view === "accounts" && <AccountsView data={data.accounts} />}
