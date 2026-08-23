@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub const LAUNCH_CONTRACT: &str = "money-map-installed-attestation-launch-v1";
 pub const ATTESTATION_CONTRACT: &str = "money-map-installed-root-attestation-v1";
 pub const RESULT_CONTRACT: &str = "money-map-native-attestation-result-v1";
+pub const MATRIX_RESULT_CONTRACT: &str = "money-map-installed-matrix-observation-v1";
 pub const MAX_LAUNCH_BYTES: usize = 8_192;
 pub const MAX_ATTESTATION_BYTES: usize = 8_192;
 
@@ -28,6 +29,51 @@ pub struct QualificationContract {
     pub result_path: PathBuf,
     pub candidate_sha256: String,
     pub source_commit: String,
+    #[serde(default)]
+    pub matrix_state: Option<String>,
+    #[serde(default)]
+    pub matrix_route: Option<String>,
+    #[serde(default)]
+    pub matrix_contract_digest: Option<String>,
+    #[serde(default)]
+    pub matrix_result_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatrixUiObservation {
+    pub sequence: u8,
+    pub route: String,
+    pub location_hash: String,
+    pub headings: Vec<String>,
+    pub statuses: Vec<String>,
+    pub alerts: Vec<String>,
+    pub buttons: Vec<String>,
+    pub disabled_buttons: Vec<String>,
+    pub messages: Vec<String>,
+    pub loading_visible: bool,
+    pub dialog_count: u32,
+    pub progress_count: u32,
+    pub unsafe_console_errors: u32,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MatrixApiObservation {
+    pub endpoint_class: &'static str,
+    pub status: u16,
+    pub response_class: String,
+}
+
+#[derive(Serialize)]
+struct MatrixResult<'a> {
+    contract: &'static str,
+    result: &'static str,
+    state: &'a str,
+    route: &'a str,
+    contract_digest_sha256: &'a str,
+    ui: &'a MatrixUiObservation,
+    api: &'a [MatrixApiObservation],
+    raw_paths_retained: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -186,7 +232,77 @@ impl QualificationContract {
             }
             reject_symlink_chain(&actual)?;
         }
+        let matrix_values = [
+            self.matrix_state.is_some(),
+            self.matrix_route.is_some(),
+            self.matrix_contract_digest.is_some(),
+            self.matrix_result_path.is_some(),
+        ];
+        if matrix_values.iter().any(|value| *value) && !matrix_values.iter().all(|value| *value) {
+            return Err("Synthetic qualification matrix contract was rejected.".to_string());
+        }
+        if let (Some(state), Some(route), Some(digest), Some(path)) = (
+            self.matrix_state.as_deref(),
+            self.matrix_route.as_deref(),
+            self.matrix_contract_digest.as_deref(),
+            self.matrix_result_path.as_deref(),
+        ) {
+            if !approved_matrix_state(state)
+                || !approved_matrix_route(route)
+                || !is_lower_hex(digest, 64)
+                || normalized(path)? != campaign.join("matrix-observation.json")
+            {
+                return Err("Synthetic qualification matrix contract was rejected.".to_string());
+            }
+            reject_symlink_chain(path)?;
+        }
         Ok(())
+    }
+
+    pub fn matrix_plan(&self) -> Option<(&str, &str)> {
+        self.matrix_state
+            .as_deref()
+            .zip(self.matrix_route.as_deref())
+    }
+
+    pub fn write_matrix_result(
+        &self,
+        ui: &MatrixUiObservation,
+        api: &[MatrixApiObservation],
+    ) -> Result<(), String> {
+        let (state, route) = self
+            .matrix_plan()
+            .ok_or_else(|| "Synthetic qualification matrix plan is unavailable.".to_string())?;
+        let digest = self
+            .matrix_contract_digest
+            .as_deref()
+            .ok_or_else(|| "Synthetic qualification matrix plan is unavailable.".to_string())?;
+        let path = self
+            .matrix_result_path
+            .as_deref()
+            .ok_or_else(|| "Synthetic qualification matrix plan is unavailable.".to_string())?;
+        if ui.route != route || !matches!(ui.sequence, 1 | 2) || !safe_matrix_observation(ui) {
+            return Err("Synthetic qualification matrix observation was rejected.".to_string());
+        }
+        let result = MatrixResult {
+            contract: MATRIX_RESULT_CONTRACT,
+            result: "observed",
+            state,
+            route,
+            contract_digest_sha256: digest,
+            ui,
+            api,
+            raw_paths_retained: false,
+        };
+        let bytes = serde_json::to_vec_pretty(&result)
+            .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())?;
+        let temporary = path.with_extension("json.tmp");
+        fs::write(&temporary, bytes)
+            .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())?;
+        fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))
+            .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())?;
+        fs::rename(temporary, path)
+            .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())
     }
 
     pub fn verify_attestation(
@@ -332,6 +448,80 @@ fn is_lower_hex(value: &str, length: usize) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn approved_matrix_state(value: &str) -> bool {
+    matches!(
+        value,
+        "empty"
+            | "loading"
+            | "unavailable"
+            | "partial_coverage"
+            | "recoverable_failure"
+            | "stale_evidence"
+            | "complete_current"
+            | "large_history"
+            | "negative_recurring_cash_flow"
+            | "cash_below_protected_floor"
+            | "missing_source_coverage"
+            | "no_life_lab_profile"
+            | "profile_without_goals"
+            | "one_enabled_goal_with_floor"
+            | "multiple_enabled_goals_ambiguous"
+            | "stale_saved_scenario"
+            | "completed_goal"
+    )
+}
+
+fn approved_matrix_route(value: &str) -> bool {
+    matches!(
+        value,
+        "cash-flow"
+            | "goals"
+            | "activity"
+            | "accounts"
+            | "income"
+            | "wealth"
+            | "retirement"
+            | "lab"
+            | "overview"
+            | "add-account"
+            | "data-home"
+            | "diagnostics"
+            | "reports"
+    )
+}
+
+fn safe_matrix_observation(value: &MatrixUiObservation) -> bool {
+    let fields = value
+        .headings
+        .iter()
+        .chain(value.statuses.iter())
+        .chain(value.alerts.iter())
+        .chain(value.buttons.iter())
+        .chain(value.disabled_buttons.iter())
+        .chain(value.messages.iter());
+    value.location_hash.len() <= 64
+        && value
+            .location_hash
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'#' | b'=' | b'-' | b'_'))
+        && value.headings.len() <= 16
+        && value.statuses.len() <= 16
+        && value.alerts.len() <= 16
+        && value.buttons.len() <= 64
+        && value.disabled_buttons.len() <= 64
+        && value.messages.len() <= 64
+        && fields.clone().all(|text| {
+            !text.is_empty()
+                && text.len() <= 240
+                && !text.contains('\\')
+                && !text.contains("/Users/")
+                && !text.contains("/private/")
+                && !text.contains("Traceback")
+                && !text.contains("Exception")
+                && !text.contains("127.0.0.1")
+        })
 }
 
 fn normalized(path: &Path) -> Result<PathBuf, String> {
@@ -517,6 +707,10 @@ mod tests {
             result_path: campaign.path().join("native-attestation-result.json"),
             candidate_sha256: "c".repeat(64),
             source_commit: "d".repeat(40),
+            matrix_state: None,
+            matrix_route: None,
+            matrix_contract_digest: None,
+            matrix_result_path: None,
         };
         let file = ResourceFacts {
             exists: true,
@@ -583,6 +777,84 @@ mod tests {
             parse_attestation(&line).unwrap_or_else(|error| panic!("{error}: {line}")),
             attestation
         );
+    }
+
+    #[test]
+    fn matrix_plan_is_exact_bounded_and_writes_only_sanitized_observations() {
+        let (campaign, contract, _attestation) = fixture();
+        let mut matrix = QualificationContract {
+            matrix_state: Some("empty".into()),
+            matrix_route: Some("cash-flow".into()),
+            matrix_contract_digest: Some("f".repeat(64)),
+            matrix_result_path: Some(campaign.path().join("matrix-observation.json")),
+            ..contract
+        };
+        matrix.validate(Some(campaign.path())).unwrap();
+        let observation = MatrixUiObservation {
+            sequence: 1,
+            route: "cash-flow".into(),
+            location_hash: "#view=cash-flow".into(),
+            headings: vec!["Cash Flow".into()],
+            statuses: vec!["Cash Flow unavailable".into()],
+            alerts: vec![],
+            buttons: vec!["Reload".into()],
+            disabled_buttons: vec![],
+            messages: vec!["Cash Flow unavailable".into()],
+            loading_visible: false,
+            dialog_count: 0,
+            progress_count: 0,
+            unsafe_console_errors: 0,
+        };
+        matrix
+            .write_matrix_result(
+                &observation,
+                &[MatrixApiObservation {
+                    endpoint_class: "cash-flow-period",
+                    status: 409,
+                    response_class: "unavailable".into(),
+                }],
+            )
+            .unwrap();
+        let retained = fs::read_to_string(matrix.matrix_result_path.as_ref().unwrap()).unwrap();
+        assert!(retained.contains(MATRIX_RESULT_CONTRACT));
+        assert!(!retained.contains(campaign.path().to_str().unwrap()));
+
+        matrix.matrix_route = Some("not-a-route".into());
+        assert!(matrix.validate(Some(campaign.path())).is_err());
+        matrix.matrix_route = Some("cash-flow".into());
+        matrix.matrix_contract_digest = None;
+        assert!(matrix.validate(Some(campaign.path())).is_err());
+    }
+
+    #[test]
+    fn matrix_observation_rejects_private_paths_and_route_substitution() {
+        let (campaign, contract, _attestation) = fixture();
+        let matrix = QualificationContract {
+            matrix_state: Some("empty".into()),
+            matrix_route: Some("cash-flow".into()),
+            matrix_contract_digest: Some("f".repeat(64)),
+            matrix_result_path: Some(campaign.path().join("matrix-observation.json")),
+            ..contract
+        };
+        let mut observation = MatrixUiObservation {
+            sequence: 1,
+            route: "goals".into(),
+            location_hash: "#view=goals".into(),
+            headings: vec!["Goals".into()],
+            statuses: vec![],
+            alerts: vec![],
+            buttons: vec![],
+            disabled_buttons: vec![],
+            messages: vec![],
+            loading_visible: false,
+            dialog_count: 0,
+            progress_count: 0,
+            unsafe_console_errors: 0,
+        };
+        assert!(matrix.write_matrix_result(&observation, &[]).is_err());
+        observation.route = "cash-flow".into();
+        observation.headings = vec!["/private/tmp/forbidden".into()];
+        assert!(matrix.write_matrix_result(&observation, &[]).is_err());
     }
 
     #[test]

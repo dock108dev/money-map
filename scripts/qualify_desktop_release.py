@@ -120,9 +120,12 @@ def launch_contract(
     candidate_sha256: str,
     source_commit: str,
     mode: str = "acceptance-synthetic-v1",
+    matrix_state: str | None = None,
+    matrix_route: str | None = None,
+    matrix_contract_digest: str | None = None,
 ) -> dict[str, object]:
     application = fake_home / "Library/Application Support/Money Map"
-    return {
+    result: dict[str, object] = {
         "contract": LAUNCH_CONTRACT,
         "schema_version": 1,
         "campaign_id": campaign_id,
@@ -138,6 +141,19 @@ def launch_contract(
         "candidate_sha256": candidate_sha256,
         "source_commit": source_commit,
     }
+    matrix = (matrix_state, matrix_route, matrix_contract_digest)
+    if any(value is not None for value in matrix):
+        if not all(value is not None for value in matrix):
+            raise QualificationFailure("matrix launch contract is incomplete")
+        result.update(
+            {
+                "matrix_state": matrix_state,
+                "matrix_route": matrix_route,
+                "matrix_contract_digest": matrix_contract_digest,
+                "matrix_result_path": str(fake_home / "matrix-observation.json"),
+            }
+        )
+    return result
 
 
 def clean_runtime_env(fake_home: Path, contract: dict[str, object]) -> dict[str, str]:

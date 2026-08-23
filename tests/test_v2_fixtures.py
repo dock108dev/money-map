@@ -7,6 +7,25 @@ from pathlib import Path
 from typing import Any, cast
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures/synthetic/v1_2_1/states.json"
+REQUIRED_STATE_IDS = {
+    "empty",
+    "loading",
+    "unavailable",
+    "partial_coverage",
+    "recoverable_failure",
+    "stale_evidence",
+    "complete_current",
+    "large_history",
+    "negative_recurring_cash_flow",
+    "cash_below_protected_floor",
+    "missing_source_coverage",
+    "no_life_lab_profile",
+    "profile_without_goals",
+    "one_enabled_goal_with_floor",
+    "multiple_enabled_goals_ambiguous",
+    "stale_saved_scenario",
+    "completed_goal",
+}
 REQUIRED_TRAITS = {
     "no_life_lab_profile",
     "profile_without_goals",
@@ -63,7 +82,7 @@ def test_all_required_v121_synthetic_states_exist() -> None:
     assert document["fixture_format"] == "money-map-v1.2.1-synthetic-v1"
     assert "invented" in str(document["fixture_origin"]).lower()
     assert traits >= REQUIRED_TRAITS
-    assert len(states) == 9
+    assert {state["id"] for state in states} == REQUIRED_STATE_IDS
     assert len({state["id"] for state in states}) == len(states)
 
 

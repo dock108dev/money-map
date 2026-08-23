@@ -14,7 +14,7 @@ use std::{fs, os::unix::fs::PermissionsExt};
 use data_home::DataHomePaths;
 use metadata::{about_info_for_mode, native_about_metadata, AboutInfo};
 use proxy::{forward, validate_frontend_request, DesktopRequest, DesktopResponse};
-use qualification::QualificationContract;
+use qualification::{MatrixApiObservation, MatrixUiObservation, QualificationContract};
 use runtime::{RuntimeController, RuntimeStatus};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::webview::NewWindowResponse;
@@ -161,10 +161,23 @@ fn build_safe_error_window<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-fn desktop_reload(window: tauri::WebviewWindow) -> Result<(), String> {
+fn desktop_reload(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<RuntimeController>>,
+) -> Result<(), String> {
     window
         .reload()
-        .map_err(|_| "The desktop window could not reload.".to_string())
+        .map_err(|_| "The desktop window could not reload.".to_string())?;
+    if let Some(contract) = state.qualification() {
+        if let Some(script) = qualification_observer_script(&contract, 2) {
+            let reloaded = window.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let _ = reloaded.eval(&script);
+            });
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -538,6 +551,161 @@ async fn desktop_fetch(
     .map_err(|_| "The local service request failed.".to_string())?
 }
 
+fn matrix_api_endpoints(route: &str) -> &'static [(&'static str, &'static str)] {
+    match route {
+        "cash-flow" => &[
+            (
+                "cash-flow-period",
+                "/api/v2/cash-flow?period_kind=all_imported_history",
+            ),
+            (
+                "recurring-outflow-candidates",
+                "/api/v2/cash-flow/recurring-outflow-candidates",
+            ),
+        ],
+        "goals" => &[
+            ("primary-goal", "/api/v2/goals/primary"),
+            ("goal-position", "/api/v2/goals/position"),
+            ("goal-comparison", "/api/v2/goals/comparison"),
+            ("goal-milestone", "/api/v2/goals/milestone"),
+        ],
+        "activity" | "accounts" => &[("accounts-dashboard", "/api/accounts")],
+        "income" => &[("payroll-history", "/api/payroll")],
+        "wealth" => &[("wealth-dashboard", "/api/wealth")],
+        "retirement" => &[
+            ("retirement-profile", "/api/v2/retirement/profile"),
+            (
+                "retirement-starting-point",
+                "/api/v2/retirement/starting-point",
+            ),
+            (
+                "retirement-operational-goals",
+                "/api/v2/retirement/operational-goals",
+            ),
+        ],
+        "lab" => &[
+            ("life-profile", "/api/life-plan/profile"),
+            ("life-starting-point", "/api/life-plan/starting-point"),
+            ("life-goals", "/api/life-plan/goals"),
+            ("life-scenarios", "/api/life-plan/scenarios"),
+        ],
+        "overview" => &[
+            ("overview", "/api/overview"),
+            ("accounts-dashboard", "/api/accounts"),
+        ],
+        "add-account" => &[
+            ("provider-status", "/api/plaid/status"),
+            ("import-history", "/api/imports"),
+        ],
+        "data-home" => &[("data-home-status", "/api/desktop/data-home/status")],
+        "diagnostics" => &[(
+            "sanitized-data-home-diagnostics",
+            "/api/desktop/data-home/diagnostics",
+        )],
+        "reports" => &[],
+        _ => &[],
+    }
+}
+
+fn matrix_response_class(status: u16) -> String {
+    match status {
+        200..=299 => "success",
+        409 => "unavailable",
+        400..=499 => "client-error",
+        _ => "service-error",
+    }
+    .to_string()
+}
+
+#[tauri::command]
+fn desktop_qualification_observe(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<RuntimeController>>,
+    observation: MatrixUiObservation,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Synthetic qualification matrix observation was rejected.".to_string());
+    }
+    let qualification = state
+        .qualification()
+        .ok_or_else(|| "Synthetic qualification matrix observation was rejected.".to_string())?;
+    let (_, route) = qualification
+        .matrix_plan()
+        .ok_or_else(|| "Synthetic qualification matrix observation was rejected.".to_string())?;
+    let (port, session) = state.target()?;
+    let mut api = Vec::new();
+    for (endpoint_class, path) in matrix_api_endpoints(route) {
+        let response = forward(
+            port,
+            &session,
+            DesktopRequest {
+                path: (*path).to_string(),
+                method: "GET".to_string(),
+                body: None,
+            },
+        )?;
+        api.push(MatrixApiObservation {
+            endpoint_class,
+            status: response.status,
+            response_class: matrix_response_class(response.status),
+        });
+    }
+    qualification.write_matrix_result(&observation, &api)
+}
+
+fn qualification_observer_script(
+    contract: &QualificationContract,
+    sequence: u8,
+) -> Option<String> {
+    let (_, route) = contract.matrix_plan()?;
+    let route_json = serde_json::to_string(route).ok()?;
+    Some(format!(
+        r#"(() => {{
+          const requestedRoute = {route_json};
+          let consoleErrors = 0;
+          const originalConsoleError = console.error.bind(console);
+          console.error = (...args) => {{ consoleErrors += 1; originalConsoleError(...args); }};
+          const routeLabels = {{
+            "cash-flow": "Cash Flow", "goals": "Goals", "activity": "Activity",
+            "accounts": "Accounts", "income": "Income", "wealth": "Wealth",
+            "retirement": "Retirement", "lab": "Lab", "overview": "Overview",
+            "add-account": "Add account"
+          }};
+          let attempts = 0;
+          const text = (element) => (element?.textContent || "").replace(/\s+/g, " ").trim();
+          const values = (selector, limit) => Array.from(document.querySelectorAll(selector))
+            .map(text).filter(Boolean).slice(0, limit);
+          const clickLabel = (label) => Array.from(document.querySelectorAll("button"))
+            .find((button) => text(button) === label)?.click();
+          const timer = window.setInterval(() => {{
+            attempts += 1;
+            if (attempts === 4) {{
+              if (routeLabels[requestedRoute]) clickLabel(routeLabels[requestedRoute]);
+              else if (requestedRoute === "data-home") clickLabel("Data safety");
+              else if (requestedRoute === "diagnostics") clickLabel("Diagnostics");
+            }}
+            if (attempts < 40) return;
+            window.clearInterval(timer);
+            void window.__TAURI_INTERNALS__.invoke("desktop_qualification_observe", {{ observation: {{
+              sequence: {sequence}, route: requestedRoute,
+              location_hash: window.location.hash,
+              headings: values("h1,h2", 16),
+              statuses: values('[role="status"]', 16),
+              alerts: values('[role="alert"],[role="alertdialog"]', 16),
+              buttons: values("button", 64),
+              disabled_buttons: Array.from(document.querySelectorAll("button:disabled"))
+                .map(text).filter(Boolean).slice(0, 64),
+              messages: values("main p,main small,main dt,main dd", 64),
+              loading_visible: Boolean(document.querySelector(".loading-state")),
+              dialog_count: document.querySelectorAll('[role="dialog"],[role="alertdialog"]').length,
+              progress_count: document.querySelectorAll('[role="progressbar"],progress').length,
+              unsafe_console_errors: consoleErrors
+            }} }});
+          }}, 100);
+        }})();"#
+    ))
+}
+
 fn sidecar_path() -> Result<PathBuf, String> {
     let executable = std::env::current_exe()
         .map_err(|_| "The signed application path is unavailable.".to_string())?;
@@ -700,7 +868,8 @@ fn main() {
             desktop_diagnostics_preview,
             desktop_export_diagnostics,
             desktop_set_operations_enabled,
-            desktop_open_external
+            desktop_open_external,
+            desktop_qualification_observe
         ])
         .setup(|app| {
             let qualification =
@@ -716,7 +885,12 @@ fn main() {
             .map_err(std::io::Error::other)?;
             app.manage(Arc::clone(&controller));
             if controller.start_initial().is_ok() {
-                build_main_window(app.handle())?;
+                let window = build_main_window(app.handle())?;
+                if let Some(contract) = controller.qualification() {
+                    if let Some(script) = qualification_observer_script(&contract, 1) {
+                        window.eval(&script)?;
+                    }
+                }
             } else {
                 build_safe_error_window(app.handle())?;
             }

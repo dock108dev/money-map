@@ -258,6 +258,7 @@ def test_financial_webview_is_constructed_only_after_native_startup_passes() -> 
         (PROJECT_ROOT / "desktop/src-tauri/capabilities/safe-error.json").read_text()
     )
     assert "allow-desktop-fetch" not in safe_capability["permissions"]
+    assert "allow-desktop-qualification-observe" not in safe_capability["permissions"]
     assert all(
         forbidden not in safe_capability["permissions"]
         for forbidden in (

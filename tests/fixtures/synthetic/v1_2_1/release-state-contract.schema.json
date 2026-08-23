@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "money-map-slice6-release-state-authority-v1",
+  "title": "Money Map independent installed release state authority",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "contract", "origin", "fixed_authority", "authority_registry", "state_defaults", "routes", "states"],
+  "properties": {
+    "$schema": {"const": "release-state-contract.schema.json"},
+    "contract": {"const": "money-map-slice6-release-state-authority-v1"},
+    "origin": {"type": "string", "minLength": 1},
+    "fixed_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixture_contract_version", "reference_instant", "eastern_business_date", "database_revision", "identifier_allocation", "exact_decimal_representation", "ordering_rule", "rounding_rule", "evidence_currentness_rule", "safe_copy_comparison_rule", "route_vocabulary", "api_status_vocabulary"],
+      "properties": {
+        "fixture_contract_version": {"const": "money-map-slice6-release-state-authority-v1"},
+        "reference_instant": {"const": "2026-08-10T12:00:00-04:00"},
+        "eastern_business_date": {"const": "2026-08-10"},
+        "database_revision": {"const": "0009_goal_persistence"},
+        "identifier_allocation": {"type": "string", "minLength": 1},
+        "exact_decimal_representation": {"type": "string", "minLength": 1},
+        "ordering_rule": {"type": "string", "minLength": 1},
+        "rounding_rule": {"type": "string", "minLength": 1},
+        "evidence_currentness_rule": {"type": "string", "minLength": 1},
+        "safe_copy_comparison_rule": {"type": "string", "minLength": 1},
+        "route_vocabulary": {"type": "array", "minItems": 13, "maxItems": 13, "uniqueItems": true, "items": {"type": "string"}},
+        "api_status_vocabulary": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "authority_registry": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^AUTH-[A-Z0-9-]+$"},
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "state_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_contract_version", "synthetic_reference_instant", "expected_database_revision", "setup_policy", "expected_network_classification", "cleanup_requirements"],
+      "properties": {
+        "state_contract_version": {"const": "money-map-slice6-release-state-authority-v1"},
+        "synthetic_reference_instant": {"const": "2026-08-10T12:00:00-04:00"},
+        "expected_database_revision": {"const": "0009_goal_persistence"},
+        "setup_policy": {"type": "object"},
+        "expected_network_classification": {"type": "string"},
+        "cleanup_requirements": {"$ref": "#/$defs/stringArray"}
+      }
+    },
+    "routes": {
+      "type": "object",
+      "minProperties": 13,
+      "maxProperties": 13,
+      "additionalProperties": {"$ref": "#/$defs/route"}
+    },
+    "states": {
+      "type": "object",
+      "minProperties": 17,
+      "maxProperties": 17,
+      "additionalProperties": {"$ref": "#/$defs/state"}
+    }
+  },
+  "$defs": {
+    "stringArray": {"type": "array", "items": {"type": "string"}},
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "authority_refs", "combination_defaults"],
+      "properties": {
+        "id": {"type": "string"},
+        "authority_refs": {"$ref": "#/$defs/stringArray"},
+        "combination_defaults": {"type": "object", "minProperties": 1}
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "setup_driver", "expected_table_counts", "expected_logical_facts", "expected_exact_totals", "reconciliations", "expected_provenance", "authority_refs", "combination_defaults", "route_overrides"],
+      "properties": {
+        "id": {"type": "string"},
+        "setup_driver": {"type": "object", "minProperties": 2},
+        "expected_table_counts": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "integer", "minimum": 0}},
+        "expected_logical_facts": {"$ref": "#/$defs/stringArray"},
+        "expected_exact_totals": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{2,4}$"}},
+        "reconciliations": {"type": "array", "items": {"type": "object"}},
+        "expected_provenance": {"$ref": "#/$defs/stringArray"},
+        "authority_refs": {"$ref": "#/$defs/stringArray"},
+        "combination_defaults": {"type": "object"},
+        "route_overrides": {"type": "object"}
+      }
+    }
+  }
+}

@@ -118,6 +118,10 @@ impl RuntimeController {
         self.paths.mode
     }
 
+    pub fn qualification(&self) -> Option<QualificationContract> {
+        self.qualification.clone()
+    }
+
     pub fn revalidate(&self) -> RuntimeStatus {
         let failed = {
             let inner = self

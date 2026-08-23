@@ -3,8 +3,234 @@
   "fixture_origin": "All people, dates, amounts, records, and identifiers are invented for tests.",
   "states": [
     {
+      "id": "empty",
+      "traits": ["fresh_0009", "no_financial_records"],
+      "driver": {
+        "type": "persistent_database_fixture",
+        "seed": "fresh-empty-0009-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "permitted_setup_writes": "schema_and_required_metadata_only",
+        "forbidden_setup_writes": "financial_rows"
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": null,
+        "accessible_investments": null,
+        "retirement_assets": null,
+        "effective_monthly_take_home": null,
+        "observed_monthly_outflow": null,
+        "coverage": "none"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "loading",
+      "traits": ["bounded_pre_response_gate", "settles_to_complete_current"],
+      "driver": {
+        "type": "transient_bounded_loading_injection",
+        "seed": "complete-current-v1",
+        "gate": "qualification-response-gate-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "release_condition": "explicit_harness_release",
+        "timeout_ms": 5000
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "6200.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "complete_after_release"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "unavailable",
+      "traits": ["controlled_unavailable_api", "no_imported_evidence"],
+      "driver": {
+        "type": "controlled_unavailable_api_state",
+        "seed": "fresh-empty-0009-v1",
+        "fault": "qualification-unavailable-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "reason": "No imported evidence supports this result."
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": null,
+        "accessible_investments": null,
+        "retirement_assets": null,
+        "effective_monthly_take_home": null,
+        "observed_monthly_outflow": null,
+        "coverage": "unavailable"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "partial_coverage",
+      "traits": ["incomplete_date_coverage", "cash_facts_only"],
+      "driver": {
+        "type": "persistent_database_fixture",
+        "seed": "partial-coverage-2026q1-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "coverage_start": "2026-01-15",
+        "coverage_end": "2026-03-10",
+        "present_sources": ["manual_bank_transactions"],
+        "missing_sources": ["payroll", "investment_balances", "retirement_profile"]
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-03-10",
+        "accessible_cash": "60.00",
+        "accessible_investments": null,
+        "retirement_assets": null,
+        "effective_monthly_take_home": null,
+        "observed_monthly_outflow": "40.00",
+        "coverage": "partial"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "recoverable_failure",
+      "traits": ["one_shot_failure", "retry_preserves_route"],
+      "driver": {
+        "type": "one_shot_recoverable_failure",
+        "seed": "complete-current-v1",
+        "fault": "qualification-dashboard-read-once-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "failure_count": 1,
+        "retry_result": "complete_current"
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "6200.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "complete_after_retry"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "stale_evidence",
+      "traits": ["fixed_clock_stale_evidence"],
+      "driver": {
+        "type": "fixed_clock_stale_evidence",
+        "seed": "complete-current-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "last_evidence_date": "2026-06-30",
+        "staleness_threshold_days": 32
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-06-30",
+        "accessible_cash": "6200.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "stale"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "complete_current",
+      "traits": ["complete_current", "internally_reconciled"],
+      "driver": {
+        "type": "persistent_database_fixture",
+        "seed": "complete-current-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "domains": ["accounts", "payroll", "transactions", "cash_flow", "goals", "retirement", "life_lab", "wealth", "imports", "reports"]
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "6200.00",
+        "accessible_investments": "1400.00",
+        "retirement_assets": "18000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3900.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
+      "id": "large_history",
+      "traits": ["deterministic_large_history", "bounded"],
+      "driver": {
+        "type": "deterministic_large_history_generator",
+        "seed": "large-history-2024-2026-v1",
+        "reference_instant": "2026-08-10T12:00:00-04:00",
+        "date_start": "2024-01-01",
+        "date_end": "2026-08-10",
+        "transaction_count": 960,
+        "payroll_count": 68,
+        "balance_snapshot_count": 96,
+        "default_visible_rows": 5,
+        "chart_point_count": 32,
+        "maximum_settle_ms": 5000
+      },
+      "tables": {
+        "life_plan_profiles": [],
+        "life_goals": [],
+        "life_scenarios": [],
+        "life_projection_periods": []
+      },
+      "source_summary": {
+        "as_of": "2026-08-10",
+        "accessible_cash": "32000.00",
+        "accessible_investments": "24000.00",
+        "retirement_assets": "68000.00",
+        "effective_monthly_take_home": "4200.00",
+        "observed_monthly_outflow": "3100.00",
+        "coverage": "complete"
+      },
+      "expected_slice_1": {"primary_goal_source_id": null, "requires_primary_selection": false}
+    },
+    {
       "id": "no_life_lab_profile",
       "traits": ["no_life_lab_profile"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#no_life_lab_profile", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [],
         "life_goals": [],
@@ -25,6 +251,7 @@
     {
       "id": "profile_without_goals",
       "traits": ["profile_without_goals"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#profile_without_goals", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {
@@ -61,6 +288,7 @@
     {
       "id": "one_enabled_goal_with_floor",
       "traits": ["one_enabled_goal", "protected_floor"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#one_enabled_goal_with_floor", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {
@@ -112,6 +340,7 @@
     {
       "id": "multiple_enabled_goals_ambiguous",
       "traits": ["multiple_enabled_goals", "no_unambiguous_primary"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#multiple_enabled_goals_ambiguous", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {
@@ -177,6 +406,7 @@
     {
       "id": "stale_saved_scenario",
       "traits": ["stale_saved_scenarios"],
+      "driver": {"type": "fixed_clock_stale_evidence", "seed": "states.json#stale_saved_scenario", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {
@@ -254,6 +484,7 @@
     {
       "id": "negative_recurring_cash_flow",
       "traits": ["negative_recurring_cash_flow"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#negative_recurring_cash_flow", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {
@@ -305,6 +536,7 @@
     {
       "id": "cash_below_protected_floor",
       "traits": ["cash_below_protected_floor"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#cash_below_protected_floor", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {
@@ -356,6 +588,7 @@
     {
       "id": "completed_goal",
       "traits": ["completed_goal"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#completed_goal", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {
@@ -407,6 +640,7 @@
     {
       "id": "missing_source_coverage",
       "traits": ["missing_or_insufficient_source_coverage"],
+      "driver": {"type": "persistent_database_fixture", "seed": "states.json#missing_source_coverage", "reference_instant": "2026-08-10T12:00:00-04:00"},
       "tables": {
         "life_plan_profiles": [
           {

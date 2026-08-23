@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-qualification-observe"
+description = "Enables the qualification-only sanitized matrix observation command."
+commands.allow = ["desktop_qualification_observe"]
+
+[[permission]]
+identifier = "deny-desktop-qualification-observe"
+description = "Denies the qualification-only sanitized matrix observation command."
+commands.deny = ["desktop_qualification_observe"]
