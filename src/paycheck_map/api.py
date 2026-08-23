@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import __version__
+from . import __product_version__
 from .balances import add_manual_value_observation
 from .cash_flow_service import (
     CashFlowUnavailableError,
@@ -226,7 +226,7 @@ def health() -> dict[str, str | bool]:
         "server": "127.0.0.1-only",
         "provider_connections": "opt-in-read-only",
         "money_movement": False,
-        "version": __version__,
+        "version": __product_version__,
     }
 
 

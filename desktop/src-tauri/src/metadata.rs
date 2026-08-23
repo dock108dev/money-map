@@ -3,6 +3,7 @@ use tauri::menu::AboutMetadataBuilder;
 
 pub const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const SCHEMA_REVISION: &str = "0009_goal_persistence";
+pub const RELEASE_STATE: &str = "candidate / not accepted";
 pub const BUILD_COMMIT: &str = match option_env!("MONEY_MAP_BUILD_COMMIT") {
     Some(value) => value,
     None => "development",
@@ -17,6 +18,7 @@ pub struct AboutInfo {
     pub product: &'static str,
     pub runtime_version: &'static str,
     pub schema_revision: &'static str,
+    pub release_state: &'static str,
     pub desktop_build: &'static str,
     pub source_commit: &'static str,
     pub target: String,
@@ -38,6 +40,7 @@ pub fn about_info_for_mode(mode: &str) -> AboutInfo {
         product: "Money Map",
         runtime_version: RUNTIME_VERSION,
         schema_revision: SCHEMA_REVISION,
+        release_state: RELEASE_STATE,
         desktop_build: BUILD_ID,
         source_commit: BUILD_COMMIT,
         target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
@@ -54,7 +57,8 @@ pub fn native_about_metadata(mode: &str) -> tauri::menu::AboutMetadata<'static> 
         .version(Some(info.runtime_version))
         .short_version(Some(info.desktop_build))
         .credits(Some(format!(
-            "Schema: {}\nSource: {}\nTarget: {}\nData: {}\nLocation: {}\n{}",
+            "Release: {}\nSchema: {}\nSource: {}\nTarget: {}\nData: {}\nLocation: {}\n{}",
+            info.release_state,
             info.schema_revision,
             info.source_commit,
             info.target,
@@ -75,7 +79,8 @@ mod tests {
         assert_eq!(about.product, "Money Map");
         assert_eq!(about.runtime_version, RUNTIME_VERSION);
         assert_eq!(about.schema_revision, SCHEMA_REVISION);
-        assert_eq!(RUNTIME_VERSION, "2.1.0");
+        assert_eq!(about.release_state, "candidate / not accepted");
+        assert_eq!(RUNTIME_VERSION, "3.0.0-beta.1");
         assert_eq!(SCHEMA_REVISION, "0009_goal_persistence");
         assert_eq!(about.data_mode, "disposable synthetic");
         assert!(about.boundary.contains("read-only"));

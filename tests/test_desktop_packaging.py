@@ -28,14 +28,15 @@ def load_sidecar_builder_module() -> Any:
     return module
 
 
-def test_release_contract_is_frozen_to_slice5_identity() -> None:
+def test_release_contract_is_frozen_to_v3_candidate_identity() -> None:
     module = load_packaging_module()
-    assert module.VERSION == "2.1.0"
+    assert module.VERSION == "3.0.0-beta.1"
+    assert module.PYTHON_VERSION == "3.0.0b1"
     assert module.SCHEMA == "0009_goal_persistence"
     assert module.TARGET == "aarch64-apple-darwin"
     assert module.TEAM == "E3G5D247ZN"
     assert module.IDENTIFIER == "com.moneymap.desktop"
-    assert module.ARTIFACT_NAME == "Money Map-Slice5-arm64.dmg"
+    assert module.ARTIFACT_NAME == "Money Map-3.0.0-beta.1-arm64.dmg"
     assert "0010" not in {path.name for path in (PROJECT_ROOT / "alembic/versions").iterdir()}
 
 
@@ -124,7 +125,9 @@ def test_manifest_comparison_accepts_only_equal_functional_payloads(tmp_path: Pa
     module = load_packaging_module()
     fields: dict[str, Any] = {
         "source_commit": "a" * 40,
-        "runtime_version": "2.1.0",
+        "runtime_version": "3.0.0-beta.1",
+        "python_package_version": "3.0.0b1",
+        "release_state": "candidate_not_accepted",
         "schema_revision": "0009_goal_persistence",
         "bundle_identifier": "com.moneymap.desktop",
         "target_architecture": "aarch64-apple-darwin",
@@ -158,7 +161,9 @@ def test_manifest_comparison_fails_on_payload_difference(tmp_path: Path) -> None
     module = load_packaging_module()
     base: dict[str, Any] = {
         "source_commit": "a" * 40,
-        "runtime_version": "2.1.0",
+        "runtime_version": "3.0.0-beta.1",
+        "python_package_version": "3.0.0b1",
+        "release_state": "candidate_not_accepted",
         "schema_revision": "0009_goal_persistence",
         "bundle_identifier": "com.moneymap.desktop",
         "target_architecture": "aarch64-apple-darwin",

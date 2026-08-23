@@ -18,7 +18,7 @@
       "paycheck_map.money", "paycheck_map.payroll", "paycheck_map.plaid_client",
       "paycheck_map.plaid_service", "paycheck_map.reconciliation",
       "paycheck_map.recurring_outflow_service", "paycheck_map.refresh",
-      "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.safe_events", "paycheck_map.services",
+      "paycheck_map.release_candidate", "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.safe_events", "paycheck_map.services",
       "paycheck_map.v21_contracts", "paycheck_map.v2_contracts"
     ],
     "dependencies": [
@@ -42,9 +42,9 @@
   "approvedResources": ["config/contribution_limits.json", "desktop/src-tauri/icons/icon.png", "desktop/src-tauri/icons/icon.svg"],
   "packaging": {
     "entrypoint": "uv run --frozen python scripts/package_desktop_release.py",
-    "artifact": "Money Map-Slice5-arm64.dmg",
+    "artifact": "Money Map-3.0.0-beta.1-arm64.dmg",
     "iconPipeline": "scripts/generate_macos_icons.sh",
-    "manifestContract": "money-map-slice5-build-manifest-v1",
+    "manifestContract": "money-map-v3-candidate-build-manifest-v1",
     "signingOrder": ["nested Mach-O code", "main executable", "application bundle", "DMG"]
   },
   "reportAndPrint": ["paycheck_map.reporting", "compiled React print CSS", "native WKWebView print panel"],

@@ -1,7 +1,8 @@
-# Money Map Slice 5 desktop packaging
+# Money Map 3.0.0-beta.1 candidate packaging
 
-Slice 5 produces an owner-machine packaging candidate at runtime version `2.1.0` and schema
-`0009_goal_persistence`. It is not `3.0.0-beta.1`, is not notarized, and must not be distributed.
+Slice 8 assembles an owner-machine candidate at public version `3.0.0-beta.1` (PEP 440 package
+version `3.0.0b1`) and schema `0009_goal_persistence`. Its state is `candidate / not accepted`;
+it is not notarized, stapled, tagged, accepted, or approved for external distribution.
 
 ## Clean build command and prerequisites
 
@@ -11,7 +12,7 @@ Run from a clean `main` checkout at the exact commit being packaged:
 uv run --frozen python scripts/package_desktop_release.py \
   <exact-40-character-commit> \
   --identity "Apple Development: <installed identity>" \
-  --build-id slice5-a \
+  --build-id slice8-a \
   --canary <nonsecret-build-canary>
 ```
 
@@ -31,13 +32,14 @@ cleanup is restricted to paths the command created.
 
 ## Outputs, identity, and branding
 
-Ignored outputs are under `.slice5-evidence/<build-id>/`:
+Ignored outputs are under `.slice8-evidence/<build-id>/`:
 
 - `Money Map.app`
-- `Money Map-Slice5-arm64.dmg`
-- `manifest.json`, `dependencies.json`, `nested-code.json`, and `dmg-listing.json`
+- `Money Map-3.0.0-beta.1-arm64.dmg`
+- `manifest.json`, `release-manifest.json`, `dependencies.json`, `nested-code.json`, and
+  `dmg-listing.json`
 
-The app is `Money Map`, bundle `com.moneymap.desktop`, version `2.1.0`, minimum macOS `13.0`, and
+The app is `Money Map`, bundle `com.moneymap.desktop`, version `3.0.0-beta.1`, minimum macOS `13.0`, and
 thin `arm64`. The DMG volume is `Money Map` and contains only `Money Map.app` plus the standard
 `Applications -> /Applications` link. Checked-in `icon.svg` and 1024px `icon.png` are public
 sources. `scripts/generate_macos_icons.sh` creates the ten standard iconset representations and
@@ -51,28 +53,32 @@ identity with timestamping disabled. Strict deep verification and the exact team
 automatically. The manifest records relative paths, thin architecture, digest, authority, team,
 designated-requirement result, entitlement list, and verification result.
 
-Slice 5 adds no entitlements. Hardened runtime is intentionally off for this owner-machine
+Slice 8 adds no entitlements. Hardened runtime is intentionally off for this owner-machine
 candidate. Network server, debugger, JIT, unsigned memory, disabled library validation,
 automation, contacts, camera, microphone, location, and broad file access entitlements are absent.
-The Slice 5 candidate is compiled with the bounded acceptance-home gate; it uses a runtime fake
+The Slice 8 qualification candidate is compiled with the bounded acceptance-home gate; it uses a runtime fake
 home only when `MONEY_MAP_ACCEPTANCE_FAKE_HOME` names a disposable `/tmp` or `/private/tmp` root.
 Production release builds must omit that compile gate.
 
 ## Manifest and reproducibility
 
-`manifest.json` uses contract `money-map-slice5-build-manifest-v1`. It records the commit and clean
+`manifest.json` uses contract `money-map-v3-candidate-build-manifest-v1`. It records the commit and clean
 result, product/schema/bundle/target identity, build ID and reproducible-time policy, sanitized
 command, tool versions, lock and approved-input hashes, certificate class/team, relative artifact
 names/sizes/digests, normalized unsigned app-tree digest, nested-code and entitlement inventory,
 dependency-inventory digest, scan result, and reproducibility status. It never records a username,
 temporary root, PID, port, environment dump, certificate private material, or credential.
 
+`release-manifest.json` uses `money-map-v3-release-manifest-v1`, records
+`candidate_not_accepted`, keeps Campaign A-J, owner-validation, cutover, final-decision, final-hash,
+tag, and release-date fields blank, and makes every acceptance/publication claim false.
+
 Prepare Build A and Build B with different build IDs. Compare them with:
 
 ```sh
 uv run --frozen python scripts/package_desktop_release.py --compare \
-  .slice5-evidence/slice5-a .slice5-evidence/slice5-b \
-  --comparison-output .slice5-evidence/reproducibility.json
+  .slice8-evidence/slice8-a .slice8-evidence/slice8-b \
+  --comparison-output .slice8-evidence/reproducibility.json
 ```
 
 Functional identity covers bundle identity, architecture, versions, resources, capabilities, CSP,
@@ -88,7 +94,7 @@ verifies the mounted app, recursively scans it and the PyInstaller archives, the
 isolated engineering installation proof, copy the app into a fresh disposable Applications-like
 directory outside the checkout. Launch only with a disposable fake home and
 `acceptance-synthetic-v1`; remove credential-bearing environment entries and keep Python, Node,
-and repository paths unavailable. Never copy into `/Applications` during Slice 5.
+and repository paths unavailable. Never copy into `/Applications` during Slice 8.
 
 Verification includes strict signing, thin-architecture inventory, exact plist identity, complete
 migrations through `0009`, no repository fallback, exact capabilities/CSP, dependency audits, app
@@ -108,4 +114,4 @@ After one is installed, a separately authorized future procedure must establish 
 nested-code layout, enable and prove hardened runtime with minimal entitlements, sign app and DMG
 with Developer ID, submit to Apple notarization using credentials supplied outside source/logs,
 wait for success, staple app and DMG, and pass Gatekeeper assessment on a clean downloaded copy.
-No Slice 5 command notarizes, staples, uploads, publishes, deploys, tags, or releases anything.
+No Slice 8 command notarizes, staples, uploads, publishes, deploys, tags, or releases anything.

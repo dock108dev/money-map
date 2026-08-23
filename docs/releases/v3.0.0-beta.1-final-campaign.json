@@ -1,0 +1,71 @@
+{
+  "contract": "money-map-v3-final-campaign-v1",
+  "release_state": "candidate_not_accepted",
+  "version": "3.0.0-beta.1",
+  "python_version": "3.0.0b1",
+  "schema": "0009_goal_persistence",
+  "steps": [
+    "01_candidate_review_and_freeze",
+    "02_loading_overview_repair",
+    "03_focused_and_complete_source_gates",
+    "04_two_build_reproducibility",
+    "05_campaign_a",
+    "06_campaign_b_221_combinations",
+    "07_campaigns_c_through_j",
+    "08_owner_validations_ov01_ov05_ov11",
+    "09_owner_cutover_ov06_ov09",
+    "10_production_mode_rebuild_if_required",
+    "11_owner_validation_ov10",
+    "12_final_reconciliation_and_decision",
+    "13_local_tag_after_acceptance"
+  ],
+  "commands": {
+    "source_gate": "uv run paycheck-map verify",
+    "frontend": "pnpm --dir web test && pnpm --dir web lint && pnpm --dir web build",
+    "rust": "cargo test --manifest-path desktop/src-tauri/Cargo.toml --locked --offline",
+    "rust_clippy": "cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --locked --offline --all-targets -- -D warnings",
+    "candidate_build_a": "uv run --frozen python scripts/package_desktop_release.py <exact-commit> --identity <Apple Development> --build-id final-a --canary <nonsecret-canary>",
+    "candidate_build_b": "uv run --frozen python scripts/package_desktop_release.py <exact-commit> --identity <Apple Development> --build-id final-b --canary <nonsecret-canary>",
+    "reproducibility": "uv run --frozen python scripts/package_desktop_release.py --compare .slice8-evidence/final-a .slice8-evidence/final-b --comparison-output .slice8-evidence/reproducibility.json",
+    "campaign_a_and_cj": "uv run --frozen python scripts/qualify_desktop_release.py <frozen-dmg> --expected-sha256 <frozen-dmg-sha256> --expected-source-commit <exact-commit> --campaign-id <fresh-id> --launch-cycles 10",
+    "campaign_b": "uv run --frozen python scripts/qualify_slice6_campaign_b.py <frozen-app> --expected-source-commit <exact-commit> --expected-candidate-sha256 <frozen-app-tree-sha256> --campaign-id <fresh-id>",
+    "privacy": "python scripts/check_private_data.py && git diff --check",
+    "tag_after_acceptance_only": "git tag -a v3.0.0-beta.1 <accepted-commit>"
+  },
+  "results": {
+    "01_candidate_review_and_freeze": null,
+    "02_loading_overview_repair": null,
+    "03_focused_and_complete_source_gates": null,
+    "04_two_build_reproducibility": null,
+    "05_campaign_a": null,
+    "06_campaign_b_221_combinations": null,
+    "07_campaigns_c_through_j": null,
+    "08_owner_validations_ov01_ov05_ov11": null,
+    "09_owner_cutover_ov06_ov09": null,
+    "10_production_mode_rebuild_if_required": null,
+    "11_owner_validation_ov10": null,
+    "12_final_reconciliation_and_decision": null,
+    "13_local_tag_after_acceptance": null
+  },
+  "owner_responses": {
+    "source_selection": null,
+    "migration_confirmation": null,
+    "rollback_decision": null,
+    "provider_choice": null,
+    "keychain_response": null,
+    "usability_result": null,
+    "coaching_required": null,
+    "cutover_acceptance": null,
+    "final_beta_decision": null
+  },
+  "final": {
+    "accepted_commit": null,
+    "app_hash": null,
+    "dmg_hash": null,
+    "owner_source_identity": null,
+    "owner_pre_cutover_backup": null,
+    "owner_post_cutover_manifest": null,
+    "tag": null,
+    "release_date": null
+  }
+}

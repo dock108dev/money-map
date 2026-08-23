@@ -5,19 +5,34 @@ macOS builds. Slice 0 freezes the gates; it does not claim the beta release is c
 
 ## Release identity and artifacts
 
-Slice 5 uses the locked entrypoint documented in `desktop-packaging.md` to produce the candidate
-`Money Map-Slice5-arm64.dmg`. It deliberately retains every `2.1.0` version surface; promotion to
-`3.0.0-beta.1` remains a later release slice.
+Slice 8 uses the locked entrypoint documented in `desktop-packaging.md` to assemble the candidate
+`Money Map-3.0.0-beta.1-arm64.dmg`. Public surfaces use `3.0.0-beta.1`; Python package metadata uses
+the explicit PEP 440 equivalent `3.0.0b1`.
 
 - One clean, reproducible release commit produces `Money Map.app` and an installable `Money
   Map-3.0.0-beta.1-arm64.dmg` through documented commands on the supported Apple Silicon builder.
 - `pyproject.toml`, the FastAPI version response, Tauri configuration, `Info.plist`, About UI,
-  DMG name, release notes, and local annotated tag must all equal `3.0.0-beta.1`. Until the release
-  slice, every Slice 0 surface remains exactly `2.1.0`.
+  DMG name and release notes must all equal `3.0.0-beta.1`. The local annotated tag remains
+  forbidden until final acceptance.
 - The schema head remains `0009_goal_persistence` unless a separately planned, reviewed migration
   is proven. Packaging is never grounds for an implicit migration.
 - Record SHA-256 hashes, byte sizes, build-tool versions, target triple, source commit, build time,
   and the exact release command for both artifacts.
+
+## Candidate and acceptance states
+
+Slice 8 emits `money-map-v3-release-manifest-v1` with state `candidate_not_accepted`. It binds the
+exact clean source commit, public/PEP-440 version mapping, schema, bundle, architecture, signing and
+entitlements, normalized payload, app/DMG candidate identities, oracle digest, build mode, and blank
+Campaign A-J, `OV-01` through `OV-11`, owner, cutover, decision, hash, tag, and release-date fields.
+All acceptance, tagging, publication, notarization, stapling, and external-distribution claims are
+false.
+
+Promotion is a separate fail-closed validation after the consolidated campaign. It requires a
+production-mode manifest, exact final artifact identities, every Campaign A-J and owner-validation
+result, explicit owner source/backup/manifest/acceptance fields, passed cutover, final owner decision,
+accepted commit, tag, and release date. Candidate code never synthesizes those values. Historical
+Slice 5/6 evidence and diagnostic artifacts cannot fill or promote final identities.
 
 ## Signing, notarization, and publication
 
@@ -31,7 +46,7 @@ Slice 5 uses the locked entrypoint documented in `desktop-packaging.md` to produ
 - Creating a tag, GitHub Release, upload, external DMG distribution, deployment, or publication is
   a separate authorized action after all evidence is accepted. Build work alone never authorizes
   it.
-- Slice 5 signs nested Mach-O code, the app, and the DMG inside-out with timestamp-free Apple
+- Slice 8 retains inside-out nested Mach-O, app, and DMG signing with timestamp-free Apple
   Development signatures and no new entitlements. Developer ID, hardened runtime, notarization,
   stapling, and Gatekeeper qualification remain the separate external-distribution path.
 

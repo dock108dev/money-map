@@ -499,6 +499,7 @@ fn diagnostic_payload(controller: &RuntimeController) -> Result<serde_json::Valu
     Ok(serde_json::json!({
         "contract": "money-map-sanitized-diagnostics-v1",
         "product_version": about.runtime_version,
+        "release_state": about.release_state,
         "schema_revision": backend.get("schema_revision").cloned().unwrap_or(serde_json::json!("unavailable")),
         "desktop_build": about.desktop_build,
         "source_commit": about.source_commit,

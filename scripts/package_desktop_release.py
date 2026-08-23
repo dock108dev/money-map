@@ -19,15 +19,22 @@ from pathlib import Path
 
 from PyInstaller.archive.readers import CArchiveReader
 
+from paycheck_map.release_candidate import (
+    CANDIDATE_STATE,
+    PUBLIC_VERSION,
+    PYTHON_VERSION,
+    candidate_manifest,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "2.1.0"
+VERSION = PUBLIC_VERSION
 SCHEMA = "0009_goal_persistence"
 TARGET = "aarch64-apple-darwin"
 TEAM = "E3G5D247ZN"
 IDENTIFIER = "com.moneymap.desktop"
 MINIMUM_MACOS = "13.0"
-CONTRACT = "money-map-slice5-build-manifest-v1"
-ARTIFACT_NAME = "Money Map-Slice5-arm64.dmg"
+CONTRACT = "money-map-v3-candidate-build-manifest-v1"
+ARTIFACT_NAME = "Money Map-3.0.0-beta.1-arm64.dmg"
 LOCKS = ("uv.lock", "web/pnpm-lock.yaml", "desktop/src-tauri/Cargo.lock")
 REQUIRED_INPUTS = (
     *LOCKS,
@@ -39,6 +46,7 @@ REQUIRED_INPUTS = (
     "desktop/src-tauri/icons/icon.svg",
     "desktop/runtime-resources.json",
     "scripts/build_signed_sidecar.py",
+    "tests/fixtures/synthetic/v1_2_1/release-state-contract.json",
 )
 SECRET_ENV = re.compile(
     r"(^|_)(TOKEN|SECRET|PASSWORD|CREDENTIAL|ACCESS_KEY|PRIVATE_KEY)($|_)|"
@@ -146,7 +154,7 @@ def preflight(commit: str, identity: str) -> dict[str, object]:
     if (
         config["version"] != VERSION
         or f'version = "{VERSION}"' not in cargo
-        or f'version = "{VERSION}"' not in project
+        or f'version = "{PYTHON_VERSION}"' not in project
     ):
         raise SystemExit("runtime version mismatch")
     if (
@@ -391,13 +399,13 @@ def tool_versions(source: Path, env: dict[str, str]) -> dict[str, str]:
 def build(args: argparse.Namespace) -> Path:
     COMMAND_RESULTS.clear()
     pre = preflight(args.commit, args.identity)
-    evidence = ROOT / ".slice5-evidence" / args.build_id
+    evidence = ROOT / ".slice8-evidence" / args.build_id
     if evidence.exists():
         raise SystemExit("evidence/build ID already exists; refusing reuse")
     evidence.mkdir(parents=True, mode=0o700)
     build_root = Path(tempfile.mkdtemp(prefix=f"money-map-{args.build_id}.", dir="/private/tmp"))
     build_root.chmod(0o700)
-    deterministic_build_id = f"slice5-{args.commit[:12]}"
+    deterministic_build_id = f"v3-candidate-{args.commit[:12]}"
     env = sanitized_env(args.identity, deterministic_build_id)
     env["MONEY_MAP_BUILD_COMMIT"] = args.commit
     try:
@@ -499,11 +507,35 @@ def build(args: argparse.Namespace) -> Path:
         dmg = evidence / ARTIFACT_NAME
         create_dmg(app, dmg, args.identity, build_root)
         verify_dmg(dmg, evidence, canaries)
+        normalized_identity = tree_digest(app)
+        app_identity = signed_tree_digest(app)
+        dmg_identity = sha256(dmg)
+        release_manifest = candidate_manifest(
+            source_commit=args.commit,
+            clean_tree=True,
+            bundle_identifier=IDENTIFIER,
+            architecture=TARGET,
+            signing_identity="Apple Development",
+            entitlements=[],
+            oracle_digest=sha256(
+                source / "tests/fixtures/synthetic/v1_2_1/release-state-contract.json"
+            ),
+            normalized_payload_identity=normalized_identity,
+            app_identity=app_identity,
+            dmg_identity=dmg_identity,
+            build_mode="qualification",
+        )
+        release_manifest_path = evidence / "release-manifest.json"
+        release_manifest_path.write_text(
+            json.dumps(release_manifest, indent=2, sort_keys=True) + "\n"
+        )
         manifest = {
             "contract": CONTRACT,
+            "release_state": CANDIDATE_STATE,
             "source_commit": args.commit,
             "clean_tree": True,
             "runtime_version": VERSION,
+            "python_package_version": PYTHON_VERSION,
             "schema_revision": SCHEMA,
             "bundle_identifier": IDENTIFIER,
             "target_architecture": TARGET,
@@ -528,10 +560,14 @@ def build(args: argparse.Namespace) -> Path:
             "app": {
                 "path": "Money Map.app",
                 "size": sum(p.stat().st_size for p in app.rglob("*") if p.is_file()),
-                "sha256": signed_tree_digest(app),
-                "sha256_tree": tree_digest(app),
+                "sha256": app_identity,
+                "sha256_tree": normalized_identity,
             },
-            "dmg": {"path": ARTIFACT_NAME, "size": dmg.stat().st_size, "sha256": sha256(dmg)},
+            "dmg": {"path": ARTIFACT_NAME, "size": dmg.stat().st_size, "sha256": dmg_identity},
+            "release_manifest": {
+                "path": "release-manifest.json",
+                "sha256": sha256(release_manifest_path),
+            },
             "nested_code_inventory": "nested-code.json",
             "entitlements": [],
             "dependency_inventory": {
@@ -675,6 +711,8 @@ def compare(build_a: Path, build_b: Path, output: Path) -> None:
     functional_fields = (
         "source_commit",
         "runtime_version",
+        "python_package_version",
+        "release_state",
         "schema_revision",
         "bundle_identifier",
         "target_architecture",
@@ -701,7 +739,7 @@ def compare(build_a: Path, build_b: Path, output: Path) -> None:
             or sha256(app_a / relative) != sha256(app_b / relative)
         ]
     report = {
-        "contract": "money-map-slice5-reproducibility-v1",
+        "contract": "money-map-v3-candidate-reproducibility-v1",
         "functional_identity": functional,
         "normalized_unsigned_payload_identity": payload,
         "signed_app_byte_identity": a["app"]["sha256"] == b["app"]["sha256"],

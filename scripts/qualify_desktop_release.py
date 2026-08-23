@@ -22,13 +22,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from paycheck_map.release_candidate import CANDIDATE_STATE, validate_candidate
+
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "2.1.0"
+VERSION = "3.0.0-beta.1"
 SCHEMA = "0009_goal_persistence"
 TEAM = "E3G5D247ZN"
 BUNDLE_ID = "com.moneymap.desktop"
 MINIMUM_MACOS = "13.0"
-DMG_NAME = "Money Map-Slice5-arm64.dmg"
+DMG_NAME = "Money Map-3.0.0-beta.1-arm64.dmg"
 CONTRACT = "money-map-slice6-installed-qualification-v1"
 LAUNCH_CONTRACT = "money-map-installed-attestation-launch-v1"
 NATIVE_RESULT_CONTRACT = "money-map-native-attestation-result-v1"
@@ -752,7 +754,15 @@ def qualification(args: argparse.Namespace) -> Path:
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("dmg", {}).get("sha256") != args.expected_sha256:
         raise QualificationFailure("manifest DMG identity differs")
-    evidence: Path = ROOT / ".slice6-evidence" / str(args.campaign_id)
+    release_manifest_path = manifest_root / "release-manifest.json"
+    if not release_manifest_path.is_file():
+        raise QualificationFailure("candidate release manifest is missing")
+    release_manifest = json.loads(release_manifest_path.read_text())
+    try:
+        validate_candidate(release_manifest)
+    except RuntimeError as error:
+        raise QualificationFailure("candidate release state was rejected") from error
+    evidence: Path = ROOT / ".slice8-evidence" / str(args.campaign_id)
     if evidence.exists():
         raise QualificationFailure("campaign evidence ID already exists")
     evidence.mkdir(parents=True, mode=0o700)
@@ -765,6 +775,7 @@ def qualification(args: argparse.Namespace) -> Path:
     mounted = False
     report: dict[str, Any] = {
         "contract": CONTRACT,
+        "release_state": CANDIDATE_STATE,
         "result": "failed",
         "campaign_id": args.campaign_id,
         "source_commit": args.expected_source_commit,
@@ -776,6 +787,9 @@ def qualification(args: argparse.Namespace) -> Path:
         "port_8765_touched": False,
         "applications_touched": False,
         "owner_validations_performed": [],
+        "accepted_as_beta": False,
+        "tagged": False,
+        "published": False,
     }
     try:
         verify_signature(dmg, deep=False)

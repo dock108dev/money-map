@@ -1,6 +1,6 @@
 [package]
 name = "money-map-desktop"
-version = "2.1.0"
+version = "3.0.0-beta.1"
 description = "Money Map production desktop runtime"
 edition = "2021"
 

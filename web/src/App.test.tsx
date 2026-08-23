@@ -731,7 +731,8 @@ describe("application states", () => {
     const reportAction = vi.fn();
     const diagnosticsPreview = vi.fn(async () => ({
       contract: "money-map-sanitized-diagnostics-v1",
-      product_version: "2.1.0",
+      product_version: "3.0.0-beta.1",
+      release_state: "candidate / not accepted",
       database_checks: { integrity: "pass", foreign_keys: "pass" },
     }));
     const setOperationsEnabled = vi.fn();
@@ -785,6 +786,7 @@ describe("application states", () => {
     window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "export-diagnostics" }));
     expect(await screen.findByRole("dialog", { name: "Sanitized diagnostics" })).toBeInTheDocument();
     expect(diagnosticsPreview).toHaveBeenCalledOnce();
+    expect(screen.getByText(/candidate \/ not accepted/)).toBeInTheDocument();
     expect(screen.getByText(/Financial records, paths, credentials, ports, and filenames are excluded\./)).toBeInTheDocument();
     expect(setOperationsEnabled).toHaveBeenCalledWith(true);
   });

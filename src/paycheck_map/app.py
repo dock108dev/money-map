@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__
+from . import __product_version__
 from .api import router
 from .config import settings
 from .db import initialize_database
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Paycheck Map",
-    version=__version__,
+    version=__product_version__,
     docs_url="/api/docs",
     redoc_url=None,
     lifespan=lifespan,

@@ -7,7 +7,7 @@ It does not move money, store bank passwords, categorize purchases, or provide
 financial advice. SoFi and Fidelity can be connected through optional Plaid
 read-only access or imported manually.
 
-Current local release: **Money Map v2.1.0**.
+Current assembled candidate: **Money Map 3.0.0-beta.1 — candidate / not accepted**.
 
 ## Privacy first
 

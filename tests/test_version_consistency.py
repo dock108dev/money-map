@@ -9,12 +9,13 @@ from importlib.metadata import version as installed_version
 
 import httpx
 
-from paycheck_map import __version__
+from paycheck_map import __product_version__, __version__
 from paycheck_map.app import app
 
 from .conftest import PROJECT_ROOT
 
-EXPECTED_VERSION = "2.1.0"
+PUBLIC_VERSION = "3.0.0-beta.1"
+PYTHON_VERSION = "3.0.0b1"
 
 
 def test_every_current_version_surface_agrees() -> None:
@@ -28,6 +29,11 @@ def test_every_current_version_surface_agrees() -> None:
     frontend_version = json.loads(
         (PROJECT_ROOT / "web" / "package.json").read_text(encoding="utf-8")
     )["version"]
+    tauri_version = json.loads(
+        (PROJECT_ROOT / "desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
+    )["version"]
+    with (PROJECT_ROOT / "desktop/src-tauri/Cargo.toml").open("rb") as cargo_file:
+        rust_version = tomllib.load(cargo_file)["package"]["version"]
 
     async def health_version() -> str:
         transport = httpx.ASGITransport(app=app)
@@ -45,15 +51,11 @@ def test_every_current_version_surface_agrees() -> None:
     )
 
     assert {
-        "expected": EXPECTED_VERSION,
+        "expected": PYTHON_VERSION,
         "python_package": __version__,
         "installed_metadata": installed_version("paycheck-map"),
         "pyproject": project_version,
         "uv_lock": locked_version,
-        "fastapi": app.version,
-        "health": asyncio.run(health_version()),
-        "cli": cli.stdout.strip().removeprefix("paycheck-map "),
-        "frontend": frontend_version,
     } == dict.fromkeys(
         [
             "expected",
@@ -61,10 +63,28 @@ def test_every_current_version_surface_agrees() -> None:
             "installed_metadata",
             "pyproject",
             "uv_lock",
+        ],
+        PYTHON_VERSION,
+    )
+    assert {
+        "expected": PUBLIC_VERSION,
+        "public_python_constant": __product_version__,
+        "fastapi": app.version,
+        "health": asyncio.run(health_version()),
+        "cli": cli.stdout.strip().removeprefix("paycheck-map "),
+        "frontend": frontend_version,
+        "tauri": tauri_version,
+        "rust": rust_version,
+    } == dict.fromkeys(
+        [
+            "expected",
+            "public_python_constant",
             "fastapi",
             "health",
             "cli",
             "frontend",
+            "tauri",
+            "rust",
         ],
-        EXPECTED_VERSION,
+        PUBLIC_VERSION,
     )

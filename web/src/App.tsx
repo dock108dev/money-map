@@ -61,6 +61,7 @@ interface DesktopAboutInfo {
   product: string;
   runtime_version: string;
   schema_revision: string;
+  release_state: "candidate / not accepted";
   desktop_build: string;
   source_commit: string;
   target: string;

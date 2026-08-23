@@ -124,6 +124,7 @@ def _scan_pyinstaller(sidecar: Path, markers: tuple[bytes, ...]) -> tuple[int, i
         "paycheck_map.desktop_sidecar",
         "paycheck_map.import_security",
         "paycheck_map.native_secrets",
+        "paycheck_map.release_candidate",
         "paycheck_map.safe_events",
     }
     missing = sorted(required_modules - set(pyz.toc))
@@ -203,7 +204,7 @@ def main() -> None:
     plist = plistlib.loads((app / "Contents/Info.plist").read_bytes())
     if plist.get("CFBundleIdentifier") != "com.moneymap.desktop":
         raise SystemExit("Unexpected bundle identifier")
-    if plist.get("CFBundleShortVersionString") != "2.1.0":
+    if plist.get("CFBundleShortVersionString") != "3.0.0-beta.1":
         raise SystemExit("Unexpected bundle version")
     signature = subprocess.run(
         [

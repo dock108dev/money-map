@@ -11,7 +11,7 @@ exact clean commit. Then run:
 
 ```sh
 uv run --frozen python scripts/qualify_desktop_release.py \
-  .slice5-evidence/<candidate>/Money\ Map-Slice5-arm64.dmg \
+  .slice8-evidence/<candidate>/Money\ Map-3.0.0-beta.1-arm64.dmg \
   --expected-sha256 <exact-64-lowercase-hex-dmg-sha256> \
   --expected-source-commit <exact-40-lowercase-hex-clean-commit> \
   --campaign-id <new-ignored-evidence-id> \
@@ -21,7 +21,7 @@ uv run --frozen python scripts/qualify_desktop_release.py \
 The command stops before mounting on a hash mismatch. It refuses a missing or changed manifest,
 wrong embedded About source, wrong version, schema, architecture, bundle identifier, deployment
 target, signature class/team, entitlement policy, DMG name, or existing Money Map process. It also
-refuses reused evidence IDs. The accepted identity is version `2.1.0`, schema
+refuses reused evidence IDs. The unaccepted candidate identity is version `3.0.0-beta.1`, schema
 `0009_goal_persistence`, thin Apple Silicon, bundle `com.moneymap.desktop`, minimum macOS `13.0`,
 and Apple Development team `E3G5D247ZN` with no entitlements.
 

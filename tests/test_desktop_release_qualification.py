@@ -23,13 +23,13 @@ def module() -> Any:
     return loaded
 
 
-def test_contract_is_frozen_to_installed_slice6_identity() -> None:
+def test_contract_is_frozen_to_v3_candidate_identity() -> None:
     loaded = module()
-    assert loaded.VERSION == "2.1.0"
+    assert loaded.VERSION == "3.0.0-beta.1"
     assert loaded.SCHEMA == "0009_goal_persistence"
     assert loaded.TEAM == "E3G5D247ZN"
     assert loaded.BUNDLE_ID == "com.moneymap.desktop"
-    assert loaded.DMG_NAME == "Money Map-Slice5-arm64.dmg"
+    assert loaded.DMG_NAME == "Money Map-3.0.0-beta.1-arm64.dmg"
     assert not any(
         path.name.startswith("0010") for path in (PROJECT_ROOT / "alembic/versions").iterdir()
     )

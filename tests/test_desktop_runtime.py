@@ -205,7 +205,7 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
             },
         )
         assert trusted.status_code == 200
-        assert trusted.json() == {"ready": True, "version": "2.1.0"}
+        assert trusted.json() == {"ready": True, "version": "3.0.0-beta.1"}
         hostile = httpx.get(
             f"{base_url}/api/desktop/health",
             headers={
