@@ -38,8 +38,12 @@ storage, file, log, diagnostic, database, crash message, artifact, evidence, or 
 
 The shell also creates a second private Unix-domain socket pair, duplicates its child end to
 descriptor 4, and retains only the parent writer. The sidecar consumes the fixed bounded shutdown
-record from that descriptor. This avoids PyInstaller bootloader stdin behavior while keeping
-control out of arguments, files, logs, the WebView, and the network.
+record from that descriptor. The one-file bootloader can replace that descriptor before the frozen
+child starts, so the child also removes and monitors a bounded native-owner PID from its cleared
+startup environment. Owner disappearance requests the same graceful Uvicorn, SQLite, writer-lock,
+bootstrap, and event-log shutdown. This keeps lifecycle control out of arguments, files, logs, the
+WebView, and the network and prevents an orphan when macOS ends the shell without delivering
+Tauri's exit callback.
 
 The shell owns an explicit `Starting`, `Ready`, `Failed`, `Restarting`, `Stopping`, and `Stopped`
 state machine. Every generation receives a new session and exactly one process group. The sidecar

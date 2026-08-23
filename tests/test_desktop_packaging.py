@@ -62,6 +62,9 @@ def test_packaged_shutdown_uses_a_private_control_descriptor() -> None:
     assert ".stdin(Stdio::null())" in rust
     assert 'os.environ.pop("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "")' in sidecar
     assert "for line in sys.stdin" not in sidecar
+    assert '"PAYCHECK_MAP_DESKTOP_OWNER_PID"' in rust
+    assert 'os.environ.pop("PAYCHECK_MAP_DESKTOP_OWNER_PID", "")' in sidecar
+    assert "await_owner_exit" in sidecar
 
 
 def test_build_environment_removes_credential_bearing_names(

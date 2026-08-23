@@ -66,6 +66,26 @@ def _control_handle() -> TextIO:
         raise RuntimeError("Desktop control is unavailable") from error
 
 
+def _owner_pid() -> int:
+    try:
+        owner_pid = int(os.environ.pop("PAYCHECK_MAP_DESKTOP_OWNER_PID", ""))
+    except ValueError as error:
+        raise RuntimeError("Desktop owner is unavailable") from error
+    if owner_pid <= 1:
+        raise RuntimeError("Desktop owner is unavailable")
+    return owner_pid
+
+
+def _owner_is_alive(owner_pid: int) -> bool:
+    try:
+        os.kill(owner_pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def _synthetic_root() -> Path:
     raw = os.environ.get("PAYCHECK_MAP_LOCAL_DIR")
     if not raw:
@@ -95,6 +115,7 @@ def _desktop_root() -> Path:
 def main() -> None:
     session = _read_bootstrap()
     control = _control_handle()
+    owner_pid = _owner_pid()
     root = _desktop_root()
     if os.environ.get("PAYCHECK_MAP_DESKTOP_MODE") != "true":
         raise RuntimeError("Desktop mode is required")
@@ -150,7 +171,13 @@ def main() -> None:
                         server.should_exit = True
                         return
 
+        def await_owner_exit() -> None:
+            while _owner_is_alive(owner_pid):
+                time.sleep(0.1)
+            server.should_exit = True
+
         threading.Thread(target=await_shutdown, name="desktop-shutdown", daemon=True).start()
+        threading.Thread(target=await_owner_exit, name="desktop-owner", daemon=True).start()
         events.emit("MM-DESKTOP-READY", "lifecycle")
         server.run(sockets=[listener])
         events.emit("MM-DESKTOP-STOP", "lifecycle")

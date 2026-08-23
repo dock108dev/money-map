@@ -115,6 +115,7 @@ def running_sidecar(
         "PAYCHECK_MAP_LOCAL_DIR": str(root),
         "PAYCHECK_MAP_DESKTOP_LOG_ROOT": str(root.parent / "logs"),
         "PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT": str(Path(__file__).resolve().parents[1]),
+        "PAYCHECK_MAP_DESKTOP_OWNER_PID": str(os.getpid()),
     }
     bootstrap_read, bootstrap_write = os.pipe()
     control_read, control_write = os.pipe()
@@ -219,6 +220,7 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
             "PAYCHECK_MAP_LOCAL_DIR": str(root),
             "PAYCHECK_MAP_DESKTOP_LOG_ROOT": str(root.parent / "logs"),
             "PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT": str(Path(__file__).resolve().parents[1]),
+            "PAYCHECK_MAP_DESKTOP_OWNER_PID": str(os.getpid()),
         }
         bootstrap_read, bootstrap_write = os.pipe()
         control_read, control_write = os.pipe()

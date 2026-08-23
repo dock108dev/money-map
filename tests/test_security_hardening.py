@@ -122,6 +122,20 @@ def test_private_control_descriptor_is_bounded_single_use_and_not_stdin(
         _control_handle()
 
 
+def test_desktop_owner_pid_is_bounded_and_removed_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from paycheck_map.desktop_sidecar import _owner_is_alive, _owner_pid
+
+    monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_OWNER_PID", str(os.getpid()))
+    assert _owner_pid() == os.getpid()
+    assert "PAYCHECK_MAP_DESKTOP_OWNER_PID" not in os.environ
+    assert _owner_is_alive(os.getpid())
+    monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_OWNER_PID", "1")
+    with pytest.raises(RuntimeError, match="unavailable"):
+        _owner_pid()
+
+
 def _security_request(
     headers: list[tuple[bytes, bytes]], *, method: str = "GET", path: str = "/api/desktop/health"
 ) -> list[Message]:

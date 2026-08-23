@@ -312,6 +312,10 @@ impl RuntimeController {
             .env("PAYCHECK_MAP_LOCAL_DIR", &self.paths.application)
             .env("PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD", "3")
             .env("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "4")
+            .env(
+                "PAYCHECK_MAP_DESKTOP_OWNER_PID",
+                std::process::id().to_string(),
+            )
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
