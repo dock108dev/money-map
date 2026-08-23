@@ -516,8 +516,9 @@ fn safe_matrix_observation(value: &MatrixUiObservation) -> bool {
             !text.is_empty()
                 && text.len() <= 240
                 && !text.contains('\\')
-                && !text.contains("/Users/")
-                && !text.contains("/private/")
+                && !text
+                    .split('/')
+                    .any(|segment| matches!(segment, "Users" | "private"))
                 && !text.contains("Traceback")
                 && !text.contains("Exception")
                 && !text.contains("127.0.0.1")
