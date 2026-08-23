@@ -156,6 +156,35 @@ def test_wait_gone_does_not_trust_a_reused_sidecar_pid(
     assert loaded.wait_gone(process, [43123], timeout=0.1) >= 0
 
 
+def test_synthetic_root_attestation_requires_exact_mode_and_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loaded = module()
+    roots = {
+        "PAYCHECK_MAP_DESKTOP_APP_ROOT": tmp_path / "Library/Application Support/Money Map",
+        "PAYCHECK_MAP_DESKTOP_CACHE_ROOT": tmp_path / "Library/Caches/com.moneymap.desktop",
+        "PAYCHECK_MAP_DESKTOP_LOG_ROOT": tmp_path / "Library/Logs/Money Map",
+    }
+    for path in roots.values():
+        path.mkdir(parents=True)
+    environment = " ".join(
+        [
+            *(f"{name}={value}" for name, value in roots.items()),
+            f"PAYCHECK_MAP_LOCAL_DIR={roots['PAYCHECK_MAP_DESKTOP_APP_ROOT']}",
+            "PAYCHECK_MAP_DESKTOP_DATA_MODE=acceptance-synthetic-v1",
+        ]
+    )
+    monkeypatch.setattr(
+        loaded.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=environment),
+    )
+    loaded.attest_synthetic_roots([43123, 43124], tmp_path)
+    environment = environment.replace("acceptance-synthetic-v1", "production-v1")
+    with pytest.raises(loaded.QualificationFailure, match="attestation"):
+        loaded.attest_synthetic_roots([43123], tmp_path)
+
+
 def test_cleanup_failure_labels_are_sanitized_and_specific() -> None:
     source = (PROJECT_ROOT / "scripts/qualify_desktop_release.py").read_text()
     for label in ("writer-lock", "session-material", "graceful-stop", "single-instance"):

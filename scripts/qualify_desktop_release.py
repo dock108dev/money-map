@@ -55,6 +55,8 @@ class CycleResult:
     session_material_clean: bool
     graceful_stop: bool
     second_launch_single_instance: bool
+    synthetic_roots_attested: bool
+    production_mode_refused: bool
 
 
 def sha256(path: Path) -> str:
@@ -293,6 +295,37 @@ def socket_observation(pids: list[int]) -> tuple[int, int]:
     return len(listeners), len(external)
 
 
+def attest_synthetic_roots(pids: list[int], fake_home: Path) -> None:
+    roots = {
+        "PAYCHECK_MAP_DESKTOP_APP_ROOT": fake_home / "Library/Application Support/Money Map",
+        "PAYCHECK_MAP_DESKTOP_CACHE_ROOT": fake_home / "Library/Caches/com.moneymap.desktop",
+        "PAYCHECK_MAP_DESKTOP_LOG_ROOT": fake_home / "Library/Logs/Money Map",
+    }
+    if not all(path.is_relative_to(fake_home) for path in roots.values()) or not all(
+        roots[name].is_dir()
+        for name in ("PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT")
+    ):
+        raise QualificationFailure("installed runtime did not activate its synthetic roots")
+    expected = {
+        **{name: str(path) for name, path in roots.items()},
+        "PAYCHECK_MAP_LOCAL_DIR": str(roots["PAYCHECK_MAP_DESKTOP_APP_ROOT"]),
+        "PAYCHECK_MAP_DESKTOP_DATA_MODE": "acceptance-synthetic-v1",
+    }
+    for pid in pids:
+        result = subprocess.run(
+            ["/bin/ps", "eww", "-p", str(pid), "-o", "command="],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode or any(
+            f"{name}={value}" not in result.stdout for name, value in expected.items()
+        ):
+            raise QualificationFailure("installed runtime synthetic-root attestation failed")
+        if "PAYCHECK_MAP_DESKTOP_DATA_MODE=production-v1" in result.stdout:
+            raise QualificationFailure("installed runtime entered forbidden production mode")
+
+
 def quit_app() -> None:
     run(
         [
@@ -337,6 +370,7 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
     lock = fake_home / "Library/Application Support/Money Map/.money-map-writer.lock"
     try:
         sidecars, ready_ms = wait_for_runtime(process.pid, lock)
+        attest_synthetic_roots(sidecars, fake_home)
         listeners, external = socket_observation(sidecars)
         if listeners != 1 or external != 0:
             raise QualificationFailure("runtime listener or external-connection boundary failed")
@@ -397,6 +431,8 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
             session_material_clean=not session_files,
             graceful_stop=graceful,
             second_launch_single_instance=single_instance,
+            synthetic_roots_attested=True,
+            production_mode_refused=True,
         )
         failed_cleanup = [
             name
