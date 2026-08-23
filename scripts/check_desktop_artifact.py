@@ -43,6 +43,7 @@ APP_COMMANDS = {
     "allow-desktop-export-diagnostics",
     "allow-desktop-set-operations-enabled",
     "allow-desktop-open-external",
+    "allow-desktop-qualification-observe",
 }
 
 
