@@ -728,7 +728,7 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Money Map native shell could not initialize");
     app.run(|handle, event| match event {
-        RunEvent::Exit => {
+        RunEvent::ExitRequested { .. } | RunEvent::Exit => {
             if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
                 controller.shutdown();
             }

@@ -39,6 +39,18 @@ def test_release_contract_is_frozen_to_slice5_identity() -> None:
     assert "0010" not in {path.name for path in (PROJECT_ROOT / "alembic/versions").iterdir()}
 
 
+def test_native_exit_request_owns_runtime_shutdown_before_process_exit() -> None:
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    assert "RunEvent::ExitRequested { .. } | RunEvent::Exit =>" in source
+    exit_handler = source.split("RunEvent::ExitRequested { .. } | RunEvent::Exit =>", 1)[1]
+    assert "controller.shutdown();" in exit_handler.split("RunEvent::Reopen", 1)[0]
+
+
+def test_release_builder_embeds_the_exact_source_commit_in_about() -> None:
+    source = (PROJECT_ROOT / "scripts/package_desktop_release.py").read_text()
+    assert 'env["MONEY_MAP_BUILD_COMMIT"] = args.commit' in source
+
+
 def test_build_environment_removes_credential_bearing_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

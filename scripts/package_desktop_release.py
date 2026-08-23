@@ -398,6 +398,7 @@ def build(args: argparse.Namespace) -> Path:
     build_root.chmod(0o700)
     deterministic_build_id = f"slice5-{args.commit[:12]}"
     env = sanitized_env(args.identity, deterministic_build_id)
+    env["MONEY_MAP_BUILD_COMMIT"] = args.commit
     try:
         source = fresh_source(args.commit, build_root)
         env["RUSTFLAGS"] = (
