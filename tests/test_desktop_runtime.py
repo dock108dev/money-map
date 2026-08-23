@@ -320,7 +320,7 @@ def test_sidecar_attestation_uses_open_sqlite_identity_and_live_resources(tmp_pa
             "symlink_free": True,
             "contained": True,
             "active": True,
-            "mode": 0o600,
+            "permissions_mode": 0o600,
             "owned_by_current_user": True,
             "single_link": True,
         }

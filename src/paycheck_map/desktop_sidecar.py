@@ -76,7 +76,7 @@ def _resource_facts(
         "symlink_free": symlink_free,
         "contained": canonical.is_relative_to(campaign),
         "active": active,
-        "mode": stat.S_IMODE(metadata.st_mode),
+        "permissions_mode": stat.S_IMODE(metadata.st_mode),
         "owned_by_current_user": metadata.st_uid == os.geteuid(),
         "single_link": metadata.st_nlink == 1,
     }

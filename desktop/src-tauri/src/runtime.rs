@@ -737,7 +737,7 @@ fn empty_attestation() -> InstalledAttestation {
         symlink_free: false,
         contained: false,
         active: None,
-        mode: 0,
+        permissions_mode: 0,
         owned_by_current_user: false,
         single_link: false,
     };

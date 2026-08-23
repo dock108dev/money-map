@@ -341,7 +341,9 @@ def socket_observation(pids: list[int]) -> tuple[int, int]:
     return len(listeners), len(external)
 
 
-def wait_native_result(path: Path, *, expected: str, timeout: float = 45) -> dict[str, Any]:
+def wait_native_result(
+    path: Path, *, expected: str, context: str = "attestation", timeout: float = 45
+) -> dict[str, Any]:
     started = time.monotonic()
     while time.monotonic() - started < timeout:
         if path.is_file() and not path.is_symlink() and path.stat().st_size <= 8192:
@@ -351,13 +353,13 @@ def wait_native_result(path: Path, *, expected: str, timeout: float = 45) -> dic
                 time.sleep(0.05)
                 continue
             if not isinstance(result, dict) or any(not isinstance(key, str) for key in result):
-                raise QualificationFailure("native launcher attestation result was rejected")
+                raise QualificationFailure(f"native launcher {context} result was rejected")
             result = cast(dict[str, Any], result)
             if result.get("contract") != NATIVE_RESULT_CONTRACT or result.get("result") != expected:
-                raise QualificationFailure("native launcher attestation result was rejected")
+                raise QualificationFailure(f"native launcher {context} result was rejected")
             return result
         time.sleep(0.05)
-    raise QualificationFailure("native launcher attestation result was not produced")
+    raise QualificationFailure(f"native launcher {context} result was not produced")
 
 
 def require_native_attestation(result: dict[str, Any], contract: dict[str, object]) -> None:
@@ -438,7 +440,11 @@ def prove_production_refusal(
         start_new_session=True,
     )
     try:
-        result = wait_native_result(fake_home / "native-attestation-result.json", expected="failed")
+        result = wait_native_result(
+            fake_home / "native-attestation-result.json",
+            expected="failed",
+            context="production-refusal",
+        )
         application = fake_home / "Library/Application Support/Money Map"
         rows = process_rows()
         if application.exists() or descendants(process.pid, rows):
@@ -505,7 +511,11 @@ def prove_attestation_failure_cleanup(
         start_new_session=True,
     )
     try:
-        result = wait_native_result(fake_home / "native-attestation-result.json", expected="failed")
+        result = wait_native_result(
+            fake_home / "native-attestation-result.json",
+            expected="failed",
+            context="failure-cleanup",
+        )
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and descendants(process.pid, process_rows()):
             time.sleep(0.1)
@@ -590,7 +600,9 @@ def run_cycle(
     lock = fake_home / "Library/Application Support/Money Map/.money-map-writer.lock"
     try:
         native_result = wait_native_result(
-            fake_home / "native-attestation-result.json", expected="pass"
+            fake_home / "native-attestation-result.json",
+            expected="pass",
+            context="cycle-attestation",
         )
         require_native_attestation(native_result, contract)
         sidecars, ready_ms = wait_for_runtime(process.pid, lock)

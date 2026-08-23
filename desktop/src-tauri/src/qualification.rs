@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
@@ -31,7 +30,7 @@ pub struct QualificationContract {
     pub source_commit: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceFacts {
     pub exists: bool,
@@ -39,12 +38,12 @@ pub struct ResourceFacts {
     pub symlink_free: bool,
     pub contained: bool,
     pub active: Option<bool>,
-    pub mode: u32,
+    pub permissions_mode: u32,
     pub owned_by_current_user: bool,
     pub single_link: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InstalledAttestation {
     pub contract: String,
@@ -243,7 +242,7 @@ impl QualificationContract {
                     || fact.kind != kind
                     || !fact.symlink_free
                     || !fact.contained
-                    || fact.mode != mode
+                    || fact.permissions_mode != mode
                     || !fact.owned_by_current_user
                     || (single_link && !fact.single_link)
                     || active.is_some_and(|required| fact.active != Some(required))
@@ -424,36 +423,42 @@ pub fn parse_attestation(line: &str) -> Result<InstalledAttestation, String> {
     }
     let value: InstalledAttestation = serde_json::from_str(raw)
         .map_err(|_| "Installed root attestation was malformed.".to_string())?;
-    let keys: BTreeSet<&str> = [
-        "contract",
-        "schema_version",
-        "campaign_id",
-        "nonce",
-        "generation",
-        "session",
-        "mode",
-        "campaign_root",
-        "application_root",
-        "database_path",
-        "writer_lock_path",
-        "cache_root",
-        "log_root",
-        "database",
-        "writer_lock",
-        "cache",
-        "logs",
-        "schema_revision",
-        "integrity",
-        "foreign_keys",
-        "database_identity_stable",
-        "engine_database_identity",
-        "sequence",
-    ]
-    .into_iter()
-    .collect();
-    if keys
+    let exact_key_counts = [
+        ("contract", 1),
+        ("schema_version", 1),
+        ("campaign_id", 1),
+        ("nonce", 1),
+        ("generation", 1),
+        ("session", 1),
+        ("mode", 1),
+        ("campaign_root", 1),
+        ("application_root", 1),
+        ("database_path", 1),
+        ("writer_lock_path", 1),
+        ("cache_root", 1),
+        ("log_root", 1),
+        ("database", 1),
+        ("writer_lock", 1),
+        ("cache", 1),
+        ("logs", 1),
+        ("schema_revision", 1),
+        ("integrity", 1),
+        ("foreign_keys", 1),
+        ("database_identity_stable", 1),
+        ("engine_database_identity", 1),
+        ("sequence", 1),
+        ("exists", 4),
+        ("kind", 4),
+        ("symlink_free", 4),
+        ("contained", 4),
+        ("active", 4),
+        ("permissions_mode", 4),
+        ("owned_by_current_user", 4),
+        ("single_link", 4),
+    ];
+    if exact_key_counts
         .iter()
-        .any(|key| raw.matches(&format!("\"{key}\"")).count() != 1)
+        .any(|(key, count)| raw.matches(&format!("\"{key}\"")).count() != *count)
     {
         return Err("Installed root attestation was malformed.".to_string());
     }
@@ -519,7 +524,7 @@ mod tests {
             symlink_free: true,
             contained: true,
             active: None,
-            mode: 0o600,
+            permissions_mode: 0o600,
             owned_by_current_user: true,
             single_link: true,
         };
@@ -529,7 +534,7 @@ mod tests {
             symlink_free: true,
             contained: true,
             active: None,
-            mode: 0o700,
+            permissions_mode: 0o700,
             owned_by_current_user: true,
             single_link: false,
         };
@@ -570,6 +575,14 @@ mod tests {
         contract
             .verify_attestation(&attestation, 1, &"e".repeat(64), &contract.nonce)
             .unwrap();
+        let line = format!(
+            "MONEY_MAP_ATTEST {}",
+            serde_json::to_string(&attestation).unwrap()
+        );
+        assert_eq!(
+            parse_attestation(&line).unwrap_or_else(|error| panic!("{error}: {line}")),
+            attestation
+        );
     }
 
     #[test]
