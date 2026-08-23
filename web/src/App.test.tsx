@@ -327,7 +327,31 @@ describe("application states", () => {
   it("shows a loading state while local endpoints are pending", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
     render(<App />);
-    expect(screen.getByText("Loading accounts…")).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { level: 1, name: "Loading accounts…" });
+    const loading = heading.closest("main");
+    expect(heading).toBeVisible();
+    expect(loading).toHaveClass("loading-state");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(loading).toHaveAttribute("aria-live", "polite");
+    expect(screen.queryByRole("heading", { name: "Cash Flow" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("withholds completed evidence until every initial dashboard read settles", async () => {
+    const settledFetch = workingFetch();
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        held.then(() => settledFetch(input, init))),
+    );
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "Loading accounts…" })).toBeVisible();
+    expect(screen.queryByText("$25,600.00")).not.toBeInTheDocument();
+    release?.();
+    expect(await screen.findByRole("heading", { name: "Cash Flow" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Loading accounts…" })).not.toBeInTheDocument();
   });
 
   it("shows a recoverable error when local endpoints fail", async () => {

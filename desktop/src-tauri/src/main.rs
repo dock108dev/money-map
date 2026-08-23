@@ -7,17 +7,17 @@ mod runtime;
 
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::{fs, os::unix::fs::PermissionsExt};
 
 use data_home::DataHomePaths;
-use metadata::{about_info_for_mode, native_about_metadata, AboutInfo};
+use metadata::{about_info_for_mode, native_about_metadata, AboutInfo, BUILD_COMMIT};
 use proxy::{forward, validate_frontend_request, DesktopRequest, DesktopResponse};
 use qualification::{MatrixApiObservation, MatrixUiObservation, QualificationContract};
 use runtime::{RuntimeController, RuntimeStatus};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const OPERATION_MENU_IDS: &[&str] = &[
@@ -55,8 +55,21 @@ const MENU_ACTION_IDS: &[&str] = &[
 
 static WEBVIEW_ZOOM: AtomicU64 = AtomicU64::new(1.0_f64.to_bits());
 
-fn initialization_script() -> &'static str {
-    r#"(() => {
+fn planned_qualification_hash(contract: Option<&QualificationContract>) -> Option<String> {
+    let (_, route) = contract?.matrix_plan()?;
+    let view = match route {
+        "add-account" => "connections",
+        "cash-flow" | "goals" | "activity" | "overview" | "accounts" | "income" | "wealth"
+        | "retirement" | "lab" => route,
+        _ => return None,
+    };
+    Some(format!("#view={view}"))
+}
+
+fn initialization_script(contract: Option<&QualificationContract>) -> String {
+    let planned_hash = serde_json::to_string(&planned_qualification_hash(contract))
+        .unwrap_or_else(|_| "null".to_string());
+    let script = r#"(() => {
           const nativeFetch = window.fetch.bind(window);
           const invoke = window.__TAURI_INTERNALS__.invoke;
           Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", { value: Object.freeze({
@@ -101,7 +114,14 @@ fn initialization_script() -> &'static str {
             headers["cache-control"] = "no-store";
             return new Response(result.body, { status: result.status, headers });
           };
-        })();"#
+        })();"#;
+    script.replacen(
+        "(() => {",
+        &format!(
+            "(() => {{ const plannedHash = {planned_hash}; if (plannedHash) window.history.replaceState(null, \"\", plannedHash);"
+        ),
+        1,
+    )
 }
 
 fn safe_error_initialization_script() -> &'static str {
@@ -123,13 +143,32 @@ fn show_safe_error(app: &tauri::AppHandle) {
 
 fn build_main_window<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
+    qualification: Option<&QualificationContract>,
 ) -> tauri::Result<tauri::WebviewWindow<R>> {
+    let observer_contract = qualification.cloned();
+    let observer_sequence = Arc::new(AtomicU8::new(0));
+    let page_sequence = Arc::clone(&observer_sequence);
     let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("Money Map")
         .inner_size(1280.0, 820.0)
         .min_inner_size(900.0, 640.0)
         .zoom_hotkeys_enabled(false)
-        .initialization_script(initialization_script())
+        .initialization_script(initialization_script(qualification))
+        .on_page_load(move |window, payload| {
+            if !matches!(payload.event(), PageLoadEvent::Finished) {
+                return;
+            }
+            let sequence = page_sequence.fetch_add(1, Ordering::SeqCst) + 1;
+            if sequence > 2 {
+                return;
+            }
+            if let Some(script) = observer_contract
+                .as_ref()
+                .and_then(|contract| qualification_observer_script(contract, sequence))
+            {
+                let _ = window.eval(&script);
+            }
+        })
         .on_navigation(internal_navigation_allowed)
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .build()?;
@@ -166,18 +205,10 @@ fn desktop_reload(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<RuntimeController>>,
 ) -> Result<(), String> {
+    state.rearm_qualification_gate()?;
     window
         .reload()
         .map_err(|_| "The desktop window could not reload.".to_string())?;
-    if let Some(contract) = state.qualification() {
-        if let Some(script) = qualification_observer_script(&contract, 2) {
-            let reloaded = window.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                let _ = reloaded.eval(&script);
-            });
-        }
-    }
     Ok(())
 }
 
@@ -224,7 +255,7 @@ async fn desktop_restart(
         let _ = window.hide();
         let main = match window.app_handle().get_webview_window("main") {
             Some(main) => main,
-            None => build_main_window(window.app_handle())
+            None => build_main_window(window.app_handle(), state.qualification().as_ref())
                 .map_err(|_| "Money Map could not create its verified window.".to_string())?,
         };
         let _ = main.show();
@@ -545,6 +576,9 @@ async fn desktop_fetch(
     let controller = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
         validate_frontend_request(&request)?;
+        if request.method == "GET" {
+            controller.hold_qualification_dashboard_request(&request.path)?;
+        }
         let (port, session) = controller.target()?;
         forward(port, &session, request)
     })
@@ -655,11 +689,13 @@ fn desktop_qualification_observe(
 }
 
 fn qualification_observer_script(contract: &QualificationContract, sequence: u8) -> Option<String> {
-    let (_, route) = contract.matrix_plan()?;
+    let (state, route) = contract.matrix_plan()?;
     let route_json = serde_json::to_string(route).ok()?;
+    let loading = state == "loading";
     Some(format!(
         r#"(() => {{
           const requestedRoute = {route_json};
+          const boundedLoading = {loading};
           let consoleErrors = 0;
           const originalConsoleError = console.error.bind(console);
           console.error = (...args) => {{ consoleErrors += 1; originalConsoleError(...args); }};
@@ -670,6 +706,8 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
             "add-account": "Add account"
           }};
           let attempts = 0;
+          let loadingRouteApplied = false;
+          let loadingSettledAt = 0;
           const text = (element) => (element?.textContent || "").replace(/\s+/g, " ").trim();
           const values = (selector, limit) => Array.from(document.querySelectorAll(selector))
             .map(text).filter(Boolean).slice(0, limit);
@@ -677,17 +715,9 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
             .replace(/, \d+ issues$/u, "");
           const clickLabel = (label) => Array.from(document.querySelectorAll("button"))
             .find((button) => buttonLabel(button) === label)?.click();
-          const timer = window.setInterval(() => {{
-            attempts += 1;
-            if (attempts === 4) {{
-              if (routeLabels[requestedRoute]) clickLabel(routeLabels[requestedRoute]);
-              else if (requestedRoute === "data-home") clickLabel("Data safety");
-              else if (requestedRoute === "diagnostics") clickLabel("Diagnostics");
-            }}
-            if (attempts < 40) return;
-            window.clearInterval(timer);
-            void window.__TAURI_INTERNALS__.invoke("desktop_qualification_observe", {{ observation: {{
-              sequence: {sequence}, route: requestedRoute,
+          const observe = (phase) => window.__TAURI_INTERNALS__.invoke(
+            "desktop_qualification_observe", {{ observation: {{
+              sequence: {sequence}, phase, route: requestedRoute,
               location_hash: window.location.hash,
               headings: values("h1,h2", 16),
               statuses: values('[role="status"]', 16),
@@ -697,10 +727,35 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
                 .map(text).filter(Boolean).slice(0, 64),
               messages: values("main p,main small,main dt,main dd,main strong,.simple-empty", 64),
               loading_visible: Boolean(document.querySelector(".loading-state")),
+              loading_busy: document.querySelector(".loading-state")?.getAttribute("aria-busy") === "true",
+              loading_live: document.querySelector(".loading-state")?.getAttribute("aria-live") || "",
               dialog_count: document.querySelectorAll('[role="dialog"],[role="alertdialog"]').length,
               progress_count: document.querySelectorAll('[role="progressbar"],progress').length,
               unsafe_console_errors: consoleErrors
-            }} }});
+            }} }}
+          );
+          const timer = window.setInterval(() => {{
+            attempts += 1;
+            if (boundedLoading && attempts === 2) {{
+              void observe("pending");
+              return;
+            }}
+            if (boundedLoading && document.querySelector(".loading-state")) return;
+            if (boundedLoading && !loadingRouteApplied) {{
+              loadingRouteApplied = true;
+              loadingSettledAt = attempts;
+              if (routeLabels[requestedRoute]) clickLabel(routeLabels[requestedRoute]);
+              else if (requestedRoute === "data-home") clickLabel("Data safety");
+              else if (requestedRoute === "diagnostics") clickLabel("Diagnostics");
+            }} else if (!boundedLoading && attempts === 4) {{
+              if (routeLabels[requestedRoute]) clickLabel(routeLabels[requestedRoute]);
+              else if (requestedRoute === "data-home") clickLabel("Data safety");
+              else if (requestedRoute === "diagnostics") clickLabel("Diagnostics");
+            }}
+            if (boundedLoading && attempts - loadingSettledAt < 10) return;
+            if (!boundedLoading && attempts < 40) return;
+            window.clearInterval(timer);
+            void observe("settled");
           }}, 100);
         }})();"#
     ))
@@ -876,6 +931,15 @@ fn main() {
         .setup(|app| {
             let qualification =
                 QualificationContract::from_environment().map_err(std::io::Error::other)?;
+            if let Some(contract) = qualification.as_ref().filter(|contract| {
+                BUILD_COMMIT != "development" && contract.source_commit != BUILD_COMMIT
+            }) {
+                let _ = contract.write_result(false, Some("qualification-source-identity"));
+                return Err(std::io::Error::other(
+                    "Synthetic qualification source identity was rejected.",
+                )
+                .into());
+            }
             let paths = DataHomePaths::resolve(app.handle(), qualification.as_ref())
                 .map_err(std::io::Error::other)?;
             install_native_menu(app.handle(), paths.mode)?;
@@ -887,12 +951,8 @@ fn main() {
             .map_err(std::io::Error::other)?;
             app.manage(Arc::clone(&controller));
             if controller.start_initial().is_ok() {
-                let window = build_main_window(app.handle())?;
-                if let Some(contract) = controller.qualification() {
-                    if let Some(script) = qualification_observer_script(&contract, 1) {
-                        window.eval(&script)?;
-                    }
-                }
+                let active_qualification = controller.qualification();
+                build_main_window(app.handle(), active_qualification.as_ref())?;
             } else {
                 build_safe_error_window(app.handle())?;
             }

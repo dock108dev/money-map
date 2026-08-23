@@ -123,6 +123,7 @@ def launch_contract(
     matrix_state: str | None = None,
     matrix_route: str | None = None,
     matrix_contract_digest: str | None = None,
+    matrix_driver: dict[str, object] | None = None,
 ) -> dict[str, object]:
     application = fake_home / "Library/Application Support/Money Map"
     result: dict[str, object] = {
@@ -153,6 +154,10 @@ def launch_contract(
                 "matrix_result_path": str(fake_home / "matrix-observation.json"),
             }
         )
+        if matrix_driver is not None:
+            result["matrix_driver"] = matrix_driver
+    elif matrix_driver is not None:
+        raise QualificationFailure("matrix response driver lacks a matrix plan")
     return result
 
 

@@ -16,7 +16,9 @@ use std::time::{Duration, Instant};
 use crate::data_home::DataHomePaths;
 use crate::lifecycle::{LifecycleMachine, LifecycleState};
 use crate::proxy::health_ready;
-use crate::qualification::{parse_attestation, InstalledAttestation, QualificationContract};
+use crate::qualification::{
+    parse_attestation, InstalledAttestation, QualificationContract, QualificationResponseGate,
+};
 use serde::Serialize;
 
 const READY_SIGNAL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -57,6 +59,7 @@ pub struct RuntimeController {
     paths: DataHomePaths,
     sidecar_path: PathBuf,
     qualification: Option<QualificationContract>,
+    qualification_gate: Option<Arc<QualificationResponseGate>>,
 }
 
 enum OutputEvent {
@@ -79,6 +82,9 @@ impl RuntimeController {
         paths: DataHomePaths,
         qualification: Option<QualificationContract>,
     ) -> Result<Arc<Self>, String> {
+        let qualification_gate = qualification
+            .as_ref()
+            .and_then(QualificationResponseGate::from_contract);
         Ok(Arc::new(Self {
             inner: Mutex::new(RuntimeInner {
                 lifecycle: LifecycleMachine::default(),
@@ -91,6 +97,7 @@ impl RuntimeController {
             paths,
             sidecar_path,
             qualification,
+            qualification_gate,
         }))
     }
 
@@ -120,6 +127,44 @@ impl RuntimeController {
 
     pub fn qualification(&self) -> Option<QualificationContract> {
         self.qualification.clone()
+    }
+
+    pub fn hold_qualification_dashboard_request(&self, path: &str) -> Result<(), String> {
+        const HELD_DASHBOARD_READS: &[&str] = &[
+            "/api/accounts",
+            "/api/wealth",
+            "/api/exceptions",
+            "/api/plaid/status",
+            "/api/payroll",
+            "/api/scenarios",
+            "/api/imports",
+        ];
+        if HELD_DASHBOARD_READS.contains(&path) {
+            if let Some(gate) = &self.qualification_gate {
+                gate.wait_for_release()?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn rearm_qualification_gate(&self) -> Result<(), String> {
+        let Some(gate) = &self.qualification_gate else {
+            return Ok(());
+        };
+        let (generation, session) = {
+            let inner = self.inner.lock().map_err(|_| FAILURE_MESSAGE.to_string())?;
+            if inner.lifecycle.state() != LifecycleState::Ready {
+                return Err("Synthetic qualification response gate rearm was rejected.".to_string());
+            }
+            (
+                inner.lifecycle.generation(),
+                inner
+                    .session
+                    .clone()
+                    .ok_or_else(|| FAILURE_MESSAGE.to_string())?,
+            )
+        };
+        gate.arm(generation, 2, &session)
     }
 
     pub fn revalidate(&self) -> RuntimeStatus {
@@ -204,6 +249,9 @@ impl RuntimeController {
     }
 
     pub fn shutdown(&self) {
+        if let Some(gate) = &self.qualification_gate {
+            gate.cleanup();
+        }
         let process = {
             let mut inner = self
                 .inner
@@ -326,7 +374,7 @@ impl RuntimeController {
                 return Err(FAILURE_MESSAGE.to_string());
             }
             inner.port = Some(port);
-            inner.session = Some(session);
+            inner.session = Some(session.clone());
             inner.message = None;
             inner
                 .lifecycle
@@ -334,6 +382,12 @@ impl RuntimeController {
                 .map_err(|_| FAILURE_MESSAGE.to_string())?;
         }
         self.monitor(process.clone());
+        if let Some(gate) = &self.qualification_gate {
+            if gate.arm(generation, 1, &session).is_err() {
+                self.remove_and_stop(generation, &process, Some(port));
+                return self.fail_generation(generation);
+            }
+        }
         if let Some(contract) = &self.qualification {
             if contract.write_result(true, None).is_err() {
                 self.remove_and_stop(generation, &process, Some(port));

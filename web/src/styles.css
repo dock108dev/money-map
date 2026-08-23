@@ -1679,9 +1679,16 @@ tbody tr[tabindex]:hover {
   text-align: center;
 }
 
-.loading-state p {
+.loading-state p,
+.loading-state h1 {
+  margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.loading-state h1 {
+  font-family: inherit;
+  font-weight: 500;
 }
 
 .fatal-state h1 {

@@ -20,7 +20,9 @@ def test_sealed_221_combination_source_preflight_has_no_obvious_mismatch() -> No
     report = load_preflight().materialize_diagnostic()
     assert report["result"] == "pass", report["first_mismatch"]
     assert report["combination_count"] == 221
+    assert report["source_assertion_count"] == 2687
     assert report["deterministic_empty_copy_combinations"] == 13
+    assert report["installed_only_assertion_count"] == 208
     assert report["mismatches"] == []
     assert report["candidate_output_used_as_expectation"] is False
     assert report["oracle_updated"] is False

@@ -1,7 +1,12 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -9,8 +14,24 @@ pub const LAUNCH_CONTRACT: &str = "money-map-installed-attestation-launch-v1";
 pub const ATTESTATION_CONTRACT: &str = "money-map-installed-root-attestation-v1";
 pub const RESULT_CONTRACT: &str = "money-map-native-attestation-result-v1";
 pub const MATRIX_RESULT_CONTRACT: &str = "money-map-installed-matrix-observation-v1";
+pub const RESPONSE_GATE_CONTRACT: &str = "qualification-response-gate-v1";
+pub const RESPONSE_GATE_RELEASE_CONTRACT: &str = "money-map-qualification-gate-release-v1";
+pub const RESPONSE_GATE_CHALLENGE_CONTRACT: &str = "money-map-qualification-gate-challenge-v1";
+pub const SEALED_ORACLE_DIGEST: &str =
+    "a8d34d04e5c56f42470fb74a6ea8dc287aa8b20ecc4237a6da76c2432202ae45";
 pub const MAX_LAUNCH_BYTES: usize = 8_192;
 pub const MAX_ATTESTATION_BYTES: usize = 8_192;
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatrixDriverPlan {
+    #[serde(rename = "type")]
+    pub driver_type: String,
+    pub seed: String,
+    pub gate: String,
+    pub release: String,
+    pub timeout_ms: u64,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -37,12 +58,15 @@ pub struct QualificationContract {
     pub matrix_contract_digest: Option<String>,
     #[serde(default)]
     pub matrix_result_path: Option<PathBuf>,
+    #[serde(default)]
+    pub matrix_driver: Option<MatrixDriverPlan>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MatrixUiObservation {
     pub sequence: u8,
+    pub phase: String,
     pub route: String,
     pub location_hash: String,
     pub headings: Vec<String>,
@@ -52,9 +76,297 @@ pub struct MatrixUiObservation {
     pub disabled_buttons: Vec<String>,
     pub messages: Vec<String>,
     pub loading_visible: bool,
+    pub loading_busy: bool,
+    pub loading_live: String,
     pub dialog_count: u32,
     pub progress_count: u32,
     pub unsafe_console_errors: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct GateRelease {
+    contract: String,
+    combination_id: String,
+    runtime_generation: u64,
+    gate_generation: u8,
+    challenge: String,
+}
+
+#[derive(Serialize)]
+struct GateChallenge<'a> {
+    contract: &'static str,
+    combination_id: &'a str,
+    runtime_generation: u64,
+    gate_generation: u8,
+    challenge: &'a str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GateStatus {
+    Idle,
+    Armed,
+    Released,
+    Failed,
+}
+
+#[derive(Debug)]
+struct GateState {
+    status: GateStatus,
+    runtime_generation: u64,
+    gate_generation: u8,
+    session: String,
+    challenge: String,
+}
+
+pub struct QualificationResponseGate {
+    contract: QualificationContract,
+    state: Mutex<GateState>,
+    changed: Condvar,
+}
+
+impl QualificationResponseGate {
+    pub fn from_contract(contract: &QualificationContract) -> Option<Arc<Self>> {
+        contract.response_gate_requested().then(|| {
+            Arc::new(Self {
+                contract: contract.clone(),
+                state: Mutex::new(GateState {
+                    status: GateStatus::Idle,
+                    runtime_generation: 0,
+                    gate_generation: 0,
+                    session: String::new(),
+                    challenge: String::new(),
+                }),
+                changed: Condvar::new(),
+            })
+        })
+    }
+
+    pub fn arm(
+        self: &Arc<Self>,
+        runtime_generation: u64,
+        gate_generation: u8,
+        session: &str,
+    ) -> Result<(), String> {
+        if runtime_generation == 0
+            || !matches!(gate_generation, 1 | 2)
+            || session.len() != 64
+            || !session.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err("Synthetic qualification response gate was rejected.".to_string());
+        }
+        let challenge_path = self.contract.gate_challenge_path();
+        let release_path = self.contract.gate_release_path();
+        if challenge_path.exists() || release_path.exists() {
+            self.fail_and_clean();
+            return Err("Synthetic qualification response gate replay was rejected.".to_string());
+        }
+        let challenge = random_hex(32)?;
+        let combination = self.contract.gate_combination()?;
+        write_private_json(
+            &challenge_path,
+            &GateChallenge {
+                contract: RESPONSE_GATE_CHALLENGE_CONTRACT,
+                combination_id: &combination,
+                runtime_generation,
+                gate_generation,
+                challenge: &challenge,
+            },
+        )?;
+        {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+            if gate_generation == 2
+                && (state.status != GateStatus::Released
+                    || state.runtime_generation != runtime_generation
+                    || state.gate_generation != 1)
+            {
+                drop(state);
+                self.fail_and_clean();
+                return Err("Synthetic qualification response gate rearm was rejected.".to_string());
+            }
+            state.status = GateStatus::Armed;
+            state.runtime_generation = runtime_generation;
+            state.gate_generation = gate_generation;
+            state.session = session.to_string();
+            state.challenge = challenge;
+        }
+        let gate = Arc::clone(self);
+        thread::spawn(move || gate.watch_release());
+        Ok(())
+    }
+
+    pub fn wait_for_release(&self) -> Result<(), String> {
+        let deadline = Instant::now() + Duration::from_millis(5_100);
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+        loop {
+            match state.status {
+                GateStatus::Released => return Ok(()),
+                GateStatus::Failed | GateStatus::Idle => {
+                    return Err("Synthetic qualification response gate failed safely.".to_string())
+                }
+                GateStatus::Armed => {}
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                drop(state);
+                self.fail_and_clean();
+                return Err("Synthetic qualification response gate timed out safely.".to_string());
+            }
+            let (next, _) = self
+                .changed
+                .wait_timeout(state, remaining)
+                .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+            state = next;
+        }
+    }
+
+    pub fn cleanup(&self) {
+        self.fail_and_clean();
+    }
+
+    fn watch_release(&self) {
+        let timeout = self
+            .contract
+            .matrix_driver
+            .as_ref()
+            .map_or(5_000, |driver| driver.timeout_ms);
+        let deadline = Instant::now() + Duration::from_millis(timeout);
+        let release_path = self.contract.gate_release_path();
+        while Instant::now() < deadline {
+            if release_path.exists() {
+                let accepted = self.consume_release(&release_path);
+                let mut state = self
+                    .state
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                state.status = if accepted {
+                    GateStatus::Released
+                } else {
+                    GateStatus::Failed
+                };
+                drop(state);
+                self.remove_gate_files();
+                self.changed.notify_all();
+                return;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        self.fail_and_clean();
+    }
+
+    fn consume_release(&self, path: &Path) -> bool {
+        if verify_private_gate_file(path).is_err() {
+            return false;
+        }
+        let bytes = match fs::read(path) {
+            Ok(bytes) if bytes.len() <= 4_096 => bytes,
+            _ => return false,
+        };
+        let release: GateRelease = match serde_json::from_slice(&bytes) {
+            Ok(release) => release,
+            Err(_) => return false,
+        };
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let combination = match self.contract.gate_combination() {
+            Ok(value) => value,
+            Err(_) => return false,
+        };
+        state.status == GateStatus::Armed
+            && !state.session.is_empty()
+            && release.contract == RESPONSE_GATE_RELEASE_CONTRACT
+            && release.combination_id == combination
+            && release.runtime_generation == state.runtime_generation
+            && release.gate_generation == state.gate_generation
+            && release.challenge == state.challenge
+    }
+
+    fn fail_and_clean(&self) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.status = GateStatus::Failed;
+        state.session.clear();
+        state.challenge.clear();
+        drop(state);
+        self.remove_gate_files();
+        self.changed.notify_all();
+    }
+
+    fn remove_gate_files(&self) {
+        for path in [
+            self.contract.gate_challenge_path(),
+            self.contract.gate_release_path(),
+        ] {
+            if fs::symlink_metadata(&path).is_ok() {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+}
+
+fn random_hex(bytes: usize) -> Result<String, String> {
+    let mut value = vec![0_u8; bytes];
+    getrandom::fill(&mut value)
+        .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+    Ok(value.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn write_private_json(path: &Path, value: &impl Serialize) -> Result<(), String> {
+    reject_symlink_chain(path)?;
+    if path.exists() {
+        return Err("Synthetic qualification response gate replay was rejected.".to_string());
+    }
+    let temporary = path.with_extension("json.tmp");
+    if temporary.exists() {
+        return Err("Synthetic qualification response gate replay was rejected.".to_string());
+    }
+    let bytes = serde_json::to_vec(value)
+        .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&temporary)
+        .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+    file.write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+    drop(file);
+    if fs::hard_link(&temporary, path).is_err() {
+        let _ = fs::remove_file(&temporary);
+        return Err("Synthetic qualification response gate replay was rejected.".to_string());
+    }
+    if fs::remove_file(&temporary).is_err() {
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(&temporary);
+        return Err("Synthetic qualification response gate failed safely.".to_string());
+    }
+    verify_private_gate_file(path)
+}
+
+fn verify_private_gate_file(path: &Path) -> Result<(), String> {
+    reject_symlink_chain(path)?;
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.mode() & 0o777 != 0o600
+        || metadata.uid() != unsafe { libc::geteuid() }
+        || metadata.nlink() != 1
+    {
+        return Err("Synthetic qualification response gate was rejected.".to_string());
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -255,6 +567,24 @@ impl QualificationContract {
                 return Err("Synthetic qualification matrix contract was rejected.".to_string());
             }
             reject_symlink_chain(path)?;
+            if state == "loading" {
+                let driver = self.matrix_driver.as_ref().ok_or_else(|| {
+                    "Synthetic qualification response gate was rejected.".to_string()
+                })?;
+                if digest != SEALED_ORACLE_DIGEST
+                    || driver.driver_type != "transient_bounded_loading_injection"
+                    || driver.seed != "complete-current-v1"
+                    || driver.gate != RESPONSE_GATE_CONTRACT
+                    || driver.release != "explicit_harness_release"
+                    || driver.timeout_ms != 5_000
+                {
+                    return Err("Synthetic qualification response gate was rejected.".to_string());
+                }
+            } else if self.matrix_driver.is_some() {
+                return Err("Synthetic qualification response gate was rejected.".to_string());
+            }
+        } else if self.matrix_driver.is_some() {
+            return Err("Synthetic qualification response gate was rejected.".to_string());
         }
         Ok(())
     }
@@ -263,6 +593,27 @@ impl QualificationContract {
         self.matrix_state
             .as_deref()
             .zip(self.matrix_route.as_deref())
+    }
+
+    pub fn response_gate_requested(&self) -> bool {
+        self.matrix_state.as_deref() == Some("loading") && self.matrix_driver.is_some()
+    }
+
+    fn gate_combination(&self) -> Result<String, String> {
+        let (state, route) = self
+            .matrix_plan()
+            .ok_or_else(|| "Synthetic qualification response gate was rejected.".to_string())?;
+        Ok(format!("{state}::{route}"))
+    }
+
+    fn gate_challenge_path(&self) -> PathBuf {
+        self.campaign_root
+            .join("qualification-response-gate.challenge.json")
+    }
+
+    fn gate_release_path(&self) -> PathBuf {
+        self.campaign_root
+            .join("qualification-response-gate.release.json")
     }
 
     pub fn write_matrix_result(
@@ -281,7 +632,12 @@ impl QualificationContract {
             .matrix_result_path
             .as_deref()
             .ok_or_else(|| "Synthetic qualification matrix plan is unavailable.".to_string())?;
-        if ui.route != route || !matches!(ui.sequence, 1 | 2) || !safe_matrix_observation(ui) {
+        if ui.route != route
+            || !matches!(ui.sequence, 1 | 2)
+            || !matches!(ui.phase.as_str(), "pending" | "settled")
+            || (state != "loading" && ui.phase != "settled")
+            || !safe_matrix_observation(ui)
+        {
             return Err("Synthetic qualification matrix observation was rejected.".to_string());
         }
         let result = MatrixResult {
@@ -296,6 +652,11 @@ impl QualificationContract {
         };
         let bytes = serde_json::to_vec_pretty(&result)
             .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())?;
+        let path = if ui.phase == "pending" {
+            path.with_file_name(format!("matrix-observation-pending-{}.json", ui.sequence))
+        } else {
+            path.to_path_buf()
+        };
         let temporary = path.with_extension("json.tmp");
         fs::write(&temporary, bytes)
             .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())?;
@@ -502,6 +863,7 @@ fn safe_matrix_observation(value: &MatrixUiObservation) -> bool {
         .chain(value.disabled_buttons.iter())
         .chain(value.messages.iter());
     value.location_hash.len() <= 64
+        && matches!(value.loading_live.as_str(), "" | "polite")
         && value
             .location_hash
             .bytes()
@@ -712,6 +1074,7 @@ mod tests {
             matrix_route: None,
             matrix_contract_digest: None,
             matrix_result_path: None,
+            matrix_driver: None,
         };
         let file = ResourceFacts {
             exists: true,
@@ -793,6 +1156,7 @@ mod tests {
         matrix.validate(Some(campaign.path())).unwrap();
         let observation = MatrixUiObservation {
             sequence: 1,
+            phase: "settled".into(),
             route: "cash-flow".into(),
             location_hash: "#view=cash-flow".into(),
             headings: vec!["Cash Flow".into()],
@@ -802,6 +1166,8 @@ mod tests {
             disabled_buttons: vec![],
             messages: vec!["Cash Flow unavailable".into()],
             loading_visible: false,
+            loading_busy: false,
+            loading_live: String::new(),
             dialog_count: 0,
             progress_count: 0,
             unsafe_console_errors: 0,
@@ -843,6 +1209,127 @@ mod tests {
         assert!(unknown.validate(Some(campaign.path())).is_err());
     }
 
+    fn loading_contract() -> (tempfile::TempDir, QualificationContract) {
+        let (campaign, contract, _attestation) = fixture();
+        let contract = QualificationContract {
+            matrix_state: Some("loading".into()),
+            matrix_route: Some("cash-flow".into()),
+            matrix_contract_digest: Some(SEALED_ORACLE_DIGEST.into()),
+            matrix_result_path: Some(campaign.path().join("matrix-observation.json")),
+            matrix_driver: Some(MatrixDriverPlan {
+                driver_type: "transient_bounded_loading_injection".into(),
+                seed: "complete-current-v1".into(),
+                gate: RESPONSE_GATE_CONTRACT.into(),
+                release: "explicit_harness_release".into(),
+                timeout_ms: 5_000,
+            }),
+            ..contract
+        };
+        contract.validate(Some(campaign.path())).unwrap();
+        (campaign, contract)
+    }
+
+    fn gate_release(contract: &QualificationContract) -> GateRelease {
+        let value: serde_json::Value = serde_json::from_slice(
+            &fs::read(contract.gate_challenge_path()).expect("gate challenge"),
+        )
+        .unwrap();
+        GateRelease {
+            contract: RESPONSE_GATE_RELEASE_CONTRACT.into(),
+            combination_id: value["combination_id"].as_str().unwrap().into(),
+            runtime_generation: value["runtime_generation"].as_u64().unwrap(),
+            gate_generation: value["gate_generation"].as_u64().unwrap() as u8,
+            challenge: value["challenge"].as_str().unwrap().into(),
+        }
+    }
+
+    #[test]
+    fn loading_gate_requires_the_exact_sealed_driver_and_oracle() {
+        let (campaign, contract) = loading_contract();
+        assert!(contract.response_gate_requested());
+        let (_ordinary_campaign, ordinary, _attestation) = fixture();
+        assert!(QualificationResponseGate::from_contract(&ordinary).is_none());
+        for changed in [
+            QualificationContract {
+                matrix_driver: None,
+                ..contract.clone()
+            },
+            QualificationContract {
+                matrix_contract_digest: Some("f".repeat(64)),
+                ..contract.clone()
+            },
+            QualificationContract {
+                matrix_state: Some("empty".into()),
+                ..contract.clone()
+            },
+            QualificationContract {
+                nonce: "f".repeat(63),
+                ..contract.clone()
+            },
+            QualificationContract {
+                mode: "production-v1".into(),
+                ..contract.clone()
+            },
+        ] {
+            assert!(changed.validate(Some(campaign.path())).is_err());
+        }
+    }
+
+    #[test]
+    fn loading_gate_releases_once_and_rearms_with_a_new_challenge() {
+        let (_campaign, contract) = loading_contract();
+        let gate = QualificationResponseGate::from_contract(&contract).unwrap();
+        gate.arm(1, 1, &"e".repeat(64)).unwrap();
+        let first = gate_release(&contract);
+        write_private_json(&contract.gate_release_path(), &first).unwrap();
+        gate.wait_for_release().unwrap();
+        assert!(!contract.gate_challenge_path().exists());
+        assert!(!contract.gate_release_path().exists());
+
+        gate.arm(1, 2, &"e".repeat(64)).unwrap();
+        let second = gate_release(&contract);
+        assert_ne!(first.challenge, second.challenge);
+        assert_eq!(second.gate_generation, 2);
+        write_private_json(&contract.gate_release_path(), &second).unwrap();
+        gate.wait_for_release().unwrap();
+        gate.cleanup();
+        assert!(!contract.gate_challenge_path().exists());
+        assert!(!contract.gate_release_path().exists());
+    }
+
+    #[test]
+    fn loading_gate_rejects_stale_wrong_generation_and_replayed_release() {
+        for mutation in ["stale", "runtime", "challenge"] {
+            let (_campaign, contract) = loading_contract();
+            let gate = QualificationResponseGate::from_contract(&contract).unwrap();
+            gate.arm(1, 1, &"e".repeat(64)).unwrap();
+            let mut first = gate_release(&contract);
+            if mutation == "runtime" {
+                first.runtime_generation = 2;
+            } else if mutation == "challenge" {
+                first.challenge = "f".repeat(64);
+            }
+            if mutation == "stale" {
+                write_private_json(&contract.gate_release_path(), &first).unwrap();
+                gate.wait_for_release().unwrap();
+                gate.arm(1, 2, &"e".repeat(64)).unwrap();
+            }
+            write_private_json(&contract.gate_release_path(), &first).unwrap();
+            assert!(gate.wait_for_release().is_err());
+            gate.cleanup();
+        }
+    }
+
+    #[test]
+    fn loading_gate_timeout_fails_closed_and_removes_private_material() {
+        let (_campaign, contract) = loading_contract();
+        let gate = QualificationResponseGate::from_contract(&contract).unwrap();
+        gate.arm(1, 1, &"e".repeat(64)).unwrap();
+        assert!(gate.wait_for_release().is_err());
+        assert!(!contract.gate_challenge_path().exists());
+        assert!(!contract.gate_release_path().exists());
+    }
+
     #[test]
     fn matrix_observation_rejects_private_paths_and_route_substitution() {
         let (campaign, contract, _attestation) = fixture();
@@ -855,6 +1342,7 @@ mod tests {
         };
         let mut observation = MatrixUiObservation {
             sequence: 1,
+            phase: "settled".into(),
             route: "goals".into(),
             location_hash: "#view=goals".into(),
             headings: vec!["Goals".into()],
@@ -864,6 +1352,8 @@ mod tests {
             disabled_buttons: vec![],
             messages: vec![],
             loading_visible: false,
+            loading_busy: false,
+            loading_live: String::new(),
             dialog_count: 0,
             progress_count: 0,
             unsafe_console_errors: 0,

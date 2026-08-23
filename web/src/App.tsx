@@ -462,9 +462,9 @@ export default function App() {
 
   if (!data) {
     return (
-      <main className="loading-state">
-        <div className="loading-mark">M</div>
-        <p>Loading accounts…</p>
+      <main className="loading-state" aria-busy="true" aria-live="polite">
+        <div className="loading-mark" aria-hidden="true">M</div>
+        <h1>Loading accounts…</h1>
       </main>
     );
   }

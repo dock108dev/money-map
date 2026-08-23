@@ -30,10 +30,42 @@ from tests.release_state_materializer import materialize_release_state  # noqa: 
 
 CONTRACT = "money-map-slice6-installed-state-route-matrix-v1"
 OBSERVATION_CONTRACT = "money-map-installed-matrix-observation-v1"
+GATE_CHALLENGE_CONTRACT = "money-map-qualification-gate-challenge-v1"
+GATE_RELEASE_CONTRACT = "money-map-qualification-gate-release-v1"
+IMPLEMENTED_SETUP_DRIVERS = frozenset(
+    {
+        "persistent_database_fixture",
+        "transient_bounded_loading_injection",
+        "controlled_unavailable_api_state",
+        "one_shot_recoverable_failure",
+        "fixed_clock_stale_evidence",
+        "deterministic_large_history_generator",
+    }
+)
 
 
 class MatrixFailure(RuntimeError):
     """A sealed expectation and installed observation differ."""
+
+
+def validate_setup_driver(expected: dict[str, Any]) -> None:
+    driver = expected.get("setup_driver")
+    if not isinstance(driver, dict) or driver.get("type") not in IMPLEMENTED_SETUP_DRIVERS:
+        raise MatrixFailure("sealed setup driver lacks an implemented executor")
+    if driver.get("type") == "transient_bounded_loading_injection" and driver != {
+        "type": "transient_bounded_loading_injection",
+        "seed": "complete-current-v1",
+        "gate": "qualification-response-gate-v1",
+        "release": "explicit_harness_release",
+        "timeout_ms": 5000,
+    }:
+        raise MatrixFailure("sealed loading setup driver differs")
+
+
+def execute_setup_driver(database: Path, expected: dict[str, Any]) -> dict[str, Any]:
+    """Execute the sealed database portion; transient native controls are armed at launch."""
+    validate_setup_driver(expected)
+    return materialize_release_state(database, str(expected["state_id"]))
 
 
 def canonical(value: object) -> bytes:
@@ -112,24 +144,55 @@ def observed_text(result: dict[str, Any]) -> str:
     return "\n".join(str(value) for value in values).casefold()
 
 
-def compare_observation(expected: dict[str, Any], actual: dict[str, Any], sequence: int) -> None:
+def compare_observation(
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    sequence: int,
+    *,
+    phase: str = "settled",
+    settled_expected: dict[str, Any] | None = None,
+) -> None:
     if actual.get("state") != expected["state_id"] or actual.get("route") != expected["route_id"]:
         raise MatrixFailure("installed observation state or route differs")
     if actual.get("contract_digest_sha256") != expected["contract_digest_sha256"]:
         raise MatrixFailure("installed observation oracle digest differs")
     ui = actual["ui"]
-    if ui.get("sequence") != sequence or ui.get("unsafe_console_errors") != 0:
+    if (
+        ui.get("sequence") != sequence
+        or ui.get("phase") != phase
+        or ui.get("unsafe_console_errors") != 0
+    ):
         raise MatrixFailure("installed UI sequence or console safety differs")
-    if expected["expected_accessible_role"] == "heading" and not ui.get("headings"):
+    if expected["state_id"] == "loading" and phase == "pending":
+        if ui.get("headings") != ["Loading accounts…"]:
+            raise MatrixFailure("installed pending UI lacks the exact loading heading")
+        if not ui.get("loading_visible") or not ui.get("loading_busy"):
+            raise MatrixFailure("installed pending UI lacks the bounded busy loading surface")
+        if ui.get("loading_live") != "polite":
+            raise MatrixFailure("installed pending UI lacks polite live behavior")
+        if ui.get("buttons") or ui.get("messages") or ui.get("alerts"):
+            raise MatrixFailure("installed pending UI exposed completed or mutable content")
+        role_expected = expected
+    else:
+        if expected["state_id"] == "loading":
+            if settled_expected is None:
+                raise MatrixFailure("sealed settled loading authority is unavailable")
+            role_expected = settled_expected
+            if ui.get("loading_visible") or ui.get("loading_busy"):
+                raise MatrixFailure("installed loading state did not settle after release")
+        else:
+            role_expected = expected
+    if role_expected["expected_accessible_role"] == "heading" and not ui.get("headings"):
         raise MatrixFailure("installed UI lacks the expected accessible heading")
-    if expected["expected_accessible_role"] == "dialog" and ui.get("dialog_count", 0) < 1:
+    if role_expected["expected_accessible_role"] == "dialog" and ui.get("dialog_count", 0) < 1:
         raise MatrixFailure("installed UI lacks the expected accessible dialog")
-    if expected["expected_accessible_role"] == "button" and not ui.get("buttons"):
+    if role_expected["expected_accessible_role"] == "button" and not ui.get("buttons"):
         raise MatrixFailure("installed UI lacks the expected accessible control")
     combined = observed_text(actual)
+    copy_expected = role_expected
     missing_copy = [
         phrase
-        for phrase in expected["expected_safe_state_language"]
+        for phrase in copy_expected["expected_safe_state_language"]
         if str(phrase).casefold() not in combined
     ]
     if missing_copy:
@@ -140,6 +203,64 @@ def compare_observation(expected: dict[str, Any], actual: dict[str, Any], sequen
     actual_status = [int(row["status"]) for row in actual["api"]]
     if expected_status != actual_status:
         raise MatrixFailure("installed authenticated API status sequence differs")
+
+
+def release_loading_gate(
+    fake_home: Path,
+    expected: dict[str, Any],
+    *,
+    runtime_generation: int,
+    gate_generation: int,
+) -> None:
+    challenge_path = fake_home / "qualification-response-gate.challenge.json"
+    release_path = fake_home / "qualification-response-gate.release.json"
+    started = time.monotonic()
+    challenge: dict[str, Any] | None = None
+    while time.monotonic() - started < 2:
+        if challenge_path.is_file() and not challenge_path.is_symlink():
+            metadata = challenge_path.stat()
+            if (
+                metadata.st_mode & 0o777 != 0o600
+                or metadata.st_nlink != 1
+                or metadata.st_uid != os.geteuid()
+            ):
+                raise MatrixFailure("qualification response gate challenge permissions differ")
+            try:
+                loaded = json.loads(challenge_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                loaded = None
+            if isinstance(loaded, dict):
+                challenge = loaded
+                break
+        time.sleep(0.02)
+    if challenge is None:
+        raise MatrixFailure("qualification response gate challenge was not produced")
+    combination_id = expected["combination_id"]
+    value = challenge.get("challenge")
+    if (
+        challenge.get("contract") != GATE_CHALLENGE_CONTRACT
+        or challenge.get("combination_id") != combination_id
+        or challenge.get("runtime_generation") != runtime_generation
+        or challenge.get("gate_generation") != gate_generation
+        or not isinstance(value, str)
+        or not base.HEX_64.fullmatch(value)
+    ):
+        raise MatrixFailure("qualification response gate challenge identity differs")
+    release = canonical(
+        {
+            "contract": GATE_RELEASE_CONTRACT,
+            "combination_id": combination_id,
+            "runtime_generation": runtime_generation,
+            "gate_generation": gate_generation,
+            "challenge": value,
+        }
+    )
+    descriptor = os.open(release_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(descriptor, release)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def trigger_reload() -> None:
@@ -173,13 +294,14 @@ def run_combination(
     *,
     source_commit: str,
     candidate_sha256: str,
+    settled_expected: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     state = expected["state_id"]
     route = expected["route_id"]
     fake_home = campaign / f"combination-{expected['combination_id'].replace('::', '--')}"
     fake_home.mkdir(mode=0o700)
     database = fake_home / "Library/Application Support/Money Map/data/paycheck-map.sqlite3"
-    seed_result = materialize_release_state(database, state)
+    seed_result = execute_setup_driver(database, expected)
     before = database_manifest(database)
     contract = base.launch_contract(
         fake_home,
@@ -190,6 +312,7 @@ def run_combination(
         matrix_state=state,
         matrix_route=route,
         matrix_contract_digest=expected["contract_digest_sha256"],
+        matrix_driver=expected["setup_driver"] if state == "loading" else None,
     )
     process = subprocess.Popen(
         [str(app / "Contents/MacOS/money-map-desktop")],
@@ -213,14 +336,56 @@ def run_combination(
         listeners, external = base.socket_observation(sidecars)
         if listeners != 1 or external != 0:
             raise MatrixFailure("installed matrix network classification differs")
-        first = wait_observation(fake_home / "matrix-observation.json", sequence=1)
-        compare_observation(expected, first, 1)
+        loading_phases: dict[str, Any] | None = None
+        if state == "loading":
+            first_pending = wait_observation(
+                fake_home / "matrix-observation-pending-1.json", sequence=1
+            )
+            compare_observation(expected, first_pending, 1, phase="pending")
+            if database_manifest(database) != before:
+                raise MatrixFailure("pending loading changed the database")
+            release_loading_gate(fake_home, expected, runtime_generation=1, gate_generation=1)
+            first = wait_observation(fake_home / "matrix-observation.json", sequence=1)
+            compare_observation(
+                expected,
+                first,
+                1,
+                phase="settled",
+                settled_expected=settled_expected,
+            )
+            loading_phases = {
+                "pending": first_pending["ui"],
+                "settled": first["ui"],
+            }
+        else:
+            first = wait_observation(fake_home / "matrix-observation.json", sequence=1)
+            compare_observation(expected, first, 1)
         after_open = database_manifest(database)
         if after_open != before:
             raise MatrixFailure("opening the installed route changed the database")
         trigger_reload()
-        second = wait_observation(fake_home / "matrix-observation.json", sequence=2)
-        compare_observation(expected, second, 2)
+        if state == "loading":
+            second_pending = wait_observation(
+                fake_home / "matrix-observation-pending-2.json", sequence=2
+            )
+            compare_observation(expected, second_pending, 2, phase="pending")
+            if database_manifest(database) != before:
+                raise MatrixFailure("rearmed pending loading changed the database")
+            release_loading_gate(fake_home, expected, runtime_generation=1, gate_generation=2)
+            second = wait_observation(fake_home / "matrix-observation.json", sequence=2)
+            compare_observation(
+                expected,
+                second,
+                2,
+                phase="settled",
+                settled_expected=settled_expected,
+            )
+            assert loading_phases is not None
+            loading_phases["reload_pending"] = second_pending["ui"]
+            loading_phases["reload_settled"] = second["ui"]
+        else:
+            second = wait_observation(fake_home / "matrix-observation.json", sequence=2)
+            compare_observation(expected, second, 2)
         after_reload = database_manifest(database)
         if after_reload != before:
             raise MatrixFailure("reloading the installed route changed the database")
@@ -252,9 +417,10 @@ def run_combination(
             for path in fake_home.rglob("*")
             if path.is_file() and ("session" in path.name.lower() or path.suffix == ".sock")
         ]
-        if lock.exists() or session_files:
+        gate_files = list(fake_home.glob("qualification-response-gate.*"))
+        if lock.exists() or session_files or gate_files:
             raise MatrixFailure("installed matrix cleanup differs")
-        return {
+        result = {
             "combination_id": expected["combination_id"],
             "result": "pass",
             "database": {
@@ -271,6 +437,10 @@ def run_combination(
             "external_connections": 0,
             "cleanup": "pass",
         }
+        if loading_phases is not None:
+            result["loading_phases"] = loading_phases
+            result["gate_material_retained"] = False
+        return result
     finally:
         if process.poll() is None:
             with contextlib.suppress(ProcessLookupError):
@@ -291,6 +461,7 @@ def run_combination(
 def qualification(args: argparse.Namespace) -> Path:
     source_commit = args.expected_source_commit
     candidate_sha256 = args.expected_candidate_sha256
+    campaign_id = cast(str, args.campaign_id)
     if not base.HEX_40.fullmatch(source_commit) or not base.HEX_64.fullmatch(candidate_sha256):
         raise MatrixFailure("candidate identity is invalid")
     base.require_no_existing_runtime()
@@ -304,11 +475,14 @@ def qualification(args: argparse.Namespace) -> Path:
     oracle = materialize()
     digest = oracle["contract_digest_sha256"]
     combinations = oracle["combinations"]
+    settled_by_route = {
+        row["route_id"]: row for row in combinations if row["state_id"] == "complete_current"
+    }
     for row in combinations:
         row["contract_digest_sha256"] = digest
     if args.limit is not None:
         combinations = combinations[: args.limit]
-    evidence = ROOT / ".slice6-evidence" / args.campaign_id
+    evidence = ROOT / ".slice6-evidence" / campaign_id
     if evidence.exists():
         raise MatrixFailure("campaign evidence ID already exists")
     evidence.mkdir(parents=True, mode=0o700)
@@ -346,6 +520,7 @@ def qualification(args: argparse.Namespace) -> Path:
                         expected,
                         source_commit=source_commit,
                         candidate_sha256=candidate_sha256,
+                        settled_expected=settled_by_route.get(expected["route_id"]),
                     )
                 )
             except (MatrixFailure, base.QualificationFailure) as error:
