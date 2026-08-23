@@ -476,6 +476,8 @@ export default function App() {
     .at(-1);
   const latestSync = data.plaid.refresh.last_successful_refresh ?? latestConnectionSync;
   const updateNeedsAttention = /attention|failed|partial|retry|unavailable/i.test(updateMessage);
+  const hasImportedFinancialEvidence =
+    data.accounts.accounts.length > 0 || data.payroll.rows.length > 0;
 
   return (
     <div className="app-shell">
@@ -573,6 +575,11 @@ export default function App() {
             )}
           </div>
         </header>
+        {!hasImportedFinancialEvidence && (
+          <div className="notice empty-data-notice" role="status">
+            No imported account evidence is available yet. Use Add account to begin.
+          </div>
+        )}
         {error && <div className="error-banner">{error}</div>}
         <div className="content-wrap">
           {view === "cash-flow" && (

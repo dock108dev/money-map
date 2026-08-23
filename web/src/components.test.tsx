@@ -835,6 +835,69 @@ describe("account-first views", () => {
     expect(screen.queryByRole("button", { name: "Connect SoFi" })).not.toBeInTheDocument();
   });
 
+  it("keeps the local-first Add account promise visible and accessible with connections", () => {
+    render(
+      <ConnectionsView
+        plaid={plaid}
+        busy={false}
+        message=""
+        onConfigure={vi.fn()}
+        onConnect={vi.fn()}
+        onSync={vi.fn()}
+        onRepair={vi.fn()}
+        onDisconnect={vi.fn()}
+        imports={[]}
+        onImport={vi.fn()}
+        onReport={vi.fn()}
+        onAutoRefreshChange={vi.fn()}
+      />,
+    );
+    const promise = screen.getByText("Manual import stays first-class.");
+    expect(promise).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Add account" })).toHaveAccessibleDescription(
+      "Manual import stays first-class.",
+    );
+    expect(screen.getAllByText("Manual import stays first-class.")).toHaveLength(1);
+  });
+
+  it("keeps manual import enabled without Plaid configuration while provider actions stay gated", () => {
+    const onImport = vi.fn();
+    const unconfigured = {
+      ...plaid,
+      configuration: {
+        ...plaid.configuration,
+        production: { configured: false, client_id_hint: null },
+      },
+      connections: [],
+    };
+    render(
+      <ConnectionsView
+        plaid={unconfigured}
+        busy={false}
+        message=""
+        onConfigure={vi.fn()}
+        onConnect={vi.fn()}
+        onSync={vi.fn()}
+        onRepair={vi.fn()}
+        onDisconnect={vi.fn()}
+        imports={[]}
+        onImport={onImport}
+        onReport={vi.fn()}
+        onAutoRefreshChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Add account" })).toHaveAccessibleDescription(
+      "Manual import stays first-class.",
+    );
+    expect(screen.getByText("0 connected")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Bank, credit or loan/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Investment account/ })).toBeDisabled();
+    const manualImport = screen.getByRole("button", { name: /Import files/ });
+    expect(manualImport).toBeEnabled();
+    fireEvent.click(manualImport);
+    expect(onImport).toHaveBeenCalledOnce();
+  });
+
   it("shows five recent imports before older evidence is requested", () => {
     const imports = Array.from({ length: 7 }, (_, index) => ({
       id: index + 1,

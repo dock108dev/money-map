@@ -388,6 +388,7 @@ describe("application states", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Update data" }));
     expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
+    expect(screen.getByText(/Use Add account to begin/)).toBeVisible();
     expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/plaid/sync-all")).toHaveLength(0);
   });
 
@@ -460,6 +461,32 @@ describe("application states", () => {
     vi.stubGlobal("fetch", workingFetch(false, 2));
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
+    expect(screen.getByText("Manual import stays first-class.")).toBeVisible();
+  });
+
+  it("preserves sealed Add account copy and zero side effects across installed deep-route reload", async () => {
+    installReadyDesktop();
+    window.location.hash = "#view=connections";
+    const base = workingFetch(false, 0);
+    const fetch = withReadyDataHome(base);
+    vi.stubGlobal("fetch", fetch);
+    const first = render(<App />);
+    const heading = await screen.findByRole("heading", { name: "Add account" });
+    expect(heading).toHaveAccessibleDescription("Manual import stays first-class.");
+    expect(screen.getByText("Manual import stays first-class.")).toBeVisible();
+    expect(window.location.hash).toBe("#view=connections");
+    first.unmount();
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Add account" })).toHaveAccessibleDescription(
+      "Manual import stays first-class.",
+    );
+    expect(window.location.hash).toBe("#view=connections");
+    const applicationCalls = base.mock.calls.map(([input, init]) => ({ url: String(input), method: init?.method ?? "GET" }));
+    expect(applicationCalls.filter(({ url }) => url === "/api/plaid/status")).toHaveLength(2);
+    expect(applicationCalls.filter(({ url }) => url === "/api/imports")).toHaveLength(2);
+    expect(applicationCalls.every(({ method }) => method === "GET")).toBe(true);
+    expect(applicationCalls.some(({ url }) => /plaid\/(link-token|sync|sync-all)/u.test(url))).toBe(false);
   });
 
   it("opens Overview lazily and renders its accepted heading", async () => {

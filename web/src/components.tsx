@@ -1337,7 +1337,8 @@ export function ConnectionsView({
       <section className="simple-page-heading" data-copy-budget="utility-page-heading">
         <div>
           <span className="eyebrow">Plaid</span>
-          <h1 data-prose>Add account</h1>
+          <h1 data-prose aria-describedby="add-account-promise">Add account</h1>
+          <p id="add-account-promise" data-prose>Manual import stays first-class.</p>
         </div>
         <strong>{plaid.connections.length} connected</strong>
       </section>
