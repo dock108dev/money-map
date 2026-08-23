@@ -48,7 +48,8 @@ def _read_bootstrap() -> dict[str, Any]:
         raise RuntimeError("Desktop bootstrap was rejected") from error
     if (
         not isinstance(value, dict)
-        or set(value) != {"attestation", "contract", "session"}
+        or set(value)
+        != {"attestation", "candidate_artifact", "candidate_commit", "contract", "session"}
         or value.get("contract") != BOOTSTRAP_CONTRACT
         or not isinstance(value.get("session"), str)
     ):
@@ -59,7 +60,26 @@ def _read_bootstrap() -> dict[str, Any]:
     attestation = value.get("attestation")
     if attestation is not None and (not isinstance(attestation, dict) or len(attestation) != 12):
         raise RuntimeError("Desktop bootstrap was rejected")
-    return {"session": session, "attestation": attestation}
+    candidate_commit = value.get("candidate_commit")
+    candidate_artifact = value.get("candidate_artifact")
+    if (
+        not isinstance(candidate_commit, str)
+        or (
+            candidate_commit != "development"
+            and (
+                len(candidate_commit) != 40
+                or any(character not in "0123456789abcdef" for character in candidate_commit)
+            )
+        )
+        or (candidate_artifact is not None and not isinstance(candidate_artifact, str))
+    ):
+        raise RuntimeError("Desktop bootstrap was rejected")
+    return {
+        "session": session,
+        "attestation": attestation,
+        "candidate_commit": candidate_commit,
+        "candidate_artifact": candidate_artifact,
+    }
 
 
 def _resource_facts(
@@ -279,7 +299,14 @@ def main() -> None:
         listener.bind(("127.0.0.1", 0))
         listener.listen(128)
         port = int(listener.getsockname()[1])
-        install_bootstrap(session, port)
+        install_bootstrap(
+            session,
+            port,
+            str(bootstrap["candidate_commit"]),
+            str(bootstrap["candidate_artifact"])
+            if bootstrap["candidate_artifact"] is not None
+            else None,
+        )
         print(f"MONEY_MAP_READY {port}", flush=True)
         config = uvicorn.Config(
             "paycheck_map.desktop_app:desktop_app",

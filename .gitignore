@@ -32,6 +32,8 @@ desktop/src-tauri/gen/
 .slice4-evidence/
 .slice5-evidence/
 .slice6-evidence/
+.slice7-evidence/
+.slice8-evidence/
 output/pdf/
 tmp/pdfs/
 money-map-sidecar.spec

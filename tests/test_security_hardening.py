@@ -91,12 +91,17 @@ def test_private_bootstrap_is_bounded_single_use_and_not_environment_secret(
     monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD", str(read_fd))
     os.write(
         write_fd,
-        b'{"attestation":null,"contract":"money-map-desktop-bootstrap-v1","session":"'
+        b'{"attestation":null,"candidate_artifact":"synthetic","candidate_commit":"b51465476d4cd628ff58553df466c200a1ac565e","contract":"money-map-desktop-bootstrap-v1","session":"'
         + b"a" * 64
         + b'"}\n',
     )
     os.close(write_fd)
-    assert _read_bootstrap() == {"session": "a" * 64, "attestation": None}
+    assert _read_bootstrap() == {
+        "session": "a" * 64,
+        "attestation": None,
+        "candidate_commit": "b51465476d4cd628ff58553df466c200a1ac565e",
+        "candidate_artifact": "synthetic",
+    }
     assert "PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD" not in os.environ
     assert "PAYCHECK_MAP_DESKTOP_SESSION" not in os.environ
     with pytest.raises(RuntimeError, match="unavailable"):

@@ -31,13 +31,20 @@ function nativeShell(selection: DataHomeStatus | null = null) {
 describe("desktop data-home workflow", () => {
   it("offers only explicit fresh setup or native existing-data selection", async () => {
     nativeShell({
-      phase: "confirmation_required",
+      state: "eligible_legacy_source",
       ready: false,
       candidate_token: "synthetic-preview-token",
-      source_classification: "selected existing Money Map data",
-      schema_revision: "0009_goal_persistence",
+      source: "Eligible legacy data",
+      schema: "Eligible legacy schema",
       size: 4096,
-      confirmation_required: true,
+      integrity: "passed",
+      foreign_keys: "passed",
+      backup: "required before activation",
+      destination: "ready",
+      rehearsal: "required",
+      rollback: "not yet available",
+      candidate: "source identity reviewed",
+      action: "Run synthetic rehearsal",
     });
     const onStatus = vi.fn();
     render(
@@ -52,10 +59,9 @@ describe("desktop data-home workflow", () => {
 
     await waitFor(() => expect(window.__MONEY_MAP_DESKTOP__?.selectImport).toHaveBeenCalledOnce());
     expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({
-      phase: "confirmation_required",
-      confirmation_required: true,
+      state: "eligible_legacy_source",
     }));
-    expect(screen.getByText("Migration preview")).toBeVisible();
+    expect(screen.getByText("Cutover readiness")).toBeVisible();
     expect(screen.queryByText(/\/Users\//)).not.toBeInTheDocument();
   });
 
@@ -66,12 +72,20 @@ describe("desktop data-home workflow", () => {
     render(
       <DataHomePanel
         initial={{
-          phase: "confirmation_required",
+          state: "eligible_legacy_source",
           ready: false,
           candidate_token: "synthetic-preview-token",
-          source_classification: "selected existing Money Map data",
-          schema_revision: "0008_life_lab_v01",
+          source: "Eligible legacy data",
+          schema: "Eligible legacy schema",
           size: 8192,
+          integrity: "passed",
+          foreign_keys: "passed",
+          backup: "required before activation",
+          destination: "ready",
+          rehearsal: "required",
+          rollback: "not yet available",
+          candidate: "source identity reviewed",
+          action: "Run synthetic rehearsal",
         }}
         onStatus={onStatus}
       />,
@@ -81,6 +95,59 @@ describe("desktop data-home workflow", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(onStatus).toHaveBeenCalledWith({ phase: "fresh_setup_available", ready: false });
+  });
+
+  it("runs the disposable rehearsal before exposing one-use activation", async () => {
+    nativeShell();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/cutover/rehearsal")) {
+        return json({ state: "rehearsal_passed", rehearsal: "passed" });
+      }
+      if (url.endsWith("/cutover/prepare")) {
+        return json({
+          state: "confirmation_required",
+          confirmation_token: "invented-one-use-confirmation-token-0001",
+          source: "Reviewed Money Map data",
+          schema: "Current 0009 candidate after rehearsal",
+          backup: "verified",
+          destination: "ready",
+          rehearsal: "passed",
+          rollback: "not required for empty destination",
+          candidate: "candidate identity bound",
+          action: "Confirm activation",
+          expires_in_seconds: 300,
+        });
+      }
+      if (url.endsWith("/backups")) return json({ backups: [] });
+      return json({ state: "completed_cutover", ready: true });
+    });
+    render(
+      <DataHomePanel
+        initial={{
+          state: "eligible_legacy_source",
+          candidate_token: "invented-preview-token",
+          source: "Eligible legacy data",
+          schema: "Eligible legacy schema",
+          size: 4096,
+          integrity: "passed",
+          foreign_keys: "passed",
+          backup: "required before activation",
+          destination: "ready",
+          rehearsal: "required",
+          rollback: "not yet available",
+          candidate: "source identity reviewed",
+          action: "Run synthetic rehearsal",
+        }}
+        onStatus={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Run rehearsal and review confirmation" }));
+    expect(await screen.findByRole("heading", { name: "Confirm cutover" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Activate reviewed data" }));
+    await waitFor(() => expect(window.__MONEY_MAP_DESKTOP__?.restart).toHaveBeenCalledOnce());
+    expect(window.__MONEY_MAP_DESKTOP__?.reload).toHaveBeenCalledOnce();
   });
 
   it("reports backend completion before setup succeeds", async () => {

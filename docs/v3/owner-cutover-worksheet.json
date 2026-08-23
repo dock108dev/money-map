@@ -1,0 +1,20 @@
+{
+  "contract": "money-map-owner-cutover-worksheet-v1",
+  "owner_responses": {
+    "source_selection": null,
+    "migration_confirmation": null,
+    "rollback_decision": null,
+    "provider_choice": null,
+    "keychain_response": null,
+    "usability_result": null,
+    "coaching_required": null,
+    "cutover_acceptance": null,
+    "final_beta_decision": null
+  },
+  "engineering": {
+    "schema": "0009_goal_persistence",
+    "campaigns_a_through_j": null,
+    "owner_validation": null,
+    "cutover_result": null
+  }
+}

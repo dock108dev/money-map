@@ -197,3 +197,17 @@ evidence ID is never reused. Cleanup failure blocks acceptance.
 Keychain behavior, provider credentials, owner data, and owner cutover remain pending. No command
 in this contract pushes, tags, uploads, publishes, deploys, notarizes, staples, distributes, or
 releases an artifact. Slice 7 remains blocked until explicit owner participation and authorization.
+
+## Slice 7 implementation-only qualification
+
+Slice 7 runs focused and complete source gates against invented databases and disposable fake homes.
+Its cutover driver proves every preflight state, read-only source bytes, complete logical-manifest
+equality, one-use confirmation and drift rejection, cancellation zero-write behavior, interruption
+and resume, rollback, retained state after authority restart, permissions, blank owner responses,
+sanitized evidence, no automatic discovery, no provider/Keychain access, and no migration beyond
+`0009_goal_persistence`.
+
+Evidence is stored only under ignored `.slice7-evidence/` and is implementation proof. It does not
+restart Campaign A or B, run Campaigns C-J, run the focused `loading::overview` installed probe,
+access owner data, or perform owner validation. The recorded Overview rejection and the entire
+installed/owner campaign remain deferred until the exact post-Slice-8 candidate is frozen.

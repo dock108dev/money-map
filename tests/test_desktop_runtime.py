@@ -137,7 +137,13 @@ def running_sidecar(
     os.write(
         bootstrap_write,
         json.dumps(
-            {"attestation": None, "contract": "money-map-desktop-bootstrap-v1", "session": session},
+            {
+                "attestation": None,
+                "candidate_artifact": "synthetic",
+                "candidate_commit": "b51465476d4cd628ff58553df466c200a1ac565e",
+                "contract": "money-map-desktop-bootstrap-v1",
+                "session": session,
+            },
             separators=(",", ":"),
         ).encode()
         + b"\n",
@@ -230,7 +236,7 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
 
         os.write(
             bootstrap_write,
-            b'{"attestation":null,"contract":"money-map-desktop-bootstrap-v1","session":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n',
+            b'{"attestation":null,"candidate_artifact":"synthetic","candidate_commit":"b51465476d4cd628ff58553df466c200a1ac565e","contract":"money-map-desktop-bootstrap-v1","session":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n',
         )
         os.close(bootstrap_write)
         contender = subprocess.run(
@@ -397,6 +403,8 @@ def test_sidecar_prepares_and_attests_the_actual_financial_engine_before_ready(
         json.dumps(
             {
                 "attestation": spec,
+                "candidate_artifact": "synthetic",
+                "candidate_commit": "b51465476d4cd628ff58553df466c200a1ac565e",
                 "contract": "money-map-desktop-bootstrap-v1",
                 "session": "c" * 64,
             },

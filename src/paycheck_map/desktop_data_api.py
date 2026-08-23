@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import settings
+from .cutover_readiness import CutoverReadinessManager
 from .data_home import DataHomeError, DataHomeManager, DataHomePaths
 from .db import engine
 
@@ -26,6 +27,12 @@ class CandidateSelection(BaseModel):
 class MigrationConfirmation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     candidate_token: str = Field(min_length=16, max_length=256)
+
+
+class CutoverConfirmation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirmation_token: str = Field(min_length=32, max_length=256)
+    requested_action: str = Field(pattern=r"^activate_reviewed_source$")
 
 
 class BackupSelection(BaseModel):
@@ -66,6 +73,11 @@ def data_home_manager() -> DataHomeManager:
     )
 
 
+@lru_cache(maxsize=1)
+def cutover_readiness_manager() -> CutoverReadinessManager:
+    return CutoverReadinessManager(data_home_manager())
+
+
 def prepare_desktop_data_home() -> dict[str, Any]:
     return data_home_manager().prepare()
 
@@ -93,7 +105,32 @@ def fresh_setup() -> dict[str, Any]:
 
 @router.post("/candidate")
 def candidate(payload: CandidateSelection) -> dict[str, Any]:
-    return _call(data_home_manager().inspect_candidate, Path(payload.selected_path))
+    return _call(cutover_readiness_manager().inspect, Path(payload.selected_path))
+
+
+@router.post("/cutover/rehearsal")
+def begin_cutover_rehearsal() -> dict[str, Any]:
+    return _call(cutover_readiness_manager().rehearse)
+
+
+@router.post("/cutover/prepare")
+def prepare_cutover() -> dict[str, Any]:
+    return _call(cutover_readiness_manager().prepare_current_confirmation)
+
+
+@router.post("/cutover/confirm")
+def confirm_cutover(payload: CutoverConfirmation) -> dict[str, Any]:
+    engine.dispose()
+    return _call(
+        cutover_readiness_manager().confirm_current,
+        payload.confirmation_token,
+        requested_action=payload.requested_action,
+    )
+
+
+@router.post("/cutover/cancel")
+def cancel_cutover() -> dict[str, Any]:
+    return _call(cutover_readiness_manager().cancel)
 
 
 @router.post("/migration")

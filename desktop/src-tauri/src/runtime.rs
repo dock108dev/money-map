@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use crate::data_home::DataHomePaths;
 use crate::lifecycle::{LifecycleMachine, LifecycleState};
+use crate::metadata::{BUILD_COMMIT, BUILD_ID};
 use crate::proxy::health_ready;
 use crate::qualification::{
     parse_attestation, InstalledAttestation, MatrixRequestObservation, QualificationContract,
@@ -504,6 +505,8 @@ impl RuntimeController {
         let bootstrap = serde_json::to_vec(&serde_json::json!({
             "contract": "money-map-desktop-bootstrap-v1",
             "session": session,
+            "candidate_commit": BUILD_COMMIT,
+            "candidate_artifact": BUILD_ID,
             "attestation": self.qualification.as_ref().zip(nonce).map(|(contract, nonce)| serde_json::json!({
                 "contract": "money-map-installed-root-attestation-v1",
                 "schema_version": 1,

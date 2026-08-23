@@ -15,13 +15,20 @@ SESSION_BYTES = 32
 class DesktopBootstrap:
     session: str
     port: int
+    candidate_commit: str
+    candidate_artifact: str | None
 
 
 _lock = threading.Lock()
 _active: DesktopBootstrap | None = None
 
 
-def install_bootstrap(session: str, port: int) -> None:
+def install_bootstrap(
+    session: str,
+    port: int,
+    candidate_commit: str = "development",
+    candidate_artifact: str | None = None,
+) -> None:
     """Install one generation exactly once before the ASGI app is imported."""
 
     global _active
@@ -30,12 +37,28 @@ def install_bootstrap(session: str, port: int) -> None:
         or not session.isascii()
         or any(character not in "0123456789abcdef" for character in session)
         or not 0 < port <= 65_535
+        or (
+            candidate_commit != "development"
+            and (
+                len(candidate_commit) != 40
+                or any(character not in "0123456789abcdef" for character in candidate_commit)
+            )
+        )
+        or (
+            candidate_artifact is not None
+            and (not candidate_artifact or len(candidate_artifact) > 128)
+        )
     ):
         raise RuntimeError("Desktop bootstrap material was rejected")
     with _lock:
         if _active is not None:
             raise RuntimeError("Desktop bootstrap material was already installed")
-        _active = DesktopBootstrap(session=session, port=port)
+        _active = DesktopBootstrap(
+            session=session,
+            port=port,
+            candidate_commit=candidate_commit,
+            candidate_artifact=candidate_artifact,
+        )
 
 
 def active_bootstrap() -> DesktopBootstrap:

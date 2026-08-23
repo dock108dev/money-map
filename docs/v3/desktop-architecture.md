@@ -1,7 +1,8 @@
 # Money Map v3 desktop architecture
 
 Status: frozen by Slice 0, productionized by Slice 1, extended by Slice 2 data-home recovery, and
-completed at the Slice 3 product-experience boundary for the Apple Silicon owner beta.
+completed at the Slice 3 product-experience boundary for the Apple Silicon owner beta. Slice 7
+adds cutover readiness as a fail-closed layer over the same Slice 2 authority.
 
 ## Decision
 
@@ -271,3 +272,13 @@ do not change.
   Gatekeeper assessment, and externally appropriate nested-code layout.
 - PyInstaller one-file extraction adds startup cost and transient files; later profiling may choose
   a signed one-folder layout while preserving PyInstaller as the frozen builder.
+
+## Slice 7 cutover-readiness layer
+
+Slice 7 adds a sanitized readiness projection without duplicating persistence. It classifies every
+source, schema, health, destination, rehearsal, confirmation, interruption, rollback, and completion
+state while keeping `DataHomeManager` authoritative. A one-use expiring confirmation binds the
+read-only source identity, destination, verified backup, rehearsal and logical-manifest commitments,
+candidate commit/artifact, and requested action. The rehearsal uses only a disposable fake home;
+live owner execution remains deferred until the consolidated post-Slice-8 campaign. See
+`cutover-readiness.md` and `owner-cutover-worksheet.json`.

@@ -9,7 +9,7 @@
       "paycheck_map.adapters.payroll_oracle", "paycheck_map.allocations", "paycheck_map.analytics",
       "paycheck_map.api", "paycheck_map.app", "paycheck_map.balances",
       "paycheck_map.business_time", "paycheck_map.cash_flow_service",
-      "paycheck_map.cash_months", "paycheck_map.cli", "paycheck_map.config",
+      "paycheck_map.cash_months", "paycheck_map.cli", "paycheck_map.config", "paycheck_map.cutover_readiness",
       "paycheck_map.data_home", "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_bootstrap", "paycheck_map.desktop_data_api", "paycheck_map.desktop_lock", "paycheck_map.desktop_sidecar",
       "paycheck_map.forecasting", "paycheck_map.goal_gap_service",
       "paycheck_map.goal_observation", "paycheck_map.goal_operations",

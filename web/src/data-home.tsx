@@ -21,8 +21,31 @@ export type DataHomePhase =
   | "restore_in_progress"
   | "restore_complete";
 
+export type CutoverState =
+  | "fresh_setup"
+  | "eligible_legacy_source"
+  | "current_0009_source"
+  | "unsupported_newer_source"
+  | "missing_or_unknown_revision"
+  | "integrity_failure"
+  | "foreign_key_failure"
+  | "required_table_failure"
+  | "source_unavailable"
+  | "read_only_source"
+  | "insufficient_destination_space"
+  | "unwritable_destination"
+  | "rehearsal_required"
+  | "rehearsal_in_progress"
+  | "rehearsal_passed"
+  | "confirmation_required"
+  | "activation_ready"
+  | "recoverable_interruption"
+  | "rollback_available"
+  | "completed_cutover";
+
 export interface DataHomeStatus {
-  phase: DataHomePhase;
+  phase?: DataHomePhase;
+  state?: CutoverState;
   ready?: boolean;
   schema_revision?: string;
   backup_count?: number;
@@ -39,6 +62,17 @@ export interface DataHomeStatus {
   failure_code?: string | null;
   replacement_warning?: string;
   backup_id?: string;
+  source?: string;
+  schema?: string;
+  integrity?: string;
+  foreign_keys?: string;
+  backup?: string;
+  destination?: string;
+  rehearsal?: string;
+  rollback?: string;
+  candidate?: string;
+  action?: string;
+  expires_in_seconds?: number;
 }
 
 interface BackupStatus {
@@ -139,7 +173,7 @@ export default function DataHomePanel({
       const result = await operation();
       update(result);
       if (
-        (result.phase === "activation_complete" || result.phase === "restore_complete") &&
+        (result.phase === "activation_complete" || result.phase === "restore_complete" || result.state === "completed_cutover") &&
         window.__MONEY_MAP_DESKTOP__?.mode
       ) {
         await window.__MONEY_MAP_DESKTOP__.restart();
@@ -199,24 +233,58 @@ export default function DataHomePanel({
           </div>
         )}
 
-        {status.phase === "confirmation_required" && status.candidate_token && (
+        {status.state && status.candidate_token && status.state !== "confirmation_required" && (
           <div className="data-home-preview">
-            <h2>Migration preview</h2>
+            <h2>Cutover readiness</h2>
             <dl>
-              <div><dt>Source</dt><dd>{status.source_classification}</dd></div>
-              <div><dt>Version</dt><dd>{status.schema_revision}</dd></div>
-              <div><dt>Size</dt><dd>{Number(status.size ?? 0).toLocaleString()} bytes</dd></div>
-              <div><dt>Protection</dt><dd>Verified backup before staging</dd></div>
+              <div><dt>Source</dt><dd>{status.source}</dd></div>
+              <div><dt>Schema</dt><dd>{status.schema}</dd></div>
+              <div><dt>Size class</dt><dd>{status.size}</dd></div>
+              <div><dt>Integrity</dt><dd>{status.integrity}</dd></div>
+              <div><dt>Relationships</dt><dd>{status.foreign_keys}</dd></div>
+              <div><dt>Backup</dt><dd>{status.backup}</dd></div>
+              <div><dt>Destination</dt><dd>{status.destination}</dd></div>
+              <div><dt>Rehearsal</dt><dd>{status.rehearsal}</dd></div>
+              <div><dt>Rollback</dt><dd>{status.rollback}</dd></div>
+              <div><dt>Candidate</dt><dd>{status.candidate}</dd></div>
             </dl>
-            <p>The original stays read-only. Migration runs only on an isolated restored copy.</p>
+            <p><strong>Next action:</strong> {status.action}</p>
+            <p>The selected original stays read-only. Rehearsal activates only in a disposable private home.</p>
             <div className="data-home-actions">
               <button
                 className="primary-button"
                 disabled={busy}
-                onClick={() => void run(() => action("/api/desktop/data-home/migration", { candidate_token: status.candidate_token }))}
+                onClick={() => void run(async () => {
+                  await action("/api/desktop/data-home/cutover/rehearsal");
+                  return action("/api/desktop/data-home/cutover/prepare");
+                })}
               >
-                Back up and import
+                Run rehearsal and review confirmation
               </button>
+              <button disabled={busy} onClick={() => update({ phase: "fresh_setup_available", ready: false })}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {status.state === "confirmation_required" && status.confirmation_token && (
+          <div className="data-home-preview">
+            <h2>Confirm cutover</h2>
+            <dl>
+              <div><dt>Source</dt><dd>{status.source}</dd></div>
+              <div><dt>Schema</dt><dd>{status.schema}</dd></div>
+              <div><dt>Backup</dt><dd>{status.backup}</dd></div>
+              <div><dt>Destination</dt><dd>{status.destination}</dd></div>
+              <div><dt>Rehearsal</dt><dd>{status.rehearsal}</dd></div>
+              <div><dt>Rollback</dt><dd>{status.rollback}</dd></div>
+              <div><dt>Candidate</dt><dd>{status.candidate}</dd></div>
+            </dl>
+            <p>This one-use confirmation expires in {status.expires_in_seconds ?? 300} seconds.</p>
+            <p><strong>Next action:</strong> {status.action}</p>
+            <div className="data-home-actions">
+              <button className="primary-button" disabled={busy} onClick={() => void run(() => action(
+                "/api/desktop/data-home/cutover/confirm",
+                { confirmation_token: status.confirmation_token, requested_action: "activate_reviewed_source" },
+              ))}>Activate reviewed data</button>
               <button disabled={busy} onClick={() => update({ phase: "fresh_setup_available", ready: false })}>Cancel</button>
             </div>
           </div>
