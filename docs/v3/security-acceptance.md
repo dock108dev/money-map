@@ -48,7 +48,8 @@ Rust generates 32 random bytes per sidecar generation and writes the 64-hex sess
 an inherited Unix-domain socket duplicated to descriptor 3. The environment carries only the
 descriptor number. The sidecar bounds and consumes the bootstrap JSON, closes the descriptor,
 installs session/active port in process-private state, and removes the descriptor marker.
-Shutdown uses a separate inherited Unix-domain socket duplicated to descriptor 4. It accepts only
+Shutdown uses a separate inherited Unix-domain socket duplicated to descriptor 63, outside the
+PyInstaller one-file bootloader's internal low-descriptor range. It accepts only
 the fixed bounded control record, and its nonsecret descriptor marker is removed before readiness.
 Neither bootstrap nor lifecycle control uses stdin, arguments, files, WebView state, or loopback.
 

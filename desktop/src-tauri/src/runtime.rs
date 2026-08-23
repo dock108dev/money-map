@@ -311,7 +311,7 @@ impl RuntimeController {
             .env("PAYCHECK_MAP_DESKTOP_LOG_ROOT", &self.paths.logs)
             .env("PAYCHECK_MAP_LOCAL_DIR", &self.paths.application)
             .env("PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD", "3")
-            .env("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "4")
+            .env("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "63")
             .env(
                 "PAYCHECK_MAP_DESKTOP_OWNER_PID",
                 std::process::id().to_string(),
@@ -342,8 +342,8 @@ impl RuntimeController {
                 }
                 if libc::dup2(bootstrap_fd, 3) == -1
                     || libc::fcntl(3, libc::F_SETFD, 0) == -1
-                    || libc::dup2(control_fd, 4) == -1
-                    || libc::fcntl(4, libc::F_SETFD, 0) == -1
+                    || libc::dup2(control_fd, 63) == -1
+                    || libc::fcntl(63, libc::F_SETFD, 0) == -1
                 {
                     return Err(std::io::Error::last_os_error());
                 }

@@ -57,8 +57,8 @@ def test_release_builder_embeds_the_exact_source_commit_in_about() -> None:
 def test_packaged_shutdown_uses_a_private_control_descriptor() -> None:
     rust = (PROJECT_ROOT / "desktop/src-tauri/src/runtime.rs").read_text()
     sidecar = (PROJECT_ROOT / "src/paycheck_map/desktop_sidecar.py").read_text()
-    assert '.env("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "4")' in rust
-    assert "libc::dup2(control_fd, 4)" in rust
+    assert '.env("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "63")' in rust
+    assert "libc::dup2(control_fd, 63)" in rust
     assert ".stdin(Stdio::null())" in rust
     assert 'os.environ.pop("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "")' in sidecar
     assert "for line in sys.stdin" not in sidecar

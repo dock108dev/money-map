@@ -37,7 +37,8 @@ removes its marker before readiness. The session never enters an environment val
 storage, file, log, diagnostic, database, crash message, artifact, evidence, or argument.
 
 The shell also creates a second private Unix-domain socket pair, duplicates its child end to
-descriptor 4, and retains only the parent writer. The sidecar consumes the fixed bounded shutdown
+descriptor 63, and retains only the parent writer. The high descriptor avoids the PyInstaller
+one-file bootloader's internal low-descriptor plumbing. The sidecar consumes the fixed shutdown
 record from that descriptor. The one-file bootloader can replace that descriptor before the frozen
 child starts, so the child also removes and monitors a bounded native-owner PID from its cleared
 startup environment. Owner disappearance requests the same graceful Uvicorn, SQLite, writer-lock,
