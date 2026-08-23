@@ -117,18 +117,21 @@ def running_sidecar(
         "PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT": str(Path(__file__).resolve().parents[1]),
     }
     bootstrap_read, bootstrap_write = os.pipe()
+    control_read, control_write = os.pipe()
     environment["PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"] = str(bootstrap_read)
+    environment["PAYCHECK_MAP_DESKTOP_CONTROL_FD"] = str(control_read)
 
     process = subprocess.Popen(
         [sys.executable, "-m", "paycheck_map.desktop_sidecar"],
-        stdin=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         env=environment,
-        pass_fds=(bootstrap_read,),
+        pass_fds=(bootstrap_read, control_read),
     )
     os.close(bootstrap_read)
+    os.close(control_read)
     os.write(
         bootstrap_write,
         json.dumps(
@@ -169,10 +172,12 @@ def running_sidecar(
         yield process, port
     finally:
         if process.poll() is None:
-            assert process.stdin is not None
-            process.stdin.write('{"command":"shutdown","contract":"money-map-control-v1"}\n')
-            process.stdin.flush()
+            os.write(
+                control_write,
+                b'{"command":"shutdown","contract":"money-map-control-v1"}\n',
+            )
             process.wait(timeout=5)
+        os.close(control_write)
 
 
 def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) -> None:
@@ -216,7 +221,9 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
             "PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT": str(Path(__file__).resolve().parents[1]),
         }
         bootstrap_read, bootstrap_write = os.pipe()
+        control_read, control_write = os.pipe()
         contender_environment["PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"] = str(bootstrap_read)
+        contender_environment["PAYCHECK_MAP_DESKTOP_CONTROL_FD"] = str(control_read)
 
         os.write(
             bootstrap_write,
@@ -225,15 +232,16 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
         os.close(bootstrap_write)
         contender = subprocess.run(
             [sys.executable, "-m", "paycheck_map.desktop_sidecar"],
-            input='{"command":"shutdown","contract":"money-map-control-v1"}\n',
             capture_output=True,
             text=True,
             env=contender_environment,
-            pass_fds=(bootstrap_read,),
+            pass_fds=(bootstrap_read, control_read),
             timeout=5,
             check=False,
         )
         os.close(bootstrap_read)
+        os.close(control_read)
+        os.close(control_write)
         assert contender.returncode == 1
         assert contender.stdout.strip() == "MONEY_MAP_FAILED"
         assert contender.stderr == ""

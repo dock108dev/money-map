@@ -48,6 +48,9 @@ Rust generates 32 random bytes per sidecar generation and writes the 64-hex sess
 an inherited Unix-domain socket duplicated to descriptor 3. The environment carries only the
 descriptor number. The sidecar bounds and consumes the bootstrap JSON, closes the descriptor,
 installs session/active port in process-private state, and removes the descriptor marker.
+Shutdown uses a separate inherited Unix-domain socket duplicated to descriptor 4. It accepts only
+the fixed bounded control record, and its nonsecret descriptor marker is removed before readiness.
+Neither bootstrap nor lifecycle control uses stdin, arguments, files, WebView state, or loopback.
 
 The server binds `127.0.0.1:0`. It requires one exact Host and session, at most one trusted Origin,
 rejects duplicate security headers, Content-Length plus Transfer-Encoding, control bytes,

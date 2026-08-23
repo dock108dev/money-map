@@ -6,10 +6,10 @@ import json
 import os
 import secrets
 import socket
-import sys
 import threading
 import time
 from pathlib import Path
+from typing import TextIO
 
 import uvicorn
 
@@ -53,6 +53,19 @@ def _read_bootstrap() -> str:
     return str(value["session"])
 
 
+def _control_handle() -> TextIO:
+    try:
+        control_fd = int(os.environ.pop("PAYCHECK_MAP_DESKTOP_CONTROL_FD", ""))
+    except ValueError as error:
+        raise RuntimeError("Desktop control is unavailable") from error
+    if not 4 <= control_fd <= 64:
+        raise RuntimeError("Desktop control is unavailable")
+    try:
+        return os.fdopen(control_fd, "r", encoding="utf-8", closefd=True)
+    except OSError as error:
+        raise RuntimeError("Desktop control is unavailable") from error
+
+
 def _synthetic_root() -> Path:
     raw = os.environ.get("PAYCHECK_MAP_LOCAL_DIR")
     if not raw:
@@ -81,6 +94,7 @@ def _desktop_root() -> Path:
 
 def main() -> None:
     session = _read_bootstrap()
+    control = _control_handle()
     root = _desktop_root()
     if os.environ.get("PAYCHECK_MAP_DESKTOP_MODE") != "true":
         raise RuntimeError("Desktop mode is required")
@@ -130,10 +144,11 @@ def main() -> None:
         server = uvicorn.Server(config)
 
         def await_shutdown() -> None:
-            for line in sys.stdin:
-                if line.strip() == '{"command":"shutdown","contract":"money-map-control-v1"}':
-                    server.should_exit = True
-                    return
+            with control:
+                for line in control:
+                    if line.strip() == '{"command":"shutdown","contract":"money-map-control-v1"}':
+                        server.should_exit = True
+                        return
 
         threading.Thread(target=await_shutdown, name="desktop-shutdown", daemon=True).start()
         events.emit("MM-DESKTOP-READY", "lifecycle")

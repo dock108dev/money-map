@@ -36,6 +36,11 @@ markers and the nonsecret descriptor number. The sidecar consumes and closes tha
 removes its marker before readiness. The session never enters an environment value, URL, WebView,
 storage, file, log, diagnostic, database, crash message, artifact, evidence, or argument.
 
+The shell also creates a second private Unix-domain socket pair, duplicates its child end to
+descriptor 4, and retains only the parent writer. The sidecar consumes the fixed bounded shutdown
+record from that descriptor. This avoids PyInstaller bootloader stdin behavior while keeping
+control out of arguments, files, logs, the WebView, and the network.
+
 The shell owns an explicit `Starting`, `Ready`, `Failed`, `Restarting`, `Stopping`, and `Stopped`
 state machine. Every generation receives a new session and exactly one process group. The sidecar
 reserves an OS-selected port by binding `127.0.0.1:0`, then prints only `MONEY_MAP_READY <port>`.
@@ -44,7 +49,8 @@ while continuing to monitor process termination after readiness. Unexpected deat
 port and session, hides stale controls, and shows one deliberate restart action; there is no
 automatic retry loop.
 
-On restart or application exit, Tauri writes `shutdown` to stdin and allows 1.5 seconds for clean
+On restart or application exit, Tauri writes `shutdown` to the private control descriptor and
+allows 1.5 seconds for clean
 Uvicorn, SQLite, and writer-lock shutdown. It then kills the entire isolated process group as a
 fallback and independently waits up to five seconds for the group and listener to disappear. The
 shell explicitly removes its temporary parent after shutdown rather than relying on process-exit

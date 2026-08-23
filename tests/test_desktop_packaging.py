@@ -51,6 +51,16 @@ def test_release_builder_embeds_the_exact_source_commit_in_about() -> None:
     assert 'env["MONEY_MAP_BUILD_COMMIT"] = args.commit' in source
 
 
+def test_packaged_shutdown_uses_a_private_control_descriptor() -> None:
+    rust = (PROJECT_ROOT / "desktop/src-tauri/src/runtime.rs").read_text()
+    sidecar = (PROJECT_ROOT / "src/paycheck_map/desktop_sidecar.py").read_text()
+    assert '.env("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "4")' in rust
+    assert "libc::dup2(control_fd, 4)" in rust
+    assert ".stdin(Stdio::null())" in rust
+    assert 'os.environ.pop("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "")' in sidecar
+    assert "for line in sys.stdin" not in sidecar
+
+
 def test_build_environment_removes_credential_bearing_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

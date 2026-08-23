@@ -36,6 +36,7 @@ struct RunningProcess {
     generation: u64,
     pid: u32,
     child: Arc<Mutex<Child>>,
+    control: Arc<Mutex<UnixStream>>,
 }
 
 struct RuntimeInner {
@@ -295,7 +296,10 @@ impl RuntimeController {
     ) -> Result<(RunningProcess, Receiver<OutputEvent>), String> {
         let (mut bootstrap_writer, bootstrap_reader) = UnixStream::pair()
             .map_err(|_| "Bundled service bootstrap could not start.".to_string())?;
+        let (control_writer, control_reader) = UnixStream::pair()
+            .map_err(|_| "Bundled service control could not start.".to_string())?;
         let bootstrap_fd = bootstrap_reader.as_raw_fd();
+        let control_fd = control_reader.as_raw_fd();
         let mut command = Command::new(&self.sidecar_path);
         command
             .env_clear()
@@ -307,7 +311,8 @@ impl RuntimeController {
             .env("PAYCHECK_MAP_DESKTOP_LOG_ROOT", &self.paths.logs)
             .env("PAYCHECK_MAP_LOCAL_DIR", &self.paths.application)
             .env("PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD", "3")
-            .stdin(Stdio::piped())
+            .env("PAYCHECK_MAP_DESKTOP_CONTROL_FD", "4")
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         if self.paths.mode == "keychain-acceptance-v1" {
@@ -331,7 +336,11 @@ impl RuntimeController {
                 if libc::setsid() == -1 {
                     return Err(std::io::Error::last_os_error());
                 }
-                if libc::dup2(bootstrap_fd, 3) == -1 || libc::fcntl(3, libc::F_SETFD, 0) == -1 {
+                if libc::dup2(bootstrap_fd, 3) == -1
+                    || libc::fcntl(3, libc::F_SETFD, 0) == -1
+                    || libc::dup2(control_fd, 4) == -1
+                    || libc::fcntl(4, libc::F_SETFD, 0) == -1
+                {
                     return Err(std::io::Error::last_os_error());
                 }
                 Ok(())
@@ -341,6 +350,7 @@ impl RuntimeController {
             .spawn()
             .map_err(|_| "Bundled service could not start.".to_string())?;
         drop(bootstrap_reader);
+        drop(control_reader);
         let bootstrap = serde_json::to_vec(&serde_json::json!({
             "contract": "money-map-desktop-bootstrap-v1",
             "session": session,
@@ -376,6 +386,7 @@ impl RuntimeController {
                 generation,
                 pid,
                 child: Arc::new(Mutex::new(child)),
+                control: Arc::new(Mutex::new(control_writer)),
             },
             receiver,
         ))
@@ -470,13 +481,10 @@ impl RuntimeController {
         process: &RunningProcess,
         known_port: Option<u16>,
     ) -> Result<(), String> {
-        if let Ok(mut child) = process.child.lock() {
-            if let Some(stdin) = child.stdin.as_mut() {
-                let _ = stdin.write_all(
-                    b"{\"command\":\"shutdown\",\"contract\":\"money-map-control-v1\"}\n",
-                );
-                let _ = stdin.flush();
-            }
+        if let Ok(mut control) = process.control.lock() {
+            let _ = control
+                .write_all(b"{\"command\":\"shutdown\",\"contract\":\"money-map-control-v1\"}\n");
+            let _ = control.flush();
         }
         let graceful_deadline = Instant::now() + GRACEFUL_SHUTDOWN_TIMEOUT;
         while Instant::now() < graceful_deadline && child_is_running(&process.child) {

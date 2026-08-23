@@ -101,6 +101,27 @@ def test_private_bootstrap_is_bounded_single_use_and_not_environment_secret(
         _read_bootstrap()
 
 
+def test_private_control_descriptor_is_bounded_single_use_and_not_stdin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from paycheck_map.desktop_sidecar import _control_handle
+
+    read_fd, write_fd = os.pipe()
+    monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_CONTROL_FD", str(read_fd))
+    with _control_handle() as control:
+        os.write(
+            write_fd,
+            b'{"command":"shutdown","contract":"money-map-control-v1"}\n',
+        )
+        os.close(write_fd)
+        assert control.readline().strip() == (
+            '{"command":"shutdown","contract":"money-map-control-v1"}'
+        )
+    assert "PAYCHECK_MAP_DESKTOP_CONTROL_FD" not in os.environ
+    with pytest.raises(RuntimeError, match="unavailable"):
+        _control_handle()
+
+
 def _security_request(
     headers: list[tuple[bytes, bytes]], *, method: str = "GET", path: str = "/api/desktop/health"
 ) -> list[Message]:

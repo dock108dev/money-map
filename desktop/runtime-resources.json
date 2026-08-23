@@ -49,7 +49,7 @@
   },
   "reportAndPrint": ["paycheck_map.reporting", "compiled React print CSS", "native WKWebView print panel"],
   "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore using com.moneymap.desktop.secrets.v1",
-  "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"],
+  "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD", "PAYCHECK_MAP_DESKTOP_CONTROL_FD"],
   "sessionBootstrap": "money-map-desktop-bootstrap-v1 over private inherited descriptor 3; never argv or environment",
   "subprocesses": ["one supervised money-map-sidecar process group owned by the Tauri process"],
   "forbidden": [".local", "*.sqlite*", "statements", "reports", "backups", "credentials", "tokens", "source maps", "repository paths", "owner screenshots"],
