@@ -490,16 +490,6 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     setPrimaryState(nextPrimary);
     setObservationState(null);
     setObservationError("");
-    if (nextPrimary.state === "primary") {
-      try {
-        const observation = await backfillGoalCheckIn();
-        if (sequence === loadSequence.current) setObservationState(observation);
-      } catch (reason) {
-        if (sequence === loadSequence.current) {
-          setObservationError(errorMessage(reason, "The goal observation could not be saved."));
-        }
-      }
-    }
     const results = await Promise.allSettled([
       loadGoalPosition(),
       loadLatestGoalCheckIn(),
@@ -563,6 +553,16 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
     await loadSurface();
     await loadOpenedDetails();
   }, [loadOpenedDetails, loadSurface]);
+
+  const recordAuthorizedObservation = useCallback(async () => {
+    setObservationState(null);
+    setObservationError("");
+    try {
+      setObservationState(await backfillGoalCheckIn());
+    } catch (reason) {
+      setObservationError(errorMessage(reason, "The goal observation could not be saved."));
+    }
+  }, []);
 
   useEffect(() => {
     void reloadCompleteSurface();
@@ -653,6 +653,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
         expected_edit_token: candidate.edit_token,
       });
       await reloadCompleteSurface();
+      await recordAuthorizedObservation();
       setMessage("Primary goal selected.");
     } catch (reason) {
       if (reason instanceof GoalApiError && reason.status === 409) {
@@ -956,6 +957,7 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
           onClose={() => setEditing(false)}
           onSaved={async () => {
             await reloadCompleteSurface();
+            await recordAuthorizedObservation();
             setEditing(false);
             setMessage("Goal updated.");
           }}

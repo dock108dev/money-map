@@ -80,7 +80,8 @@ credential, or real balance enters the repository.
   observation date. Identical evidence on a later day remains source-equivalent while the live
   required pace can advance independently.
 - [x] One shared post-operation coordinator serves global and individual read-only Plaid,
-  manual import, payroll rebuild, and explicit load backfill. It returns only `created`,
+  manual import, payroll rebuild, and backfill explicitly authorized by a successful goal
+  selection or edit. It returns only `created`,
   `unchanged`, `no_primary`, `not_current`, or retryable `unavailable` contracts.
 - [x] Repeated unchanged complete refresh/open/import/payroll operations write zero additional
   check-ins. One changed complete operation writes one check-in; a global refresh never writes
@@ -91,9 +92,11 @@ credential, or real balance enters the repository.
 - [x] Check-in persistence has its own transaction boundary. An injected insertion failure
   preserved already committed financial evidence, rolled back only the observation, and returned
   a visible retryable result without converting provider success into provider failure.
-- [x] Every Goals GET remains write-free. `POST /api/v2/goals/check-ins/backfill` is the sole
-  explicit load command and sends no browser timestamp, telemetry, filename, account identifier,
-  merchant detail, credential, or raw provider payload.
+- [x] Every Goals GET remains write-free. Ordinary mount, navigation, reload, remount, history,
+  provenance, detail expansion, and printing never invoke a write. `POST
+  /api/v2/goals/check-ins/backfill` remains an explicit post-command operation only after a
+  successful user-authorized goal selection or edit; it sends no browser timestamp, telemetry,
+  filename, account identifier, merchant detail, credential, or raw provider payload.
 - [x] “Since last financial change” compares the latest two distinct persisted fingerprints.
   The recent timeline retains cursor pagination and the 25-row render cap, with compressed safe
   summaries and expandable exact evidence/components including unexplained residual.

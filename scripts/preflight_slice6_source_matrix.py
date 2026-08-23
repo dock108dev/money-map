@@ -173,6 +173,28 @@ def materialize_diagnostic() -> dict[str, Any]:
                 {"combination_id": "loading::*", "check": check, "classification": "source"}
             )
 
+    goals_source = source_text("goals")
+    goals_load_surface = goals_source.split("const loadSurface = useCallback", 1)[1].split(
+        "const loadOpenedDetails = useCallback", 1
+    )[0]
+    goals_read_boundary_checks = {
+        "goals_load_surface_is_query_only": "backfillGoalCheckIn" not in goals_load_surface,
+        "goals_backfill_is_explicit_command": "const recordAuthorizedObservation" in goals_source
+        and "await backfillGoalCheckIn()" in goals_source,
+        "goals_authorized_handlers_invoke_command": goals_source.count(
+            "await recordAuthorizedObservation();"
+        )
+        == 2,
+        "mutation_failure_evidence_names_tables_and_requests": "affected_tables" in driver_sources
+        and "request_inventory" in driver_sources,
+    }
+    for check, passed in goals_read_boundary_checks.items():
+        assertion_count += 1
+        if not passed:
+            mismatches.append(
+                {"combination_id": "loading::goals", "check": check, "classification": "source"}
+            )
+
     return {
         "contract": "money-map-slice6-source-diagnostic-v1",
         "classification": "diagnostic-source-evidence-not-installed-acceptance",

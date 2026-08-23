@@ -48,6 +48,24 @@ class MatrixFailure(RuntimeError):
     """A sealed expectation and installed observation differ."""
 
 
+class DatabaseMutationFailure(MatrixFailure):
+    """A read-only installed observation changed one or more logical tables."""
+
+    def __init__(
+        self,
+        classification: str,
+        *,
+        phase: str,
+        before: dict[str, Any],
+        after: dict[str, Any],
+        observation: dict[str, Any],
+    ) -> None:
+        super().__init__(classification)
+        self.phase = phase
+        self.affected_tables = manifest_difference(before, after)
+        self.request_inventory = sanitized_request_inventory(observation)
+
+
 def validate_setup_driver(expected: dict[str, Any]) -> None:
     driver = expected.get("setup_driver")
     if not isinstance(driver, dict) or driver.get("type") not in IMPLEMENTED_SETUP_DRIVERS:
@@ -97,9 +115,70 @@ def database_manifest(database: Path) -> dict[str, Any]:
             }
     payload = {"tables": tables}
     return {
+        "tables": tables,
         "table_counts": {name: value["count"] for name, value in tables.items()},
         "logical_digest_sha256": hashlib.sha256(canonical(payload)).hexdigest(),
     }
+
+
+def manifest_difference(before: dict[str, Any], after: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    before_tables = before["tables"]
+    after_tables = after["tables"]
+    for name in sorted(set(before_tables) | set(after_tables)):
+        prior = before_tables.get(name, {"count": 0, "rows_sha256": None})
+        current = after_tables.get(name, {"count": 0, "rows_sha256": None})
+        if prior == current:
+            continue
+        result[name] = {
+            "before_count": prior["count"],
+            "after_count": current["count"],
+            "count_delta": current["count"] - prior["count"],
+            "rows_changed": prior["rows_sha256"] != current["rows_sha256"],
+        }
+    return result
+
+
+def sanitized_request_inventory(observation: dict[str, Any]) -> list[dict[str, Any]]:
+    inventory = observation.get("request_inventory", [])
+    if not isinstance(inventory, list):
+        return []
+    result = []
+    for item in inventory:
+        if not isinstance(item, dict):
+            continue
+        method = item.get("method")
+        endpoint = item.get("endpoint")
+        count = item.get("count")
+        if (
+            method in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+            and isinstance(endpoint, str)
+            and endpoint.startswith("/api/")
+            and "?" not in endpoint
+            and len(endpoint) <= 256
+            and isinstance(count, int)
+            and count > 0
+        ):
+            result.append({"method": method, "endpoint": endpoint, "count": count})
+    return result
+
+
+def require_database_unchanged(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    *,
+    classification: str,
+    phase: str,
+    observation: dict[str, Any],
+) -> None:
+    if after != before:
+        raise DatabaseMutationFailure(
+            classification,
+            phase=phase,
+            before=before,
+            after=after,
+            observation=observation,
+        )
 
 
 def _json_value(value: object) -> object:
@@ -342,8 +421,13 @@ def run_combination(
                 fake_home / "matrix-observation-pending-1.json", sequence=1
             )
             compare_observation(expected, first_pending, 1, phase="pending")
-            if database_manifest(database) != before:
-                raise MatrixFailure("pending loading changed the database")
+            require_database_unchanged(
+                before,
+                database_manifest(database),
+                classification="pending loading changed the database",
+                phase="initial-pending",
+                observation=first_pending,
+            )
             release_loading_gate(fake_home, expected, runtime_generation=1, gate_generation=1)
             first = wait_observation(fake_home / "matrix-observation.json", sequence=1)
             compare_observation(
@@ -361,16 +445,26 @@ def run_combination(
             first = wait_observation(fake_home / "matrix-observation.json", sequence=1)
             compare_observation(expected, first, 1)
         after_open = database_manifest(database)
-        if after_open != before:
-            raise MatrixFailure("opening the installed route changed the database")
+        require_database_unchanged(
+            before,
+            after_open,
+            classification="opening the installed route changed the database",
+            phase="initial-settled",
+            observation=first,
+        )
         trigger_reload()
         if state == "loading":
             second_pending = wait_observation(
                 fake_home / "matrix-observation-pending-2.json", sequence=2
             )
             compare_observation(expected, second_pending, 2, phase="pending")
-            if database_manifest(database) != before:
-                raise MatrixFailure("rearmed pending loading changed the database")
+            require_database_unchanged(
+                before,
+                database_manifest(database),
+                classification="rearmed pending loading changed the database",
+                phase="reload-pending",
+                observation=second_pending,
+            )
             release_loading_gate(fake_home, expected, runtime_generation=1, gate_generation=2)
             second = wait_observation(fake_home / "matrix-observation.json", sequence=2)
             compare_observation(
@@ -387,8 +481,13 @@ def run_combination(
             second = wait_observation(fake_home / "matrix-observation.json", sequence=2)
             compare_observation(expected, second, 2)
         after_reload = database_manifest(database)
-        if after_reload != before:
-            raise MatrixFailure("reloading the installed route changed the database")
+        require_database_unchanged(
+            before,
+            after_reload,
+            classification="reloading the installed route changed the database",
+            phase="reload-settled",
+            observation=second,
+        )
         trigger_close()
         time.sleep(0.5)
         activation = subprocess.Popen(
@@ -410,8 +509,13 @@ def run_combination(
         base.quit_app()
         shutdown_ms = base.wait_gone(process, sidecars)
         final = database_manifest(database)
-        if final != before:
-            raise MatrixFailure("close and reopen changed the database")
+        require_database_unchanged(
+            before,
+            final,
+            classification="close and reopen changed the database",
+            phase="close-reopen",
+            observation=second,
+        )
         session_files = [
             path
             for path in fake_home.rglob("*")
@@ -531,6 +635,12 @@ def qualification(args: argparse.Namespace) -> Path:
                     "accessible_role": expected["expected_accessible_role"],
                     "http_status": expected["expected_http_status"],
                 }
+                if isinstance(error, DatabaseMutationFailure):
+                    report["first_failure_database"] = {
+                        "phase": error.phase,
+                        "affected_tables": error.affected_tables,
+                    }
+                    report["first_failure_request_inventory"] = error.request_inventory
                 observation_path = (
                     campaign
                     / f"combination-{expected['combination_id'].replace('::', '--')}"

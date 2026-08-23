@@ -86,6 +86,13 @@ Review/Overview, Add Account/connections, Data Home, Diagnostics, and Reports. C
 initial route. Route state must survive reload and close/reopen. Finder/Dock-style reopen,
 hide/show, minimize/restore, native menus, and one-app second launch are installed-shell facts.
 
+Every ordinary Goals route path is query-only. Mount, navigation, reload, close/reopen, React
+remount, loading-gate pending/release, detail expansion, history, provenance, and printing must use
+only the accepted GET endpoints and leave the logical database unchanged. Goal check-in backfill is
+permitted only after an explicit successful user-authorized goal or data command. Qualification
+observations retain a bounded method/endpoint/count inventory, and any database-stability failure
+reports exact affected table names and count deltas without retaining row values or identifiers.
+
 ## Mutation inventory
 
 For every row in the checked-in mutation matrix, evidence maps:

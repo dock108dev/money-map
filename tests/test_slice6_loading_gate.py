@@ -117,3 +117,57 @@ def test_harness_release_is_private_bounded_and_contains_no_runtime_secret() -> 
         assert "session" not in retained
         assert "nonce" not in retained
         assert os.path.islink(release_path) is False
+
+
+def test_database_mutation_failure_reports_only_sanitized_tables_and_requests() -> None:
+    campaign = load_campaign()
+    before = {
+        "tables": {
+            "goal_check_ins": {"count": 0, "rows_sha256": "a" * 64},
+            "goal_check_in_components": {"count": 0, "rows_sha256": "b" * 64},
+        },
+        "table_counts": {"goal_check_ins": 0, "goal_check_in_components": 0},
+        "logical_digest_sha256": "c" * 64,
+    }
+    after = {
+        "tables": {
+            "goal_check_ins": {"count": 1, "rows_sha256": "d" * 64},
+            "goal_check_in_components": {"count": 12, "rows_sha256": "e" * 64},
+        },
+        "table_counts": {"goal_check_ins": 1, "goal_check_in_components": 12},
+        "logical_digest_sha256": "f" * 64,
+    }
+    observation = {
+        "request_inventory": [
+            {"method": "GET", "endpoint": "/api/v2/goals/primary", "count": 1},
+            {"method": "POST", "endpoint": "/api/v2/goals/check-ins/backfill", "count": 1},
+            {"method": "GET", "endpoint": "/api/private?identifier=unsafe", "count": 1},
+        ]
+    }
+    with pytest.raises(campaign.DatabaseMutationFailure) as raised:
+        campaign.require_database_unchanged(
+            before,
+            after,
+            classification="opening the installed route changed the database",
+            phase="initial-settled",
+            observation=observation,
+        )
+    failure = raised.value
+    assert failure.affected_tables == {
+        "goal_check_in_components": {
+            "before_count": 0,
+            "after_count": 12,
+            "count_delta": 12,
+            "rows_changed": True,
+        },
+        "goal_check_ins": {
+            "before_count": 0,
+            "after_count": 1,
+            "count_delta": 1,
+            "rows_changed": True,
+        },
+    }
+    assert failure.request_inventory == [
+        {"method": "GET", "endpoint": "/api/v2/goals/primary", "count": 1},
+        {"method": "POST", "endpoint": "/api/v2/goals/check-ins/backfill", "count": 1},
+    ]

@@ -376,6 +376,13 @@ pub struct MatrixApiObservation {
     pub response_class: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct MatrixRequestObservation {
+    pub method: String,
+    pub endpoint: String,
+    pub count: u32,
+}
+
 #[derive(Serialize)]
 struct MatrixResult<'a> {
     contract: &'static str,
@@ -385,6 +392,7 @@ struct MatrixResult<'a> {
     contract_digest_sha256: &'a str,
     ui: &'a MatrixUiObservation,
     api: &'a [MatrixApiObservation],
+    request_inventory: &'a [MatrixRequestObservation],
     raw_paths_retained: bool,
 }
 
@@ -620,6 +628,7 @@ impl QualificationContract {
         &self,
         ui: &MatrixUiObservation,
         api: &[MatrixApiObservation],
+        request_inventory: &[MatrixRequestObservation],
     ) -> Result<(), String> {
         let (state, route) = self
             .matrix_plan()
@@ -637,6 +646,17 @@ impl QualificationContract {
             || !matches!(ui.phase.as_str(), "pending" | "settled")
             || (state != "loading" && ui.phase != "settled")
             || !safe_matrix_observation(ui)
+            || request_inventory.iter().any(|item| {
+                item.count == 0
+                    || !matches!(
+                        item.method.as_str(),
+                        "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+                    )
+                    || !item.endpoint.starts_with("/api/")
+                    || item.endpoint.contains('?')
+                    || item.endpoint.len() > 256
+                    || !item.endpoint.is_ascii()
+            })
         {
             return Err("Synthetic qualification matrix observation was rejected.".to_string());
         }
@@ -648,6 +668,7 @@ impl QualificationContract {
             contract_digest_sha256: digest,
             ui,
             api,
+            request_inventory,
             raw_paths_retained: false,
         };
         let bytes = serde_json::to_vec_pretty(&result)
@@ -1180,11 +1201,29 @@ mod tests {
                     status: 409,
                     response_class: "unavailable".into(),
                 }],
+                &[MatrixRequestObservation {
+                    method: "GET".into(),
+                    endpoint: "/api/v2/cash-flow".into(),
+                    count: 1,
+                }],
             )
             .unwrap();
         let retained = fs::read_to_string(matrix.matrix_result_path.as_ref().unwrap()).unwrap();
         assert!(retained.contains(MATRIX_RESULT_CONTRACT));
+        assert!(retained.contains("/api/v2/cash-flow"));
         assert!(!retained.contains(campaign.path().to_str().unwrap()));
+
+        assert!(matrix
+            .write_matrix_result(
+                &observation,
+                &[],
+                &[MatrixRequestObservation {
+                    method: "GET".into(),
+                    endpoint: "/api/private?identifier=unsafe".into(),
+                    count: 1,
+                }],
+            )
+            .is_err());
 
         matrix.matrix_route = Some("not-a-route".into());
         assert!(matrix.validate(Some(campaign.path())).is_err());
@@ -1358,10 +1397,10 @@ mod tests {
             progress_count: 0,
             unsafe_console_errors: 0,
         };
-        assert!(matrix.write_matrix_result(&observation, &[]).is_err());
+        assert!(matrix.write_matrix_result(&observation, &[], &[]).is_err());
         observation.route = "cash-flow".into();
         observation.headings = vec!["/private/tmp/forbidden".into()];
-        assert!(matrix.write_matrix_result(&observation, &[]).is_err());
+        assert!(matrix.write_matrix_result(&observation, &[], &[]).is_err());
     }
 
     #[test]

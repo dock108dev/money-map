@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -88,6 +89,17 @@ async function renderOrdinary(options: FetchOptions = {}) {
   render(<GoalsView reloadVersion={0} />);
   await screen.findByRole("heading", { name: goalProgram.name });
   return fetch;
+}
+
+function writeCalls(fetch: ReturnType<typeof goalsFetch>) {
+  return fetch.mock.calls.filter(([, init]) => ![undefined, "GET"].includes(init?.method));
+}
+
+function backfillCalls(fetch: ReturnType<typeof goalsFetch>) {
+  return fetch.mock.calls.filter(
+    ([input, init]) =>
+      init?.method === "POST" && String(input) === "/api/v2/goals/check-ins/backfill",
+  );
 }
 
 afterEach(() => {
@@ -192,50 +204,38 @@ describe("Goals first answer", () => {
     expect(screen.getAllByText("Comparison unavailable: Comparison evidence is offline.")).not.toHaveLength(0);
   });
 
-  it("shows a concise created observation status", async () => {
-    await renderOrdinary({
-      backfill: {
-        ...unchangedObservation,
-        status: "created",
-        message: "A new financial-change observation was saved.",
-      },
-    });
-    expect(screen.getByText("Financial change saved.")).toHaveAttribute("data-observation-status", "created");
+  it("uses only the expected GET endpoints on ordinary mount", async () => {
+    const fetch = await renderOrdinary();
+    expect(writeCalls(fetch)).toEqual([]);
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+      "/api/v2/goals/primary",
+      "/api/v2/goals/position",
+      "/api/v2/goals/check-ins/latest",
+      "/api/v2/goals/comparison",
+      "/api/v2/goals/milestone",
+    ]);
+    expect(screen.queryByText("Financial change saved.")).not.toBeInTheDocument();
   });
 
-  it("does not repeat an unchanged observation above the ordinary result", async () => {
-    await renderOrdinary();
-    expect(screen.queryByText("The current financial evidence already has a saved observation.")).not.toBeInTheDocument();
-    expect(document.querySelector('[data-observation-status="unchanged"]')).not.toBeInTheDocument();
-  });
-
-  it("keeps the prior goal visible when source currentness blocks a check-in", async () => {
-    await renderOrdinary({
-      backfill: {
-        status: "not_current",
-        trigger: "load_backfill",
-        check_in: null,
-        retryable: true,
-        message: "No new goal observation was saved because one or more financial sources are not current. Retry Update data.",
-      },
+  it("keeps reload, remount, and duplicate Strict Mode effects read-only", async () => {
+    const fetch = goalsFetch();
+    vi.stubGlobal("fetch", fetch);
+    const view = render(<GoalsView reloadVersion={0} />);
+    await screen.findByRole("heading", { name: goalProgram.name });
+    view.rerender(<GoalsView reloadVersion={1} />);
+    await waitFor(() => {
+      expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/goals/primary"))
+        .toHaveLength(2);
     });
-    expect(screen.getByRole("heading", { name: goalProgram.name })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("No new goal observation was saved");
-    expect(screen.getByRole("alert")).toHaveTextContent("Retry Update data");
-  });
-
-  it("keeps the prior goal visible when the backfill command itself fails", async () => {
-    await renderOrdinary({
-      failures: {
-        "/api/v2/goals/check-ins/backfill": {
-          status: 503,
-          detail: "Observation persistence is unavailable",
-        },
-      },
-    });
-    expect(screen.getByRole("heading", { name: goalProgram.name })).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("No new goal observation was saved");
-    expect(screen.getByRole("alert")).toHaveTextContent("Use Update data to retry");
+    view.unmount();
+    render(
+      <StrictMode>
+        <GoalsView reloadVersion={0} />
+      </StrictMode>,
+    );
+    await screen.findByRole("heading", { name: goalProgram.name });
+    expect(writeCalls(fetch)).toEqual([]);
+    expect(screen.queryByText("Financial change saved.")).not.toBeInTheDocument();
   });
 });
 
@@ -276,6 +276,9 @@ describe("Goal selection and editing", () => {
       if (url === "/api/v2/goals/check-ins/latest") return json(latestState);
       if (url === "/api/v2/goals/comparison") return json(comparisonState("250.00"));
       if (url === "/api/v2/goals/milestone") return json(milestoneState());
+      if (url === "/api/v2/goals/check-ins/backfill" && init?.method === "POST") {
+        return json(unchangedObservation);
+      }
       return json({ detail: "Not found" }, 404);
     });
     vi.stubGlobal("fetch", fetch);
@@ -288,6 +291,7 @@ describe("Goal selection and editing", () => {
       expected_edit_token: candidateProgram.edit_token,
     }));
     expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/goals/position").length).toBeGreaterThan(1);
+    expect(backfillCalls(fetch as ReturnType<typeof goalsFetch>)).toHaveLength(1);
   });
 
   it("keeps candidate selection reviewable after a stale conflict", async () => {
@@ -298,6 +302,7 @@ describe("Goal selection and editing", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("This goal changed before selection");
     expect(screen.getByRole("button", { name: "Reload goals" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: candidateProgram.name })).toBeInTheDocument();
+    expect(backfillCalls(fetch)).toHaveLength(0);
   });
 
   it("submits exact edit strings, confirms compactly, and reloads through the explicit backfill command", async () => {
@@ -317,9 +322,74 @@ describe("Goal selection and editing", () => {
       reserved_for_goal: "2400.00",
     }));
     expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/goals/position").length).toBeGreaterThan(1);
-    expect(fetch.mock.calls.some(([input, init]) =>
-      init?.method === "POST" && String(input) === "/api/v2/goals/check-ins/backfill",
-    )).toBe(true);
+    expect(backfillCalls(fetch)).toHaveLength(1);
+    expect(screen.queryByText("Financial change saved.")).not.toBeInTheDocument();
+  });
+
+  it("shows financial-change success only after an authorized edit creates one observation", async () => {
+    const fetch = await renderOrdinary({
+      backfill: {
+        ...unchangedObservation,
+        status: "created",
+        message: "A new financial-change observation was saved.",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit goal" }));
+    fireEvent.change(screen.getByLabelText("Reserved amount"), { target: { value: "2400.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save goal" }));
+    expect(await screen.findByText("Financial change saved.")).toHaveAttribute(
+      "data-observation-status",
+      "created",
+    );
+    expect(backfillCalls(fetch)).toHaveLength(1);
+  });
+
+  it("keeps a successful edit visible when its explicit observation is not current", async () => {
+    const fetch = await renderOrdinary({
+      backfill: {
+        status: "not_current",
+        trigger: "load_backfill",
+        check_in: null,
+        retryable: true,
+        message: "No new goal observation was saved because one or more financial sources are not current. Retry Update data.",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit goal" }));
+    fireEvent.change(screen.getByLabelText("Reserved amount"), { target: { value: "2400.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save goal" }));
+    expect(await screen.findByText("Goal updated.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("No new goal observation was saved");
+    expect(screen.queryByText("Financial change saved.")).not.toBeInTheDocument();
+    expect(backfillCalls(fetch)).toHaveLength(1);
+  });
+
+  it("does not backfill or show success after a rejected edit", async () => {
+    const fetch = await renderOrdinary({ patchStatus: 409 });
+    fireEvent.click(screen.getByRole("button", { name: "Edit goal" }));
+    fireEvent.change(screen.getByLabelText("Goal name"), { target: { value: "Rejected change" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save goal" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your entries are preserved");
+    expect(backfillCalls(fetch)).toHaveLength(0);
+    expect(screen.queryByText("Financial change saved.")).not.toBeInTheDocument();
+  });
+
+  it("does not show false success when observation persistence fails after a successful edit", async () => {
+    const fetch = await renderOrdinary({
+      failures: {
+        "/api/v2/goals/check-ins/backfill": {
+          status: 503,
+          detail: "Observation persistence is unavailable",
+        },
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit goal" }));
+    fireEvent.change(screen.getByLabelText("Reserved amount"), { target: { value: "2400.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save goal" }));
+    expect(await screen.findByText("Goal updated.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("No new goal observation was saved");
+    expect(screen.getByRole("alert")).toHaveTextContent("Use Update data to retry");
+    expect(screen.queryByText("Financial change saved.")).not.toBeInTheDocument();
+    expect(backfillCalls(fetch)).toHaveLength(1);
   });
 
   it("associates local validation errors and does not submit an invalid reservation", async () => {
@@ -370,6 +440,7 @@ describe("Progressive evidence", () => {
       "/api/v2/goals/check-ins?limit=5&cursor=older-cursor",
       expect.any(Object),
     );
+    expect(writeCalls(fetch)).toEqual([]);
   });
 
   it("never renders more than 25 timeline entries", async () => {
@@ -397,6 +468,7 @@ describe("Progressive evidence", () => {
     expect(screen.getByText("accessible cash: $6,000.00")).toBeInTheDocument();
     expect(screen.queryByText("balance:synthetic:1")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(".sqlite3");
+    expect(writeCalls(fetch)).toEqual([]);
   });
 
   it("keeps a provenance failure inside its opened detail", async () => {
@@ -442,5 +514,6 @@ describe("Progressive evidence", () => {
     expect(document.querySelector(".goal-primary-card .print-only")).toHaveTextContent(`Source fingerprint: ${goalHash}`);
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/goals/provenance")).toBe(true);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/goals/check-ins?"))).toBe(true);
+    expect(writeCalls(fetch)).toEqual([]);
   });
 });

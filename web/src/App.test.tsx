@@ -447,8 +447,15 @@ describe("application states", () => {
     expect(navigation).toHaveAttribute("aria-label", "Primary navigation");
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/life-plan"))).toBe(false);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/overview"))).toBe(false);
+    const callsBeforeGoals = fetch.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Goals" }));
     expect(await screen.findByRole("heading", { name: "Quiet place by the water" })).toBeInTheDocument();
+    expect(
+      fetch.mock.calls
+        .slice(callsBeforeGoals)
+        .filter(([, init]) => ![undefined, "GET"].includes(init?.method)),
+    ).toEqual([]);
+    expect(screen.queryByText("Financial change saved.")).not.toBeInTheDocument();
   });
 
   it("keeps the exact visible navigation order and exposes the conditional Review count", async () => {

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
@@ -17,7 +18,8 @@ use crate::data_home::DataHomePaths;
 use crate::lifecycle::{LifecycleMachine, LifecycleState};
 use crate::proxy::health_ready;
 use crate::qualification::{
-    parse_attestation, InstalledAttestation, QualificationContract, QualificationResponseGate,
+    parse_attestation, InstalledAttestation, MatrixRequestObservation, QualificationContract,
+    QualificationResponseGate,
 };
 use serde::Serialize;
 
@@ -60,6 +62,7 @@ pub struct RuntimeController {
     sidecar_path: PathBuf,
     qualification: Option<QualificationContract>,
     qualification_gate: Option<Arc<QualificationResponseGate>>,
+    qualification_requests: Mutex<BTreeMap<(String, String), u32>>,
 }
 
 enum OutputEvent {
@@ -98,6 +101,7 @@ impl RuntimeController {
             sidecar_path,
             qualification,
             qualification_gate,
+            qualification_requests: Mutex::new(BTreeMap::new()),
         }))
     }
 
@@ -127,6 +131,39 @@ impl RuntimeController {
 
     pub fn qualification(&self) -> Option<QualificationContract> {
         self.qualification.clone()
+    }
+
+    pub fn record_qualification_request(&self, method: &str, path: &str) {
+        if self
+            .qualification
+            .as_ref()
+            .and_then(|value| value.matrix_plan())
+            .is_none()
+        {
+            return;
+        }
+        let endpoint = path.split_once('?').map_or(path, |(value, _)| value);
+        let mut requests = self
+            .qualification_requests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let count = requests
+            .entry((method.to_string(), endpoint.to_string()))
+            .or_insert(0);
+        *count = count.saturating_add(1);
+    }
+
+    pub fn qualification_request_inventory(&self) -> Vec<MatrixRequestObservation> {
+        self.qualification_requests
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .map(|((method, endpoint), count)| MatrixRequestObservation {
+                method: method.clone(),
+                endpoint: endpoint.clone(),
+                count: *count,
+            })
+            .collect()
     }
 
     pub fn hold_qualification_dashboard_request(&self, path: &str) -> Result<(), String> {

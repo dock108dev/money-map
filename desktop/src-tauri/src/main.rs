@@ -576,6 +576,7 @@ async fn desktop_fetch(
     let controller = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
         validate_frontend_request(&request)?;
+        controller.record_qualification_request(&request.method, &request.path);
         if request.method == "GET" {
             controller.hold_qualification_dashboard_request(&request.path)?;
         }
@@ -685,7 +686,8 @@ fn desktop_qualification_observe(
             response_class: matrix_response_class(response.status),
         });
     }
-    qualification.write_matrix_result(&observation, &api)
+    let request_inventory = state.qualification_request_inventory();
+    qualification.write_matrix_result(&observation, &api, &request_inventory)
 }
 
 fn qualification_observer_script(contract: &QualificationContract, sequence: u8) -> Option<String> {
