@@ -41,9 +41,12 @@ def test_release_contract_is_frozen_to_slice5_identity() -> None:
 
 def test_native_exit_request_owns_runtime_shutdown_before_process_exit() -> None:
     source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
-    assert "RunEvent::ExitRequested { .. } | RunEvent::Exit =>" in source
-    exit_handler = source.split("RunEvent::ExitRequested { .. } | RunEvent::Exit =>", 1)[1]
-    assert "controller.shutdown();" in exit_handler.split("RunEvent::Reopen", 1)[0]
+    assert "RunEvent::ExitRequested { api, .. } =>" in source
+    exit_handler = source.split("RunEvent::ExitRequested { api, .. } =>", 1)[1]
+    exit_handler = exit_handler.split("RunEvent::Exit =>", 1)[0]
+    assert "api.prevent_exit();" in exit_handler
+    assert "controller.shutdown();" in exit_handler
+    assert "handle.exit(0);" in exit_handler
 
 
 def test_release_builder_embeds_the_exact_source_commit_in_about() -> None:

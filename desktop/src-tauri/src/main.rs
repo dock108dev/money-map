@@ -6,7 +6,7 @@ mod runtime;
 
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::{fs, os::unix::fs::PermissionsExt};
 
@@ -26,6 +26,8 @@ const OPERATION_MENU_IDS: &[&str] = &[
     "generate-report",
     "export-diagnostics",
 ];
+
+static EXIT_CLEANUP_STARTED: AtomicBool = AtomicBool::new(false);
 
 const MENU_ACTION_IDS: &[&str] = &[
     "import-private-inbox",
@@ -728,7 +730,16 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Money Map native shell could not initialize");
     app.run(|handle, event| match event {
-        RunEvent::ExitRequested { .. } | RunEvent::Exit => {
+        RunEvent::ExitRequested { api, .. } => {
+            if !EXIT_CLEANUP_STARTED.swap(true, Ordering::SeqCst) {
+                api.prevent_exit();
+                if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
+                    controller.shutdown();
+                }
+                handle.exit(0);
+            }
+        }
+        RunEvent::Exit => {
             if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
                 controller.shutdown();
             }
