@@ -644,9 +644,33 @@ describe("account-first views", () => {
   it("shows an explicit empty Accounts state", () => {
     render(<AccountsView data={{ ...accounts, accounts: [] }} />);
     expect(screen.getByRole("status")).toHaveTextContent("No accounts are connected");
+    expect(screen.getByText("Net worth unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("$0 net worth")).not.toBeInTheDocument();
     const budget = document.querySelector('[data-copy-budget="utility-page-heading"]');
     expect(budget).not.toBeNull();
     expect(proseWordCount(budget!)).toBeLessThanOrEqual(COPY_BUDGETS["utility-page-heading"]);
+  });
+
+  it("does not fabricate zero wealth without account-value evidence", () => {
+    render(<WealthView data={{
+      ...wealth,
+      as_of: null,
+      accessible: { total: "0.00", cash: "0.00", sellable_investments: "0.00", accounts: [] },
+      excluded: { total: "0.00", message: "No excluded evidence" },
+      fidelity: {
+        ...wealth.fidelity,
+        current_value: "0.00",
+        accounts: [],
+        history: [],
+        recent_observation: null,
+        performance_periods: [],
+        funding: { ...wealth.fidelity.funding, you_contributed: "0.00", employer_contributed: "0.00", total_payroll_funding: "0.00" },
+      },
+      paycheck: null,
+    }} />);
+    expect(screen.getByRole("heading", { name: "Wealth unavailable" })).toBeInTheDocument();
+    expect(screen.getByText(/Use Add account to add a supported account or value/)).toBeInTheDocument();
+    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
   });
 
   it("prints dated Overview and Wealth evidence with collapsed detail still present", () => {
@@ -838,5 +862,13 @@ describe("account-first views", () => {
     expect(screen.getByRole("complementary", { name: "Paycheck details" })).toBeInTheDocument();
     expect(screen.getByText("Matched to 2 Plaid deposits.")).toBeInTheDocument();
     expect(screen.queryByText(/unresolved/i)).not.toBeInTheDocument();
+  });
+
+  it("does not fabricate zero income totals without paycheck evidence", () => {
+    render(<IncomeView data={{ ...payroll, rows: [] }} />);
+    expect(screen.getByRole("heading", { name: "Income unavailable" })).toBeInTheDocument();
+    expect(screen.getByText(/Use Add account to import a payroll statement/)).toBeInTheDocument();
+    expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Income date range")).not.toBeInTheDocument();
   });
 });

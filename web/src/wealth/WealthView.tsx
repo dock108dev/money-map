@@ -39,6 +39,21 @@ export default function WealthView({ data }: { data: WealthDashboard }) {
   const historyRange = Math.max(historyMax - historyMin, 1);
   const fundedAccounts = data.fidelity.accounts.filter((account) => Number(account.current_value ?? 0) !== 0);
   const observation = data.fidelity.recent_observation;
+  const hasWealthEvidence = Boolean(
+    data.as_of || data.accessible.accounts.length || data.fidelity.accounts.length || data.fidelity.history.length || data.paycheck,
+  );
+
+  if (!hasWealthEvidence) {
+    return (
+      <div className="view-stack wealth-view concise-wealth" data-copy-budget="wealth-hero-result">
+        <section className="simple-page-heading"><div><span className="eyebrow">Money you can use and investments you can measure</span><h1>Wealth</h1></div></section>
+        <section className="panel compact-panel empty-state" role="status">
+          <h2>Wealth unavailable</h2>
+          <p>No account value evidence has been imported. Use Add account to add a supported account or value, then return to Wealth.</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="view-stack wealth-view concise-wealth" data-copy-budget="wealth-hero-result">

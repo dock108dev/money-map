@@ -514,7 +514,7 @@ export function AccountsView({ data }: { data: AccountsDashboard }) {
           <span className="eyebrow">{data.accounts.length} accounts</span>
           <h1 data-prose>Accounts</h1>
         </div>
-        <strong>{currency(data.totals.net_worth)} net worth</strong>
+        <strong>{data.accounts.length ? `${currency(data.totals.net_worth)} net worth` : "Net worth unavailable"}</strong>
       </section>
       <div className="account-groups">
         {categories.map((category) => {
@@ -814,6 +814,7 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
     | "employer_account_funding"
     | "total_paycheck_value"
   >) => fromCents(rows.reduce((total, row) => total + toCents(row[field]), 0));
+  const hasImportedPaychecks = data.rows.length > 0;
 
   return (
     <div className="view-stack account-first-view">
@@ -824,7 +825,7 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
         </div>
         <strong>{rows.length} paychecks</strong>
       </section>
-      <div className="date-range" aria-label="Income date range">
+      {hasImportedPaychecks && <div className="date-range" aria-label="Income date range">
         <label>
           From
           <input
@@ -847,8 +848,17 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
             onInput={(event) => setEndDate(event.currentTarget.value)}
           />
         </label>
-      </div>
-      <section className="overview-metrics income-metrics">
+      </div>}
+      {rows.length === 0 ? (
+        <section className="panel compact-panel empty-state" role="status">
+          <h2>{hasImportedPaychecks ? "No paychecks in this period" : "Income unavailable"}</h2>
+          <p>
+            {hasImportedPaychecks
+              ? "Choose a date range that includes imported paycheck evidence."
+              : "No paycheck evidence has been imported. Use Add account to import a payroll statement, then return to Income."}
+          </p>
+        </section>
+      ) : <><section className="overview-metrics income-metrics">
         <MetricCard label="Gross" value={currencyExact(sum("gross_earnings"))} />
         <MetricCard label="Spendable cash" value={currencyExact(sum("net_payment"))} tone="green" />
         <MetricCard label="Your account funding" value={currencyExact(sum("employee_account_funding"))} />
@@ -884,6 +894,7 @@ export function IncomeView({ data }: { data: PayrollHistory }) {
           ))}
         </div>
       </section>
+      </>}
       {selected && <PayrollDetail entry={selected} onClose={() => setSelected(null)} />}
     </div>
   );
