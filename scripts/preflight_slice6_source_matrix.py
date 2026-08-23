@@ -155,7 +155,11 @@ def materialize_diagnostic() -> dict[str, Any]:
     loading_checks = {
         "loading_copy_is_heading_not_body_text": "<h1>Loading accounts…</h1>" in loading_source
         and "<p>Loading accounts…</p>" not in loading_source,
-        "loading_surface_is_busy": 'className="loading-state" aria-busy="true"' in loading_source,
+        "loading_surface_is_busy": (
+            'data-qualification-loading="global-dashboard"' in loading_source
+            and 'aria-busy="true"' in loading_source
+            and loading_source.count('data-qualification-loading="global-dashboard"') == 1
+        ),
         "loading_surface_is_polite": 'aria-live="polite"' in loading_source,
         "loading_driver_has_explicit_release": "release_loading_gate" in driver_sources
         and "explicit_harness_release" in driver_sources,

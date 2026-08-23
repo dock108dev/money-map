@@ -257,8 +257,15 @@ def test_financial_webview_is_constructed_only_after_native_startup_passes() -> 
     safe_capability = json.loads(
         (PROJECT_ROOT / "desktop/src-tauri/capabilities/safe-error.json").read_text()
     )
+    main_capability = json.loads(
+        (PROJECT_ROOT / "desktop/src-tauri/capabilities/default.json").read_text()
+    )
+    assert "allow-desktop-qualification-observer-failure" in main_capability["permissions"]
+    artifact_scanner = (PROJECT_ROOT / "scripts/check_desktop_artifact.py").read_text()
+    assert '"allow-desktop-qualification-observer-failure"' in artifact_scanner
     assert "allow-desktop-fetch" not in safe_capability["permissions"]
     assert "allow-desktop-qualification-observe" not in safe_capability["permissions"]
+    assert "allow-desktop-qualification-observer-failure" not in safe_capability["permissions"]
     assert all(
         forbidden not in safe_capability["permissions"]
         for forbidden in (
@@ -281,6 +288,36 @@ def test_matrix_observer_uses_the_accessible_navigation_label() -> None:
     observer = source[source.index("fn qualification_observer_script") :]
     assert 'button.getAttribute("aria-label")' in observer
     assert "buttonLabel(button) === label" in observer
+
+
+def test_matrix_observer_distinguishes_global_and_route_local_loading() -> None:
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    observer = source[source.index("fn qualification_observer_script") :]
+    assert 'data-qualification-loading="global-dashboard"' in observer
+    assert 'querySelectorAll(".loading-state")' in observer
+    assert "!element.matches(globalSelector)" in observer
+    assert "new MutationObserver(schedule)" in observer
+    assert "setInterval" not in observer
+    assert "attempts" not in observer
+    assert "window.location.hash === expectedHashes[requestedRoute]" in observer
+    assert 'await observe("pending")' in observer
+    assert 'await observe("settled")' in observer
+    assert 'fail("observer-timeout", true)' in observer
+    assert 'fail("native-observation-rejected")' in observer
+
+
+def test_global_loading_marker_is_exclusive_to_the_sealed_app_gate() -> None:
+    source = (PROJECT_ROOT / "web/src/App.tsx").read_text()
+    marker = 'data-qualification-loading="global-dashboard"'
+    assert source.count(marker) == 1
+    marked = source[source.index(marker) - 120 : source.index(marker) + 260]
+    assert 'aria-busy="true"' in marked
+    assert 'aria-live="polite"' in marked
+    assert "Loading accounts…" in marked
+    overview_fallback = source[
+        source.index("Opening Overview…") - 240 : source.index("Opening Overview…") + 40
+    ]
+    assert marker not in overview_fallback
 
 
 def test_cleanup_failure_labels_are_sanitized_and_specific() -> None:

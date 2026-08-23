@@ -462,7 +462,12 @@ export default function App() {
 
   if (!data) {
     return (
-      <main className="loading-state" aria-busy="true" aria-live="polite">
+      <main
+        className="loading-state"
+        data-qualification-loading="global-dashboard"
+        aria-busy="true"
+        aria-live="polite"
+      >
         <div className="loading-mark" aria-hidden="true">M</div>
         <h1>Loading accounts…</h1>
       </main>

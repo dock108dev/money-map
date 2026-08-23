@@ -331,10 +331,12 @@ describe("application states", () => {
     const loading = heading.closest("main");
     expect(heading).toBeVisible();
     expect(loading).toHaveClass("loading-state");
+    expect(loading).toHaveAttribute("data-qualification-loading", "global-dashboard");
     expect(loading).toHaveAttribute("aria-busy", "true");
     expect(loading).toHaveAttribute("aria-live", "polite");
     expect(screen.queryByRole("heading", { name: "Cash Flow" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-qualification-loading="global-dashboard"]')).toHaveLength(1);
   });
 
   it("withholds completed evidence until every initial dashboard read settles", async () => {
@@ -574,7 +576,10 @@ describe("application states", () => {
     vi.stubGlobal("fetch", fetch);
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
-    expect(await screen.findByRole("status", { name: "Loading Overview" })).toBeInTheDocument();
+    const overviewLoading = await screen.findByRole("status", { name: "Loading Overview" });
+    expect(overviewLoading).toBeInTheDocument();
+    expect(overviewLoading).not.toHaveAttribute("data-qualification-loading");
+    expect(document.querySelector('[data-qualification-loading="global-dashboard"]')).toBeNull();
     resolveOverview?.(new Response(JSON.stringify({ detail: "/private/secret should not render" }), { status: 503, headers: { "Content-Type": "application/json" } }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Overview unavailable");
     expect(screen.queryByText(/private\/secret/)).not.toBeInTheDocument();

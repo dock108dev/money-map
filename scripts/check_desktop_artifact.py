@@ -44,6 +44,7 @@ APP_COMMANDS = {
     "allow-desktop-set-operations-enabled",
     "allow-desktop-open-external",
     "allow-desktop-qualification-observe",
+    "allow-desktop-qualification-observer-failure",
 }
 
 

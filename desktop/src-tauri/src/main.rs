@@ -14,7 +14,9 @@ use std::{fs, os::unix::fs::PermissionsExt};
 use data_home::DataHomePaths;
 use metadata::{about_info_for_mode, native_about_metadata, AboutInfo, BUILD_COMMIT};
 use proxy::{forward, validate_frontend_request, DesktopRequest, DesktopResponse};
-use qualification::{MatrixApiObservation, MatrixUiObservation, QualificationContract};
+use qualification::{
+    MatrixApiObservation, MatrixObserverFailure, MatrixUiObservation, QualificationContract,
+};
 use runtime::{RuntimeController, RuntimeStatus};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
@@ -668,7 +670,33 @@ fn desktop_qualification_observe(
     let (_, route) = qualification
         .matrix_plan()
         .ok_or_else(|| "Synthetic qualification matrix observation was rejected.".to_string())?;
-    let (port, session) = state.target()?;
+    let native_failure = |classification: &str, stage: &str| MatrixObserverFailure {
+        sequence: observation.sequence,
+        requested_route: route.to_string(),
+        expected_phase: observation.phase.clone(),
+        last_completed_stage: stage.to_string(),
+        failure_classification: classification.to_string(),
+        hash_matched: observation.location_hash
+            == planned_qualification_hash(Some(&qualification)).unwrap_or_default(),
+        global_loading_present: observation.loading_visible,
+        route_local_loading_present: false,
+        native_invocation_accepted: true,
+        timeout_classification: false,
+    };
+    if !qualification.valid_matrix_observation(&observation, &[]) {
+        let _ = qualification.write_matrix_failure(&native_failure(
+            "native-validation-rejected",
+            "pending-observed",
+        ));
+        return Err("Synthetic qualification matrix observation was rejected.".to_string());
+    }
+    let (port, session) = state.target().map_err(|_| {
+        let _ = qualification.write_matrix_failure(&native_failure(
+            "native-api-probe-failed",
+            "native-api-probe",
+        ));
+        "Synthetic qualification matrix API probe failed safely.".to_string()
+    })?;
     let mut api = Vec::new();
     for (endpoint_class, path) in matrix_api_endpoints(route) {
         let response = forward(
@@ -679,7 +707,14 @@ fn desktop_qualification_observe(
                 method: "GET".to_string(),
                 body: None,
             },
-        )?;
+        )
+        .map_err(|_| {
+            let _ = qualification.write_matrix_failure(&native_failure(
+                "native-api-probe-failed",
+                "native-api-probe",
+            ));
+            "Synthetic qualification matrix API probe failed safely.".to_string()
+        })?;
         api.push(MatrixApiObservation {
             endpoint_class,
             status: response.status,
@@ -687,7 +722,35 @@ fn desktop_qualification_observe(
         });
     }
     let request_inventory = state.qualification_request_inventory();
-    qualification.write_matrix_result(&observation, &api, &request_inventory)
+    if !qualification.valid_matrix_observation(&observation, &request_inventory) {
+        let _ = qualification.write_matrix_failure(&native_failure(
+            "native-validation-rejected",
+            "native-api-probe",
+        ));
+        return Err("Synthetic qualification matrix observation was rejected.".to_string());
+    }
+    qualification
+        .write_matrix_result(&observation, &api, &request_inventory)
+        .map_err(|_| {
+            let _ = qualification
+                .write_matrix_failure(&native_failure("evidence-write-failed", "evidence-write"));
+            "Synthetic qualification matrix evidence write failed safely.".to_string()
+        })
+}
+
+#[tauri::command]
+fn desktop_qualification_observer_failure(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<RuntimeController>>,
+    failure: MatrixObserverFailure,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Synthetic qualification matrix failure was rejected.".to_string());
+    }
+    state
+        .qualification()
+        .ok_or_else(|| "Synthetic qualification matrix failure was rejected.".to_string())?
+        .write_matrix_failure(&failure)
 }
 
 fn qualification_observer_script(contract: &QualificationContract, sequence: u8) -> Option<String> {
@@ -695,7 +758,7 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
     let route_json = serde_json::to_string(route).ok()?;
     let loading = state == "loading";
     Some(format!(
-        r#"(() => {{
+        r##"(() => {{
           const requestedRoute = {route_json};
           const boundedLoading = {loading};
           let consoleErrors = 0;
@@ -707,17 +770,72 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
             "retirement": "Retirement", "lab": "Lab", "overview": "Overview",
             "add-account": "Add account"
           }};
-          let attempts = 0;
-          let loadingRouteApplied = false;
-          let loadingSettledAt = 0;
+          const expectedHashes = {{
+            "cash-flow": "#view=cash-flow", "goals": "#view=goals",
+            "activity": "#view=activity", "accounts": "#view=accounts",
+            "income": "#view=income", "wealth": "#view=wealth",
+            "retirement": "#view=retirement", "lab": "#view=lab",
+            "overview": "#view=overview", "add-account": "#view=connections"
+          }};
+          const expectedHeadings = {{
+            "cash-flow": "Cash Flow", "goals": "Goals", "activity": "Activity",
+            "accounts": "Accounts", "income": "Income", "wealth": "Wealth",
+            "retirement": "Retirement", "lab": "Life Lab", "overview": "Overview",
+            "add-account": "Add account", "data-home": "Data safety"
+          }};
+          const globalSelector = '[data-qualification-loading="global-dashboard"]';
+          let stage = boundedLoading ? "awaiting-global-loading" : "route-requested";
+          let expectedPhase = boundedLoading ? "pending" : "settled";
+          let routeRequested = false;
+          let finished = false;
+          let inFlight = false;
+          let scheduled = false;
           const text = (element) => (element?.textContent || "").replace(/\s+/g, " ").trim();
           const values = (selector, limit) => Array.from(document.querySelectorAll(selector))
             .map(text).filter(Boolean).slice(0, limit);
           const buttonLabel = (button) => (button.getAttribute("aria-label") || text(button))
             .replace(/, \d+ issues$/u, "");
-          const clickLabel = (label) => Array.from(document.querySelectorAll("button"))
-            .find((button) => buttonLabel(button) === label)?.click();
-          const observe = (phase) => window.__TAURI_INTERNALS__.invoke(
+          const routeButton = () => {{
+            const label = routeLabels[requestedRoute]
+              || (requestedRoute === "data-home" ? "Data safety" : null)
+              || (requestedRoute === "diagnostics" ? "Diagnostics" : null);
+            return label ? Array.from(document.querySelectorAll("button"))
+              .find((button) => buttonLabel(button) === label) : null;
+          }};
+          const globalLoading = () => document.querySelector(globalSelector);
+          const routeLocalLoading = () => Array.from(document.querySelectorAll(".loading-state"))
+            .some((element) => !element.matches(globalSelector));
+          const hashMatched = () => !expectedHashes[requestedRoute]
+            || window.location.hash === expectedHashes[requestedRoute];
+          const routeObservable = () => {{
+            const heading = expectedHeadings[requestedRoute];
+            if (heading && !Array.from(document.querySelectorAll("h1"))
+              .some((element) => text(element) === heading)) return false;
+            if (requestedRoute === "diagnostics"
+              && !document.querySelector('[role="dialog"],[role="alertdialog"]')) return false;
+            if (requestedRoute === "reports" && !Array.from(document.querySelectorAll("button"))
+              .some((button) => buttonLabel(button) === "Generate report")) return false;
+            return Boolean(heading || requestedRoute === "diagnostics" || requestedRoute === "reports");
+          }};
+          const failureFacts = (classification, timeout) => ({{ failure: {{
+            sequence: {sequence}, requested_route: requestedRoute,
+            expected_phase: expectedPhase, last_completed_stage: stage,
+            failure_classification: classification, hash_matched: hashMatched(),
+            global_loading_present: Boolean(globalLoading()),
+            route_local_loading_present: routeLocalLoading(),
+            native_invocation_accepted: classification !== "native-observation-rejected",
+            timeout_classification: timeout
+          }} }});
+          const fail = (classification, timeout = false) => {{
+            if (finished) return;
+            finished = true;
+            observer.disconnect();
+            window.clearTimeout(deadline);
+            void window.__TAURI_INTERNALS__.invoke(
+              "desktop_qualification_observer_failure", failureFacts(classification, timeout)
+            );
+          }};
+          const observe = async (phase) => window.__TAURI_INTERNALS__.invoke(
             "desktop_qualification_observe", {{ observation: {{
               sequence: {sequence}, phase, route: requestedRoute,
               location_hash: window.location.hash,
@@ -728,38 +846,74 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
               disabled_buttons: Array.from(document.querySelectorAll("button:disabled"))
                 .map(text).filter(Boolean).slice(0, 64),
               messages: values("main p,main small,main dt,main dd,main strong,.simple-empty", 64),
-              loading_visible: Boolean(document.querySelector(".loading-state")),
-              loading_busy: document.querySelector(".loading-state")?.getAttribute("aria-busy") === "true",
-              loading_live: document.querySelector(".loading-state")?.getAttribute("aria-live") || "",
+              loading_visible: Boolean(globalLoading()),
+              loading_busy: globalLoading()?.getAttribute("aria-busy") === "true",
+              loading_live: globalLoading()?.getAttribute("aria-live") || "",
               dialog_count: document.querySelectorAll('[role="dialog"],[role="alertdialog"]').length,
               progress_count: document.querySelectorAll('[role="progressbar"],progress').length,
               unsafe_console_errors: consoleErrors
             }} }}
           );
-          const timer = window.setInterval(() => {{
-            attempts += 1;
-            if (boundedLoading && attempts === 2) {{
-              void observe("pending");
+          const evaluate = async () => {{
+            scheduled = false;
+            if (finished || inFlight) return;
+            const global = globalLoading();
+            if (boundedLoading && stage === "awaiting-global-loading") {{
+              const exactPending = global
+                && global.getAttribute("aria-busy") === "true"
+                && global.getAttribute("aria-live") === "polite"
+                && values("h1", 16).length === 1
+                && values("h1", 16)[0] === "Loading accounts…"
+                && values("button", 64).length === 0
+                && hashMatched();
+              if (!exactPending) return;
+              inFlight = true;
+              try {{
+                await observe("pending");
+                stage = "pending-observed";
+                expectedPhase = "settled";
+              }} catch (_) {{ fail("native-observation-rejected"); }}
+              finally {{ inFlight = false; }}
+              schedule();
               return;
             }}
-            if (boundedLoading && document.querySelector(".loading-state")) return;
-            if (boundedLoading && !loadingRouteApplied) {{
-              loadingRouteApplied = true;
-              loadingSettledAt = attempts;
-              if (routeLabels[requestedRoute]) clickLabel(routeLabels[requestedRoute]);
-              else if (requestedRoute === "data-home") clickLabel("Data safety");
-              else if (requestedRoute === "diagnostics") clickLabel("Diagnostics");
-            }} else if (!boundedLoading && attempts === 4) {{
-              if (routeLabels[requestedRoute]) clickLabel(routeLabels[requestedRoute]);
-              else if (requestedRoute === "data-home") clickLabel("Data safety");
-              else if (requestedRoute === "diagnostics") clickLabel("Diagnostics");
+            if (boundedLoading && global) {{
+              stage = "awaiting-global-release";
+              return;
             }}
-            if (boundedLoading && attempts - loadingSettledAt < 10) return;
-            if (!boundedLoading && attempts < 40) return;
-            window.clearInterval(timer);
-            void observe("settled");
-          }}, 100);
-        }})();"#
+            if (!routeRequested) {{
+              const button = routeButton();
+              if (button) button.click();
+              else if (!["reports"].includes(requestedRoute)) {{
+                fail("route-control-unavailable");
+                return;
+              }}
+              routeRequested = true;
+              stage = "route-requested";
+              schedule();
+              return;
+            }}
+            stage = "awaiting-route";
+            if (!hashMatched() || routeLocalLoading() || !routeObservable()) return;
+            inFlight = true;
+            try {{
+              await observe("settled");
+              finished = true;
+              observer.disconnect();
+              window.clearTimeout(deadline);
+            }} catch (_) {{ fail("native-observation-rejected"); }}
+            finally {{ inFlight = false; }}
+          }};
+          const schedule = () => {{
+            if (scheduled || finished) return;
+            scheduled = true;
+            window.requestAnimationFrame(() => {{ void evaluate(); }});
+          }};
+          const observer = new MutationObserver(schedule);
+          observer.observe(document.documentElement, {{ childList: true, subtree: true, attributes: true }});
+          const deadline = window.setTimeout(() => fail("observer-timeout", true), 15_000);
+          schedule();
+        }})();"##
     ))
 }
 
@@ -928,7 +1082,8 @@ fn main() {
             desktop_export_diagnostics,
             desktop_set_operations_enabled,
             desktop_open_external,
-            desktop_qualification_observe
+            desktop_qualification_observe,
+            desktop_qualification_observer_failure
         ])
         .setup(|app| {
             let qualification =

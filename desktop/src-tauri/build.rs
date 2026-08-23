@@ -19,6 +19,7 @@ fn main() {
         "desktop_set_operations_enabled",
         "desktop_open_external",
         "desktop_qualification_observe",
+        "desktop_qualification_observer_failure",
     ];
     tauri_build::try_build(
         tauri_build::Attributes::new()

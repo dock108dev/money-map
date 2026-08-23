@@ -30,6 +30,7 @@ from tests.release_state_materializer import materialize_release_state  # noqa: 
 
 CONTRACT = "money-map-slice6-installed-state-route-matrix-v1"
 OBSERVATION_CONTRACT = "money-map-installed-matrix-observation-v1"
+OBSERVER_FAILURE_CONTRACT = "money-map-installed-matrix-observer-failure-v1"
 GATE_CHALLENGE_CONTRACT = "money-map-qualification-gate-challenge-v1"
 GATE_RELEASE_CONTRACT = "money-map-qualification-gate-release-v1"
 IMPLEMENTED_SETUP_DRIVERS = frozenset(
@@ -46,6 +47,14 @@ IMPLEMENTED_SETUP_DRIVERS = frozenset(
 
 class MatrixFailure(RuntimeError):
     """A sealed expectation and installed observation differ."""
+
+
+class ObserverFailure(MatrixFailure):
+    """The installed observer produced a bounded authoritative failure."""
+
+    def __init__(self, failure: dict[str, Any]) -> None:
+        super().__init__(f"installed observer reported {failure['failure_classification']}")
+        self.failure = failure
 
 
 class DatabaseMutationFailure(MatrixFailure):
@@ -193,7 +202,46 @@ def _json_value(value: object) -> object:
 
 def wait_observation(path: Path, *, sequence: int, timeout: float = 20) -> dict[str, Any]:
     started = time.monotonic()
+    failure_path = path.with_name(f"matrix-observer-failure-{sequence}.json")
     while time.monotonic() - started < timeout:
+        if failure_path.is_file() and not failure_path.is_symlink():
+            try:
+                failure = json.loads(failure_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                time.sleep(0.05)
+                continue
+            required = {
+                "contract",
+                "result",
+                "state",
+                "route",
+                "contract_digest_sha256",
+                "candidate_sha256",
+                "source_commit",
+                "sequence",
+                "requested_route",
+                "expected_phase",
+                "last_completed_stage",
+                "failure_classification",
+                "hash_matched",
+                "global_loading_present",
+                "route_local_loading_present",
+                "native_invocation_accepted",
+                "timeout_classification",
+                "raw_paths_retained",
+                "private_content_retained",
+            }
+            if (
+                isinstance(failure, dict)
+                and set(failure) == required
+                and failure.get("contract") == OBSERVER_FAILURE_CONTRACT
+                and failure.get("result") == "failed"
+                and failure.get("sequence") == sequence
+                and failure.get("raw_paths_retained") is False
+                and failure.get("private_content_retained") is False
+            ):
+                raise ObserverFailure(cast(dict[str, Any], failure))
+            raise MatrixFailure("installed observer failure evidence was rejected")
         if path.is_file() and not path.is_symlink() and path.stat().st_size <= 65536:
             try:
                 result = json.loads(path.read_text(encoding="utf-8"))
@@ -282,6 +330,13 @@ def compare_observation(
     actual_status = [int(row["status"]) for row in actual["api"]]
     if expected_status != actual_status:
         raise MatrixFailure("installed authenticated API status sequence differs")
+    inventory = actual.get("request_inventory")
+    if expected["route_id"] == "overview" and (
+        not isinstance(inventory, list)
+        or not inventory
+        or any(not isinstance(item, dict) or item.get("method") != "GET" for item in inventory)
+    ):
+        raise MatrixFailure("installed Overview request inventory is not read-only")
 
 
 def release_loading_gate(
@@ -535,6 +590,7 @@ def run_combination(
             },
             "ui": second["ui"],
             "api": second["api"],
+            "request_inventory": sanitized_request_inventory(second),
             "ready_ms": ready_ms,
             "shutdown_ms": shutdown_ms,
             "network_classification": "authenticated-ephemeral-ipv4-loopback-only",
@@ -586,6 +642,12 @@ def qualification(args: argparse.Namespace) -> Path:
         row["contract_digest_sha256"] = digest
     if args.limit is not None:
         combinations = combinations[: args.limit]
+    if args.only_combination is not None:
+        combinations = [
+            row for row in combinations if row["combination_id"] == args.only_combination
+        ]
+        if len(combinations) != 1:
+            raise MatrixFailure("requested diagnostic combination is unavailable")
     evidence = ROOT / ".slice6-evidence" / campaign_id
     if evidence.exists():
         raise MatrixFailure("campaign evidence ID already exists")
@@ -641,6 +703,8 @@ def qualification(args: argparse.Namespace) -> Path:
                         "affected_tables": error.affected_tables,
                     }
                     report["first_failure_request_inventory"] = error.request_inventory
+                if isinstance(error, ObserverFailure):
+                    report["first_failure_observer"] = error.failure
                 observation_path = (
                     campaign
                     / f"combination-{expected['combination_id'].replace('::', '--')}"
@@ -672,6 +736,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--expected-source-commit", required=True)
     value.add_argument("--campaign-id", required=True)
     value.add_argument("--limit", type=int, choices=range(1, 222))
+    value.add_argument("--only-combination")
     return value
 
 

@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -78,6 +79,26 @@ def test_pending_loading_assertion_is_distinct_from_settled_evidence() -> None:
     pending["ui"]["buttons"] = ["Generate report"]
     with pytest.raises(campaign.MatrixFailure, match="completed or mutable"):
         campaign.compare_observation(expected, pending, 1, phase="pending")
+
+
+def test_overview_observation_requires_nonempty_get_only_inventory() -> None:
+    campaign = load_campaign()
+    expected = loading_expected()
+    expected["combination_id"] = "loading::overview"
+    expected["route_id"] = "overview"
+    actual = pending_observation()
+    actual["route"] = "overview"
+    actual["request_inventory"] = [
+        {"method": "GET", "endpoint": "/api/overview", "count": 1},
+        {"method": "GET", "endpoint": "/api/accounts", "count": 1},
+    ]
+    campaign.compare_observation(expected, actual, 1, phase="pending")
+    actual["request_inventory"][0]["method"] = "POST"
+    with pytest.raises(campaign.MatrixFailure, match="not read-only"):
+        campaign.compare_observation(expected, actual, 1, phase="pending")
+    actual["request_inventory"] = []
+    with pytest.raises(campaign.MatrixFailure, match="not read-only"):
+        campaign.compare_observation(expected, actual, 1, phase="pending")
 
 
 def test_loading_driver_rejects_unsealed_or_non_loading_gate_plans() -> None:
@@ -171,3 +192,70 @@ def test_database_mutation_failure_reports_only_sanitized_tables_and_requests() 
         {"method": "GET", "endpoint": "/api/v2/goals/primary", "count": 1},
         {"method": "POST", "endpoint": "/api/v2/goals/check-ins/backfill", "count": 1},
     ]
+
+
+def test_observer_failure_is_reported_immediately_and_sanitized() -> None:
+    campaign = load_campaign()
+    with tempfile.TemporaryDirectory(prefix="money-map-observer-test-", dir="/private/tmp") as root:
+        observation = Path(root) / "matrix-observation.json"
+        failure_path = Path(root) / "matrix-observer-failure-1.json"
+        failure = {
+            "contract": campaign.OBSERVER_FAILURE_CONTRACT,
+            "result": "failed",
+            "state": "loading",
+            "route": "overview",
+            "contract_digest_sha256": DIGEST,
+            "candidate_sha256": "a" * 64,
+            "source_commit": "b" * 40,
+            "sequence": 1,
+            "requested_route": "overview",
+            "expected_phase": "settled",
+            "last_completed_stage": "awaiting-route",
+            "failure_classification": "observer-timeout",
+            "hash_matched": True,
+            "global_loading_present": False,
+            "route_local_loading_present": True,
+            "native_invocation_accepted": True,
+            "timeout_classification": True,
+            "raw_paths_retained": False,
+            "private_content_retained": False,
+        }
+        failure_path.write_text(json.dumps(failure), encoding="utf-8")
+        started = time.monotonic()
+        with pytest.raises(campaign.ObserverFailure) as raised:
+            campaign.wait_observation(observation, sequence=1, timeout=1)
+        assert time.monotonic() - started < 0.5
+        assert raised.value.failure == failure
+        assert str(Path(root)) not in json.dumps(raised.value.failure)
+
+
+def test_stale_failure_sequence_cannot_satisfy_reload_observation() -> None:
+    campaign = load_campaign()
+    with tempfile.TemporaryDirectory(prefix="money-map-observer-test-", dir="/private/tmp") as root:
+        observation = Path(root) / "matrix-observation.json"
+        stale = {
+            "contract": campaign.OBSERVER_FAILURE_CONTRACT,
+            "result": "failed",
+            "state": "loading",
+            "route": "overview",
+            "contract_digest_sha256": DIGEST,
+            "candidate_sha256": "a" * 64,
+            "source_commit": "b" * 40,
+            "sequence": 1,
+            "requested_route": "overview",
+            "expected_phase": "settled",
+            "last_completed_stage": "awaiting-route",
+            "failure_classification": "observer-timeout",
+            "hash_matched": True,
+            "global_loading_present": False,
+            "route_local_loading_present": True,
+            "native_invocation_accepted": True,
+            "timeout_classification": True,
+            "raw_paths_retained": False,
+            "private_content_retained": False,
+        }
+        (Path(root) / "matrix-observer-failure-1.json").write_text(
+            json.dumps(stale), encoding="utf-8"
+        )
+        with pytest.raises(campaign.MatrixFailure, match="was not produced"):
+            campaign.wait_observation(observation, sequence=2, timeout=0.1)

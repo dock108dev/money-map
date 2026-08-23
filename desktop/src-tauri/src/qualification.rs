@@ -14,6 +14,7 @@ pub const LAUNCH_CONTRACT: &str = "money-map-installed-attestation-launch-v1";
 pub const ATTESTATION_CONTRACT: &str = "money-map-installed-root-attestation-v1";
 pub const RESULT_CONTRACT: &str = "money-map-native-attestation-result-v1";
 pub const MATRIX_RESULT_CONTRACT: &str = "money-map-installed-matrix-observation-v1";
+pub const MATRIX_FAILURE_CONTRACT: &str = "money-map-installed-matrix-observer-failure-v1";
 pub const RESPONSE_GATE_CONTRACT: &str = "qualification-response-gate-v1";
 pub const RESPONSE_GATE_RELEASE_CONTRACT: &str = "money-map-qualification-gate-release-v1";
 pub const RESPONSE_GATE_CHALLENGE_CONTRACT: &str = "money-map-qualification-gate-challenge-v1";
@@ -81,6 +82,21 @@ pub struct MatrixUiObservation {
     pub dialog_count: u32,
     pub progress_count: u32,
     pub unsafe_console_errors: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatrixObserverFailure {
+    pub sequence: u8,
+    pub requested_route: String,
+    pub expected_phase: String,
+    pub last_completed_stage: String,
+    pub failure_classification: String,
+    pub hash_matched: bool,
+    pub global_loading_present: bool,
+    pub route_local_loading_present: bool,
+    pub native_invocation_accepted: bool,
+    pub timeout_classification: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -396,6 +412,29 @@ struct MatrixResult<'a> {
     raw_paths_retained: bool,
 }
 
+#[derive(Serialize)]
+struct MatrixFailureResult<'a> {
+    contract: &'static str,
+    result: &'static str,
+    state: &'a str,
+    route: &'a str,
+    contract_digest_sha256: &'a str,
+    candidate_sha256: &'a str,
+    source_commit: &'a str,
+    sequence: u8,
+    requested_route: &'a str,
+    expected_phase: &'a str,
+    last_completed_stage: &'a str,
+    failure_classification: &'a str,
+    hash_matched: bool,
+    global_loading_present: bool,
+    route_local_loading_present: bool,
+    native_invocation_accepted: bool,
+    timeout_classification: bool,
+    raw_paths_retained: bool,
+    private_content_retained: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceFacts {
@@ -641,23 +680,7 @@ impl QualificationContract {
             .matrix_result_path
             .as_deref()
             .ok_or_else(|| "Synthetic qualification matrix plan is unavailable.".to_string())?;
-        if ui.route != route
-            || !matches!(ui.sequence, 1 | 2)
-            || !matches!(ui.phase.as_str(), "pending" | "settled")
-            || (state != "loading" && ui.phase != "settled")
-            || !safe_matrix_observation(ui)
-            || request_inventory.iter().any(|item| {
-                item.count == 0
-                    || !matches!(
-                        item.method.as_str(),
-                        "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
-                    )
-                    || !item.endpoint.starts_with("/api/")
-                    || item.endpoint.contains('?')
-                    || item.endpoint.len() > 256
-                    || !item.endpoint.is_ascii()
-            })
-        {
+        if !self.valid_matrix_observation(ui, request_inventory) {
             return Err("Synthetic qualification matrix observation was rejected.".to_string());
         }
         let result = MatrixResult {
@@ -685,6 +708,125 @@ impl QualificationContract {
             .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())?;
         fs::rename(temporary, path)
             .map_err(|_| "Synthetic qualification matrix observation was rejected.".to_string())
+    }
+
+    pub fn valid_matrix_observation(
+        &self,
+        ui: &MatrixUiObservation,
+        request_inventory: &[MatrixRequestObservation],
+    ) -> bool {
+        let Some((state, route)) = self.matrix_plan() else {
+            return false;
+        };
+        let expected_hash = match route {
+            "add-account" => Some("#view=connections"),
+            "cash-flow" | "goals" | "activity" | "accounts" | "income" | "wealth"
+            | "retirement" | "lab" | "overview" => Some(route),
+            _ => None,
+        };
+        let hash_matches = expected_hash.is_none_or(|value| {
+            ui.location_hash
+                == if value.starts_with('#') {
+                    value.to_string()
+                } else {
+                    format!("#view={value}")
+                }
+        });
+        let loading_phase_matches = if ui.phase == "pending" {
+            ui.headings == ["Loading accounts…"]
+                && ui.statuses.is_empty()
+                && ui.alerts.is_empty()
+                && ui.buttons.is_empty()
+                && ui.disabled_buttons.is_empty()
+                && ui.messages.is_empty()
+                && ui.loading_visible
+                && ui.loading_busy
+                && ui.loading_live == "polite"
+                && ui.dialog_count == 0
+                && ui.progress_count == 0
+        } else {
+            state != "loading" || (!ui.loading_visible && !ui.loading_busy)
+        };
+        ui.route == route
+            && matches!(ui.sequence, 1 | 2)
+            && matches!(ui.phase.as_str(), "pending" | "settled")
+            && (state == "loading" || ui.phase == "settled")
+            && hash_matches
+            && loading_phase_matches
+            && safe_matrix_observation(ui)
+            && request_inventory.iter().all(|item| {
+                item.count > 0
+                    && matches!(
+                        item.method.as_str(),
+                        "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+                    )
+                    && item.endpoint.starts_with("/api/")
+                    && !item.endpoint.contains('?')
+                    && item.endpoint.len() <= 256
+                    && item.endpoint.is_ascii()
+            })
+    }
+
+    pub fn write_matrix_failure(&self, failure: &MatrixObserverFailure) -> Result<(), String> {
+        let (state, route) = self
+            .matrix_plan()
+            .ok_or_else(|| "Synthetic qualification matrix failure was rejected.".to_string())?;
+        let digest = self
+            .matrix_contract_digest
+            .as_deref()
+            .ok_or_else(|| "Synthetic qualification matrix failure was rejected.".to_string())?;
+        if failure.requested_route != route
+            || !matches!(failure.sequence, 1 | 2)
+            || !matches!(failure.expected_phase.as_str(), "pending" | "settled")
+            || !matches!(
+                failure.last_completed_stage.as_str(),
+                "awaiting-global-loading"
+                    | "pending-observed"
+                    | "awaiting-global-release"
+                    | "route-requested"
+                    | "awaiting-route"
+                    | "native-api-probe"
+                    | "evidence-write"
+            )
+            || !matches!(
+                failure.failure_classification.as_str(),
+                "observer-timeout"
+                    | "route-control-unavailable"
+                    | "native-observation-rejected"
+                    | "native-validation-rejected"
+                    | "native-api-probe-failed"
+                    | "evidence-write-failed"
+            )
+        {
+            return Err("Synthetic qualification matrix failure was rejected.".to_string());
+        }
+        let result = MatrixFailureResult {
+            contract: MATRIX_FAILURE_CONTRACT,
+            result: "failed",
+            state,
+            route,
+            contract_digest_sha256: digest,
+            candidate_sha256: &self.candidate_sha256,
+            source_commit: &self.source_commit,
+            sequence: failure.sequence,
+            requested_route: &failure.requested_route,
+            expected_phase: &failure.expected_phase,
+            last_completed_stage: &failure.last_completed_stage,
+            failure_classification: &failure.failure_classification,
+            hash_matched: failure.hash_matched,
+            global_loading_present: failure.global_loading_present,
+            route_local_loading_present: failure.route_local_loading_present,
+            native_invocation_accepted: failure.native_invocation_accepted,
+            timeout_classification: failure.timeout_classification,
+            raw_paths_retained: false,
+            private_content_retained: false,
+        };
+        write_private_json(
+            &self
+                .campaign_root
+                .join(format!("matrix-observer-failure-{}.json", failure.sequence)),
+            &result,
+        )
     }
 
     pub fn verify_attestation(
@@ -1401,6 +1543,69 @@ mod tests {
         observation.route = "cash-flow".into();
         observation.headings = vec!["/private/tmp/forbidden".into()];
         assert!(matrix.write_matrix_result(&observation, &[], &[]).is_err());
+    }
+
+    #[test]
+    fn matrix_failure_is_bounded_private_and_sequence_specific() {
+        let (campaign, contract, _attestation) = fixture();
+        let matrix = QualificationContract {
+            matrix_state: Some("loading".into()),
+            matrix_route: Some("overview".into()),
+            matrix_contract_digest: Some(SEALED_ORACLE_DIGEST.into()),
+            matrix_result_path: Some(campaign.path().join("matrix-observation.json")),
+            matrix_driver: Some(MatrixDriverPlan {
+                driver_type: "transient_bounded_loading_injection".into(),
+                seed: "complete-current-v1".into(),
+                gate: RESPONSE_GATE_CONTRACT.into(),
+                release: "explicit_harness_release".into(),
+                timeout_ms: 5_000,
+            }),
+            ..contract
+        };
+        let failure = MatrixObserverFailure {
+            sequence: 2,
+            requested_route: "overview".into(),
+            expected_phase: "settled".into(),
+            last_completed_stage: "awaiting-route".into(),
+            failure_classification: "observer-timeout".into(),
+            hash_matched: true,
+            global_loading_present: false,
+            route_local_loading_present: true,
+            native_invocation_accepted: true,
+            timeout_classification: true,
+        };
+        matrix.write_matrix_failure(&failure).unwrap();
+        let path = campaign.path().join("matrix-observer-failure-2.json");
+        let metadata = fs::metadata(&path).unwrap();
+        assert_eq!(metadata.mode() & 0o777, 0o600);
+        assert_eq!(metadata.nlink(), 1);
+        let retained = fs::read_to_string(path).unwrap();
+        assert!(retained.contains(MATRIX_FAILURE_CONTRACT));
+        assert!(retained.contains("observer-timeout"));
+        assert!(retained.contains("\"raw_paths_retained\":false"));
+        assert!(retained.contains("\"private_content_retained\":false"));
+        assert!(!retained.contains(campaign.path().to_str().unwrap()));
+
+        for changed in [
+            MatrixObserverFailure {
+                sequence: 3,
+                ..failure.clone()
+            },
+            MatrixObserverFailure {
+                requested_route: "/private/tmp/private".into(),
+                ..failure.clone()
+            },
+            MatrixObserverFailure {
+                failure_classification: "session-secret-leaked-on-port-1234".into(),
+                ..failure.clone()
+            },
+            MatrixObserverFailure {
+                last_completed_stage: "unbounded-private-stage".into(),
+                ..failure.clone()
+            },
+        ] {
+            assert!(matrix.write_matrix_failure(&changed).is_err());
+        }
     }
 
     #[test]
