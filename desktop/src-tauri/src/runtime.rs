@@ -7,6 +7,7 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 use crate::data_home::DataHomePaths;
 use crate::lifecycle::{LifecycleMachine, LifecycleState};
 use crate::proxy::health_ready;
+use crate::qualification::{parse_attestation, InstalledAttestation, QualificationContract};
 use serde::Serialize;
 
 const READY_SIGNAL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -38,6 +40,7 @@ struct RunningProcess {
     pid: u32,
     child: Arc<Mutex<Child>>,
     control: Arc<Mutex<UnixStream>>,
+    protocol_valid: Arc<AtomicBool>,
 }
 
 struct RuntimeInner {
@@ -53,22 +56,29 @@ pub struct RuntimeController {
     operation: Mutex<()>,
     paths: DataHomePaths,
     sidecar_path: PathBuf,
+    qualification: Option<QualificationContract>,
 }
 
 enum OutputEvent {
+    Attestation(InstalledAttestation),
     Ready(u16),
+    Invalid,
     Closed,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 enum ReadinessResult {
-    Ready(u16),
+    Ready(InstalledAttestation, u16),
     TimedOut,
     Terminated,
 }
 
 impl RuntimeController {
-    pub fn new(sidecar_path: PathBuf, paths: DataHomePaths) -> Result<Arc<Self>, String> {
+    pub fn new(
+        sidecar_path: PathBuf,
+        paths: DataHomePaths,
+        qualification: Option<QualificationContract>,
+    ) -> Result<Arc<Self>, String> {
         Ok(Arc::new(Self {
             inner: Mutex::new(RuntimeInner {
                 lifecycle: LifecycleMachine::default(),
@@ -80,6 +90,7 @@ impl RuntimeController {
             operation: Mutex::new(()),
             paths,
             sidecar_path,
+            qualification,
         }))
     }
 
@@ -222,7 +233,14 @@ impl RuntimeController {
             return self.fail_generation(generation);
         }
         let session = session_token()?;
-        let (process, output) = match self.spawn_process(generation, &session) {
+        let nonce = if generation == 1 {
+            self.qualification.as_ref().map(|value| value.nonce.clone())
+        } else if self.qualification.is_some() {
+            Some(session_token()?)
+        } else {
+            None
+        };
+        let (process, output) = match self.spawn_process(generation, &session, nonce.as_deref()) {
             Ok(value) => value,
             Err(_) => return self.fail_generation(generation),
         };
@@ -241,19 +259,35 @@ impl RuntimeController {
             inner.process = Some(process.clone());
         }
 
-        let readiness = wait_for_readiness(&output, READY_SIGNAL_TIMEOUT, || {
-            child_is_running(&process.child)
-        });
-        let port = match readiness {
-            ReadinessResult::Ready(port) => port,
+        let readiness = wait_for_readiness(
+            &output,
+            READY_SIGNAL_TIMEOUT,
+            self.qualification.is_some(),
+            || child_is_running(&process.child),
+        );
+        let (attestation, port) = match readiness {
+            ReadinessResult::Ready(attestation, port) => (attestation, port),
             ReadinessResult::TimedOut | ReadinessResult::Terminated => {
                 self.remove_and_stop(generation, &process, None);
                 return self.fail_generation(generation);
             }
         };
+        if let (Some(contract), Some(nonce)) = (&self.qualification, nonce.as_deref()) {
+            if contract
+                .verify_attestation(&attestation, generation, &session, nonce)
+                .is_err()
+            {
+                self.remove_and_stop(generation, &process, None);
+                let _ = contract.write_result(false, Some("installed-root-attestation"));
+                return self.fail_generation(generation);
+            }
+        }
         let deadline = Instant::now() + HEALTH_TIMEOUT;
         while Instant::now() < deadline {
-            if !self.is_current_and_active(generation) || !child_is_running(&process.child) {
+            if !self.is_current_and_active(generation)
+                || !child_is_running(&process.child)
+                || !process.protocol_valid.load(Ordering::SeqCst)
+            {
                 self.remove_and_stop(generation, &process, Some(port));
                 return self.fail_generation(generation);
             }
@@ -286,7 +320,13 @@ impl RuntimeController {
                 .ready()
                 .map_err(|_| FAILURE_MESSAGE.to_string())?;
         }
-        self.monitor(process);
+        self.monitor(process.clone());
+        if let Some(contract) = &self.qualification {
+            if contract.write_result(true, None).is_err() {
+                self.remove_and_stop(generation, &process, Some(port));
+                return self.fail_generation(generation);
+            }
+        }
         Ok(self.status())
     }
 
@@ -294,6 +334,7 @@ impl RuntimeController {
         &self,
         generation: u64,
         session: &str,
+        nonce: Option<&str>,
     ) -> Result<(RunningProcess, Receiver<OutputEvent>), String> {
         let (mut bootstrap_writer, bootstrap_reader) = UnixStream::pair()
             .map_err(|_| "Bundled service bootstrap could not start.".to_string())?;
@@ -359,9 +400,23 @@ impl RuntimeController {
         let bootstrap = serde_json::to_vec(&serde_json::json!({
             "contract": "money-map-desktop-bootstrap-v1",
             "session": session,
+            "attestation": self.qualification.as_ref().zip(nonce).map(|(contract, nonce)| serde_json::json!({
+                "contract": "money-map-installed-root-attestation-v1",
+                "schema_version": 1,
+                "campaign_id": contract.campaign_id,
+                "nonce": nonce,
+                "generation": generation,
+                "mode": contract.mode,
+                "campaign_root": contract.campaign_root,
+                "application_root": contract.application_root,
+                "database_path": contract.database_path,
+                "writer_lock_path": contract.writer_lock_path,
+                "cache_root": contract.cache_root,
+                "log_root": contract.log_root,
+            })),
         }))
         .map_err(|_| "Bundled service bootstrap was rejected.".to_string())?;
-        if bootstrap.len() > 511
+        if bootstrap.len() > 8_191
             || bootstrap_writer.write_all(&bootstrap).is_err()
             || bootstrap_writer.write_all(b"\n").is_err()
             || bootstrap_writer.flush().is_err()
@@ -377,11 +432,36 @@ impl RuntimeController {
             .take()
             .ok_or_else(|| "Bundled service output was unavailable.".to_string())?;
         let (sender, receiver) = mpsc::channel();
+        let protocol_valid = Arc::new(AtomicBool::new(true));
+        let reader_protocol_valid = Arc::clone(&protocol_valid);
+        let attestation_required = self.qualification.is_some();
         thread::spawn(move || {
             let reader = BufReader::new(stdout);
+            let mut attested = false;
+            let mut ready = false;
             for line in reader.lines().map_while(Result::ok) {
-                if let Some(port) = parse_ready(&line) {
-                    let _ = sender.send(OutputEvent::Ready(port));
+                if line.starts_with("MONEY_MAP_ATTEST ") {
+                    match (attested, ready, parse_attestation(&line)) {
+                        (false, false, Ok(value)) => {
+                            attested = true;
+                            let _ = sender.send(OutputEvent::Attestation(value));
+                        }
+                        _ => {
+                            reader_protocol_valid.store(false, Ordering::SeqCst);
+                            let _ = sender.send(OutputEvent::Invalid);
+                        }
+                    }
+                } else if line.starts_with("MONEY_MAP_READY ") {
+                    match (ready, attestation_required && !attested, parse_ready(&line)) {
+                        (false, false, Some(port)) => {
+                            ready = true;
+                            let _ = sender.send(OutputEvent::Ready(port));
+                        }
+                        _ => {
+                            reader_protocol_valid.store(false, Ordering::SeqCst);
+                            let _ = sender.send(OutputEvent::Invalid);
+                        }
+                    }
                 }
             }
             let _ = sender.send(OutputEvent::Closed);
@@ -392,6 +472,7 @@ impl RuntimeController {
                 pid,
                 child: Arc::new(Mutex::new(child)),
                 control: Arc::new(Mutex::new(control_writer)),
+                protocol_valid,
             },
             receiver,
         ))
@@ -404,7 +485,12 @@ impl RuntimeController {
             if !controller.process_matches(&process) {
                 return;
             }
-            if !child_is_running(&process.child) {
+            if !child_is_running(&process.child) || !process.protocol_valid.load(Ordering::SeqCst) {
+                if !process.protocol_valid.load(Ordering::SeqCst) {
+                    unsafe {
+                        libc::kill(-(process.pid as i32), libc::SIGTERM);
+                    }
+                }
                 let mut inner = controller
                     .inner
                     .lock()
@@ -594,12 +680,14 @@ fn parse_ready(line: &str) -> Option<u16> {
 fn wait_for_readiness<F>(
     receiver: &Receiver<OutputEvent>,
     timeout: Duration,
+    require_attestation: bool,
     mut running: F,
 ) -> ReadinessResult
 where
     F: FnMut() -> bool,
 {
     let deadline = Instant::now() + timeout;
+    let mut attestation = None;
     loop {
         if !running() {
             return ReadinessResult::Terminated;
@@ -609,12 +697,57 @@ where
             return ReadinessResult::TimedOut;
         }
         match receiver.recv_timeout(remaining.min(Duration::from_millis(50))) {
-            Ok(OutputEvent::Ready(port)) => return ReadinessResult::Ready(port),
+            Ok(OutputEvent::Attestation(value)) if attestation.is_none() => {
+                attestation = Some(value)
+            }
+            Ok(OutputEvent::Ready(port)) => {
+                if let Some(value) = attestation.take() {
+                    return ReadinessResult::Ready(value, port);
+                }
+                if !require_attestation {
+                    return ReadinessResult::Ready(empty_attestation(), port);
+                }
+                return ReadinessResult::Terminated;
+            }
+            Ok(OutputEvent::Attestation(_)) | Ok(OutputEvent::Invalid) => {
+                return ReadinessResult::Terminated
+            }
             Ok(OutputEvent::Closed) | Err(RecvTimeoutError::Disconnected) => {
                 return ReadinessResult::Terminated;
             }
             Err(RecvTimeoutError::Timeout) => {}
         }
+    }
+}
+
+fn empty_attestation() -> InstalledAttestation {
+    use crate::qualification::ResourceFacts;
+    let facts = ResourceFacts {
+        exists: false,
+        kind: String::new(),
+        symlink_free: false,
+        contained: false,
+        active: None,
+    };
+    InstalledAttestation {
+        contract: String::new(),
+        schema_version: 0,
+        campaign_id: String::new(),
+        nonce: String::new(),
+        generation: 0,
+        session: String::new(),
+        mode: String::new(),
+        campaign_root: PathBuf::new(),
+        application_root: PathBuf::new(),
+        database_path: PathBuf::new(),
+        writer_lock_path: PathBuf::new(),
+        cache_root: PathBuf::new(),
+        log_root: PathBuf::new(),
+        database: facts.clone(),
+        writer_lock: facts.clone(),
+        cache: facts.clone(),
+        logs: facts,
+        sequence: 0,
     }
 }
 
@@ -652,7 +785,10 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    use super::{parse_ready, session_token, wait_for_readiness, OutputEvent, ReadinessResult};
+    use super::{
+        empty_attestation, parse_ready, session_token, wait_for_readiness, OutputEvent,
+        ReadinessResult,
+    };
 
     #[test]
     fn every_session_has_256_bits_and_is_replaced() {
@@ -673,35 +809,66 @@ mod tests {
     }
 
     #[test]
-    fn readiness_reports_success_timeout_and_child_termination() {
+    fn attestation_must_precede_readiness_exactly_once() {
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(OutputEvent::Attestation(empty_attestation()))
+            .unwrap();
+        sender.send(OutputEvent::Ready(43123)).unwrap();
+        assert!(matches!(
+            wait_for_readiness(&receiver, Duration::from_millis(10), true, || true),
+            ReadinessResult::Ready(_, 43123)
+        ));
+
         let (sender, receiver) = mpsc::channel();
         sender.send(OutputEvent::Ready(43123)).unwrap();
         assert_eq!(
-            wait_for_readiness(&receiver, Duration::from_millis(10), || true),
-            ReadinessResult::Ready(43123)
+            wait_for_readiness(&receiver, Duration::from_millis(10), true, || true),
+            ReadinessResult::Terminated
         );
 
-        let (_sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(OutputEvent::Attestation(empty_attestation()))
+            .unwrap();
+        sender
+            .send(OutputEvent::Attestation(empty_attestation()))
+            .unwrap();
         assert_eq!(
-            wait_for_readiness(&receiver, Duration::from_millis(5), || true),
-            ReadinessResult::TimedOut
-        );
-
-        let (_sender, receiver) = mpsc::channel();
-        assert_eq!(
-            wait_for_readiness(&receiver, Duration::from_millis(10), || false),
+            wait_for_readiness(&receiver, Duration::from_millis(10), true, || true),
             ReadinessResult::Terminated
         );
     }
 
     #[test]
-    fn closed_output_is_a_startup_termination() {
+    fn missing_malformed_or_closed_attestation_fails_closed() {
+        let (sender, receiver) = mpsc::channel();
+        sender.send(OutputEvent::Invalid).unwrap();
+        assert_eq!(
+            wait_for_readiness(&receiver, Duration::from_millis(10), true, || true),
+            ReadinessResult::Terminated
+        );
         let (sender, receiver) = mpsc::channel();
         sender.send(OutputEvent::Closed).unwrap();
         assert_eq!(
-            wait_for_readiness(&receiver, Duration::from_millis(10), || true),
+            wait_for_readiness(&receiver, Duration::from_millis(10), true, || true),
             ReadinessResult::Terminated
         );
+        let (_sender, receiver) = mpsc::channel();
+        assert_eq!(
+            wait_for_readiness(&receiver, Duration::from_millis(2), true, || true),
+            ReadinessResult::TimedOut
+        );
+    }
+
+    #[test]
+    fn ordinary_runtime_remains_ready_without_qualification_attestation() {
+        let (sender, receiver) = mpsc::channel();
+        sender.send(OutputEvent::Ready(43123)).unwrap();
+        assert!(matches!(
+            wait_for_readiness(&receiver, Duration::from_millis(10), false, || true),
+            ReadinessResult::Ready(_, 43123)
+        ));
     }
 
     #[test]
@@ -714,7 +881,7 @@ mod tests {
             crate::data_home::DataHomePaths::from_home(parent.path(), "acceptance-synthetic-v1")
                 .unwrap();
         let controller =
-            super::RuntimeController::new("/missing/synthetic-sidecar".into(), paths.clone())
+            super::RuntimeController::new("/missing/synthetic-sidecar".into(), paths.clone(), None)
                 .unwrap();
         assert!(controller.start_initial().is_err());
         controller.shutdown();

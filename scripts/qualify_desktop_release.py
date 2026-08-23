@@ -10,6 +10,7 @@ import json
 import os
 import plistlib
 import re
+import secrets
 import shutil
 import signal
 import subprocess
@@ -18,7 +19,7 @@ import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "2.1.0"
@@ -28,6 +29,8 @@ BUNDLE_ID = "com.moneymap.desktop"
 MINIMUM_MACOS = "13.0"
 DMG_NAME = "Money Map-Slice5-arm64.dmg"
 CONTRACT = "money-map-slice6-installed-qualification-v1"
+LAUNCH_CONTRACT = "money-map-installed-attestation-launch-v1"
+NATIVE_RESULT_CONTRACT = "money-map-native-attestation-result-v1"
 SECRET_ENV = re.compile(
     r"(^|_)(TOKEN|SECRET|PASSWORD|CREDENTIAL|ACCESS_KEY|PRIVATE_KEY)($|_)|"
     r"^(PLAID|AWS|AZURE|GCP|GH_|GITHUB_|OPENAI_|ANTHROPIC_|APPLE_)"
@@ -57,6 +60,9 @@ class CycleResult:
     second_launch_single_instance: bool
     synthetic_roots_attested: bool
     production_mode_refused: bool
+    attestation_campaign_id: str
+    attestation_contract: str
+    root_roles: tuple[str, ...]
 
 
 def sha256(path: Path) -> str:
@@ -97,11 +103,42 @@ def run(
     return result.stdout.strip() if capture else ""
 
 
-def clean_runtime_env(fake_home: Path) -> dict[str, str]:
+def launch_contract(
+    fake_home: Path,
+    *,
+    campaign_id: str,
+    nonce: str,
+    candidate_sha256: str,
+    source_commit: str,
+    mode: str = "acceptance-synthetic-v1",
+) -> dict[str, object]:
+    application = fake_home / "Library/Application Support/Money Map"
+    return {
+        "contract": LAUNCH_CONTRACT,
+        "schema_version": 1,
+        "campaign_id": campaign_id,
+        "nonce": nonce,
+        "mode": mode,
+        "campaign_root": str(fake_home),
+        "application_root": str(application),
+        "database_path": str(application / "data/paycheck-map.sqlite3"),
+        "writer_lock_path": str(application / ".money-map-writer.lock"),
+        "cache_root": str(fake_home / "Library/Caches/com.moneymap.desktop"),
+        "log_root": str(fake_home / "Library/Logs/Money Map"),
+        "result_path": str(fake_home / "native-attestation-result.json"),
+        "candidate_sha256": candidate_sha256,
+        "source_commit": source_commit,
+    }
+
+
+def clean_runtime_env(fake_home: Path, contract: dict[str, object]) -> dict[str, str]:
     env = {
         "PATH": "/usr/bin:/bin",
         "HOME": str(fake_home),
         "MONEY_MAP_ACCEPTANCE_FAKE_HOME": str(fake_home),
+        "MONEY_MAP_QUALIFICATION_CONTRACT": json.dumps(
+            contract, sort_keys=True, separators=(",", ":")
+        ),
     }
     if any(SECRET_ENV.search(name) for name in env):
         raise QualificationFailure("credential-bearing runtime environment name was retained")
@@ -295,35 +332,83 @@ def socket_observation(pids: list[int]) -> tuple[int, int]:
     return len(listeners), len(external)
 
 
-def attest_synthetic_roots(pids: list[int], fake_home: Path) -> None:
-    roots = {
-        "PAYCHECK_MAP_DESKTOP_APP_ROOT": fake_home / "Library/Application Support/Money Map",
-        "PAYCHECK_MAP_DESKTOP_CACHE_ROOT": fake_home / "Library/Caches/com.moneymap.desktop",
-        "PAYCHECK_MAP_DESKTOP_LOG_ROOT": fake_home / "Library/Logs/Money Map",
-    }
-    if not all(path.is_relative_to(fake_home) for path in roots.values()) or not all(
-        roots[name].is_dir()
-        for name in ("PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT")
+def wait_native_result(path: Path, *, expected: str, timeout: float = 45) -> dict[str, Any]:
+    started = time.monotonic()
+    while time.monotonic() - started < timeout:
+        if path.is_file() and not path.is_symlink() and path.stat().st_size <= 8192:
+            try:
+                result = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                time.sleep(0.05)
+                continue
+            if not isinstance(result, dict) or any(not isinstance(key, str) for key in result):
+                raise QualificationFailure("native launcher attestation result was rejected")
+            result = cast(dict[str, Any], result)
+            if result.get("contract") != NATIVE_RESULT_CONTRACT or result.get("result") != expected:
+                raise QualificationFailure("native launcher attestation result was rejected")
+            return result
+        time.sleep(0.05)
+    raise QualificationFailure("native launcher attestation result was not produced")
+
+
+def require_native_attestation(result: dict[str, Any], contract: dict[str, object]) -> None:
+    required_true = (
+        "database",
+        "writer_lock",
+        "cache",
+        "logs",
+        "containment",
+        "symlink_checks",
+        "readiness_ordering",
+        "ui_gating",
+    )
+    if (
+        result.get("campaign_id") != contract["campaign_id"]
+        or result.get("mode") != "acceptance-synthetic-v1"
+        or result.get("candidate_sha256") != contract["candidate_sha256"]
+        or result.get("source_commit") != contract["source_commit"]
+        or result.get("attestation_contract") != "money-map-installed-root-attestation-v1"
+        or result.get("root_roles")
+        != ["campaign", "application-data", "database", "cache", "safe-log"]
+        or any(result.get(name) is not True for name in required_true)
+        or result.get("first_unmet_requirement") is not None
     ):
-        raise QualificationFailure("installed runtime did not activate its synthetic roots")
-    expected = {
-        **{name: str(path) for name, path in roots.items()},
-        "PAYCHECK_MAP_LOCAL_DIR": str(roots["PAYCHECK_MAP_DESKTOP_APP_ROOT"]),
-        "PAYCHECK_MAP_DESKTOP_DATA_MODE": "acceptance-synthetic-v1",
-    }
-    for pid in pids:
-        result = subprocess.run(
-            ["/bin/ps", "eww", "-p", str(pid), "-o", "command="],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode or any(
-            f"{name}={value}" not in result.stdout for name, value in expected.items()
-        ):
-            raise QualificationFailure("installed runtime synthetic-root attestation failed")
-        if "PAYCHECK_MAP_DESKTOP_DATA_MODE=production-v1" in result.stdout:
-            raise QualificationFailure("installed runtime entered forbidden production mode")
+        raise QualificationFailure("native launcher did not attest the installed synthetic roots")
+
+
+def prove_production_refusal(
+    app: Path, campaign: Path, candidate_sha256: str, source_commit: str
+) -> bool:
+    fake_home = campaign / "production-refusal"
+    fake_home.mkdir(mode=0o700)
+    contract = launch_contract(
+        fake_home,
+        campaign_id=secrets.token_hex(16),
+        nonce=secrets.token_hex(32),
+        candidate_sha256=candidate_sha256,
+        source_commit=source_commit,
+        mode="production-v1",
+    )
+    process = subprocess.Popen(
+        [str(app / "Contents/MacOS/money-map-desktop")],
+        cwd=campaign,
+        env=clean_runtime_env(fake_home, contract),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        result = wait_native_result(fake_home / "native-attestation-result.json", expected="failed")
+        application = fake_home / "Library/Application Support/Money Map"
+        rows = process_rows()
+        if application.exists() or descendants(process.pid, rows):
+            raise QualificationFailure("production qualification reached a financial data location")
+        return result.get("first_unmet_requirement") == "qualification-contract"
+    finally:
+        if process.poll() is None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGTERM)
 
 
 def quit_app() -> None:
@@ -353,10 +438,26 @@ def wait_gone(
     raise QualificationFailure("normal quit left an installed-app process alive")
 
 
-def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> CycleResult:
+def run_cycle(
+    app: Path,
+    campaign: Path,
+    cycle: int,
+    *,
+    second_launch: bool,
+    candidate_sha256: str,
+    source_commit: str,
+    production_mode_refused: bool,
+) -> CycleResult:
     fake_home = campaign / f"home-{cycle:02d}"
     fake_home.mkdir(mode=0o700)
-    env = clean_runtime_env(fake_home)
+    contract = launch_contract(
+        fake_home,
+        campaign_id=secrets.token_hex(16),
+        nonce=secrets.token_hex(32),
+        candidate_sha256=candidate_sha256,
+        source_commit=source_commit,
+    )
+    env = clean_runtime_env(fake_home, contract)
     executable = app / "Contents/MacOS/money-map-desktop"
     process = subprocess.Popen(
         [str(executable)],
@@ -369,8 +470,11 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
     )
     lock = fake_home / "Library/Application Support/Money Map/.money-map-writer.lock"
     try:
+        native_result = wait_native_result(
+            fake_home / "native-attestation-result.json", expected="pass"
+        )
+        require_native_attestation(native_result, contract)
         sidecars, ready_ms = wait_for_runtime(process.pid, lock)
-        attest_synthetic_roots(sidecars, fake_home)
         listeners, external = socket_observation(sidecars)
         if listeners != 1 or external != 0:
             raise QualificationFailure("runtime listener or external-connection boundary failed")
@@ -432,7 +536,10 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
             graceful_stop=graceful,
             second_launch_single_instance=single_instance,
             synthetic_roots_attested=True,
-            production_mode_refused=True,
+            production_mode_refused=production_mode_refused,
+            attestation_campaign_id=str(contract["campaign_id"]),
+            attestation_contract=str(native_result["attestation_contract"]),
+            root_roles=tuple(str(role) for role in native_result["root_roles"]),
         )
         failed_cleanup = [
             name
@@ -485,7 +592,7 @@ def qualification(args: argparse.Namespace) -> Path:
     manifest = json.loads(manifest_path.read_text())
     if manifest.get("dmg", {}).get("sha256") != args.expected_sha256:
         raise QualificationFailure("manifest DMG identity differs")
-    evidence = ROOT / ".slice6-evidence" / args.campaign_id
+    evidence: Path = ROOT / ".slice6-evidence" / str(args.campaign_id)
     if evidence.exists():
         raise QualificationFailure("campaign evidence ID already exists")
     evidence.mkdir(parents=True, mode=0o700)
@@ -504,7 +611,6 @@ def qualification(args: argparse.Namespace) -> Path:
         "runtime_version": VERSION,
         "schema_revision": SCHEMA,
         "dmg": {"name": DMG_NAME, "sha256": args.expected_sha256, "size": dmg.stat().st_size},
-        "owner_data_accessed": False,
         "production_keychain_accessed": False,
         "provider_contacted": False,
         "port_8765_touched": False,
@@ -551,10 +657,25 @@ def qualification(args: argparse.Namespace) -> Path:
             ],
             timeout=300,
         )
+        production_mode_refused = prove_production_refusal(
+            app, campaign, args.expected_sha256, args.expected_source_commit
+        )
+        if not production_mode_refused:
+            raise QualificationFailure("native launcher did not refuse production qualification")
         cycles: list[CycleResult] = []
         for cycle in range(1, args.launch_cycles + 1):
             try:
-                cycles.append(run_cycle(app, campaign, cycle, second_launch=True))
+                cycles.append(
+                    run_cycle(
+                        app,
+                        campaign,
+                        cycle,
+                        second_launch=True,
+                        candidate_sha256=args.expected_sha256,
+                        source_commit=args.expected_source_commit,
+                        production_mode_refused=production_mode_refused,
+                    )
+                )
             except QualificationFailure as error:
                 report["completed_cycles"] = [asdict(item) for item in cycles]
                 report["failed_cycle"] = cycle
@@ -573,6 +694,7 @@ def qualification(args: argparse.Namespace) -> Path:
                     "mounted_entries": ["Applications", "Money Map.app"],
                 },
                 "cycles": [asdict(cycle) for cycle in cycles],
+                "owner_data_accessed": False,
                 "lifecycle_bounds": {
                     "cycles": len(cycles),
                     "maximum_ready_ms": max(cycle.ready_ms for cycle in cycles),

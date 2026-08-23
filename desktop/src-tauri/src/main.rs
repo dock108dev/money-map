@@ -2,6 +2,7 @@ mod data_home;
 mod lifecycle;
 mod metadata;
 mod proxy;
+mod qualification;
 mod runtime;
 
 use std::path::PathBuf;
@@ -13,6 +14,7 @@ use std::{fs, os::unix::fs::PermissionsExt};
 use data_home::DataHomePaths;
 use metadata::{about_info_for_mode, native_about_metadata, AboutInfo};
 use proxy::{forward, validate_frontend_request, DesktopRequest, DesktopResponse};
+use qualification::QualificationContract;
 use runtime::{RuntimeController, RuntimeStatus};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::webview::NewWindowResponse;
@@ -118,6 +120,46 @@ fn show_safe_error(app: &tauri::AppHandle) {
     }
 }
 
+fn build_main_window<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> tauri::Result<tauri::WebviewWindow<R>> {
+    let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        .title("Money Map")
+        .inner_size(1280.0, 820.0)
+        .min_inner_size(900.0, 640.0)
+        .zoom_hotkeys_enabled(false)
+        .initialization_script(initialization_script())
+        .on_navigation(internal_navigation_allowed)
+        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .build()?;
+    let close_window = window.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = close_window.hide();
+        }
+    });
+    Ok(window)
+}
+
+fn build_safe_error_window<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> tauri::Result<tauri::WebviewWindow<R>> {
+    WebviewWindowBuilder::new(
+        app,
+        "safe-error",
+        WebviewUrl::App("desktop-error.html".into()),
+    )
+    .title("Money Map recovery")
+    .inner_size(640.0, 440.0)
+    .min_inner_size(560.0, 400.0)
+    .zoom_hotkeys_enabled(false)
+    .initialization_script(safe_error_initialization_script())
+    .on_navigation(internal_navigation_allowed)
+    .on_new_window(|_, _| NewWindowResponse::Deny)
+    .build()
+}
+
 #[tauri::command]
 fn desktop_reload(window: tauri::WebviewWindow) -> Result<(), String> {
     window
@@ -166,10 +208,13 @@ async fn desktop_restart(
         .map_err(|_| "Money Map could not restart the local service.".to_string())??;
     if window.label() == "safe-error" {
         let _ = window.hide();
-        if let Some(main) = window.app_handle().get_webview_window("main") {
-            let _ = main.show();
-            let _ = main.set_focus();
-        }
+        let main = match window.app_handle().get_webview_window("main") {
+            Some(main) => main,
+            None => build_main_window(window.app_handle())
+                .map_err(|_| "Money Map could not create its verified window.".to_string())?,
+        };
+        let _ = main.show();
+        let _ = main.set_focus();
     }
     Ok(status)
 }
@@ -658,49 +703,23 @@ fn main() {
             desktop_open_external
         ])
         .setup(|app| {
-            let paths = DataHomePaths::resolve(app.handle()).map_err(std::io::Error::other)?;
+            let qualification =
+                QualificationContract::from_environment().map_err(std::io::Error::other)?;
+            let paths = DataHomePaths::resolve(app.handle(), qualification.as_ref())
+                .map_err(std::io::Error::other)?;
             install_native_menu(app.handle(), paths.mode)?;
-            let controller =
-                RuntimeController::new(sidecar_path().map_err(std::io::Error::other)?, paths)
-                    .map_err(std::io::Error::other)?;
-            app.manage(Arc::clone(&controller));
-            let window =
-                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                    .title("Money Map")
-                    .inner_size(1280.0, 820.0)
-                    .min_inner_size(900.0, 640.0)
-                    .zoom_hotkeys_enabled(false)
-                    .initialization_script(initialization_script())
-                    .on_navigation(internal_navigation_allowed)
-                    .on_new_window(|_, _| NewWindowResponse::Deny)
-                    .build()?;
-            WebviewWindowBuilder::new(
-                app,
-                "safe-error",
-                WebviewUrl::App("desktop-error.html".into()),
+            let controller = RuntimeController::new(
+                sidecar_path().map_err(std::io::Error::other)?,
+                paths,
+                qualification,
             )
-            .title("Money Map recovery")
-            .inner_size(640.0, 440.0)
-            .min_inner_size(560.0, 400.0)
-            .visible(false)
-            .zoom_hotkeys_enabled(false)
-            .initialization_script(safe_error_initialization_script())
-            .on_navigation(internal_navigation_allowed)
-            .on_new_window(|_, _| NewWindowResponse::Deny)
-            .build()?;
-            let close_window = window.clone();
-            window.on_window_event(move |event| {
-                if let WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = close_window.hide();
-                }
-            });
-            let app_handle = app.handle().clone();
-            std::thread::spawn(move || {
-                if controller.start_initial().is_err() {
-                    show_safe_error(&app_handle);
-                }
-            });
+            .map_err(std::io::Error::other)?;
+            app.manage(Arc::clone(&controller));
+            if controller.start_initial().is_ok() {
+                build_main_window(app.handle())?;
+            } else {
+                build_safe_error_window(app.handle())?;
+            }
             Ok(())
         })
         .on_menu_event(|app, event| {

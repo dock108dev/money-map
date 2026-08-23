@@ -7,7 +7,7 @@ import threading
 from dataclasses import dataclass
 
 BOOTSTRAP_CONTRACT = "money-map-desktop-bootstrap-v1"
-MAX_BOOTSTRAP_BYTES = 512
+MAX_BOOTSTRAP_BYTES = 8192
 SESSION_BYTES = 32
 
 

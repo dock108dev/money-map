@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use crate::qualification::QualificationContract;
 use serde::Serialize;
 use tauri::Manager;
 
@@ -13,7 +14,18 @@ pub struct DataHomePaths {
 }
 
 impl DataHomePaths {
-    pub fn resolve(app: &tauri::AppHandle) -> Result<Self, String> {
+    pub fn resolve(
+        app: &tauri::AppHandle,
+        qualification: Option<&QualificationContract>,
+    ) -> Result<Self, String> {
+        if let Some(contract) = qualification {
+            return Ok(Self {
+                application: contract.application_root.clone(),
+                cache: contract.cache_root.clone(),
+                logs: contract.log_root.clone(),
+                mode: "acceptance-synthetic-v1",
+            });
+        }
         let runtime_fake_home = (option_env!("MONEY_MAP_ALLOW_ACCEPTANCE_HOME") == Some("1"))
             .then(|| std::env::var_os("MONEY_MAP_ACCEPTANCE_FAKE_HOME"))
             .flatten();

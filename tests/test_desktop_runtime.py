@@ -12,6 +12,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import cast
 
 import httpx
 import pytest
@@ -136,7 +137,7 @@ def running_sidecar(
     os.write(
         bootstrap_write,
         json.dumps(
-            {"contract": "money-map-desktop-bootstrap-v1", "session": session},
+            {"attestation": None, "contract": "money-map-desktop-bootstrap-v1", "session": session},
             separators=(",", ":"),
         ).encode()
         + b"\n",
@@ -229,7 +230,7 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
 
         os.write(
             bootstrap_write,
-            b'{"contract":"money-map-desktop-bootstrap-v1","session":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n',
+            b'{"attestation":null,"contract":"money-map-desktop-bootstrap-v1","session":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n',
         )
         os.close(bootstrap_write)
         contender = subprocess.run(
@@ -271,6 +272,58 @@ def test_sigterm_requests_graceful_sidecar_cleanup(tmp_path: Path) -> None:
     assert not (root / ".money-map-writer.lock").exists()
     events = (root.parent / "logs/desktop-events.jsonl").read_text()
     assert '"code":"MM-DESKTOP-STOP"' in events
+
+
+def test_sidecar_attestation_uses_open_sqlite_identity_and_live_resources(tmp_path: Path) -> None:
+    import sqlite3
+
+    from paycheck_map.desktop_lock import WriterLock
+    from paycheck_map.desktop_sidecar import _attestation_record
+
+    campaign = tmp_path / "campaign"
+    application = campaign / "Library/Application Support/Money Map"
+    database = application / "data/paycheck-map.sqlite3"
+    cache = campaign / "Library/Caches/com.moneymap.desktop"
+    logs = campaign / "Library/Logs/Money Map"
+    database.parent.mkdir(parents=True)
+    cache.mkdir(parents=True)
+    logs.mkdir(parents=True)
+    spec = {
+        "contract": "money-map-installed-root-attestation-v1",
+        "schema_version": 1,
+        "campaign_id": "a" * 32,
+        "nonce": "b" * 64,
+        "generation": 1,
+        "mode": "acceptance-synthetic-v1",
+        "campaign_root": str(campaign),
+        "application_root": str(application),
+        "database_path": str(database),
+        "writer_lock_path": str(application / ".money-map-writer.lock"),
+        "cache_root": str(cache),
+        "log_root": str(logs),
+    }
+    application.mkdir(parents=True, exist_ok=True)
+    with WriterLock(application), sqlite3.connect(database) as connection:
+        record = _attestation_record(spec, "c" * 64, connection)
+        assert record["database_path"] == str(database.resolve())
+        assert record["writer_lock"] == {
+            "exists": True,
+            "kind": "file",
+            "symlink_free": True,
+            "contained": True,
+            "active": True,
+        }
+        assert all(
+            cast(dict[str, object], record[name])["contained"]
+            for name in ("database", "cache", "logs")
+        )
+
+        other = campaign / "other.sqlite3"
+        with (
+            sqlite3.connect(other) as wrong_connection,
+            pytest.raises(RuntimeError, match="SQLite identity"),
+        ):
+            _attestation_record(spec, "c" * 64, wrong_connection)
 
 
 def test_desktop_python_boundary_rejects_method_path_size_and_redacts(

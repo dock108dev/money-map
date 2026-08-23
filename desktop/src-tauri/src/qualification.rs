@@ -1,0 +1,576 @@
+use std::collections::BTreeSet;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Component, Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+pub const LAUNCH_CONTRACT: &str = "money-map-installed-attestation-launch-v1";
+pub const ATTESTATION_CONTRACT: &str = "money-map-installed-root-attestation-v1";
+pub const RESULT_CONTRACT: &str = "money-map-native-attestation-result-v1";
+pub const MAX_LAUNCH_BYTES: usize = 8_192;
+pub const MAX_ATTESTATION_BYTES: usize = 8_192;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct QualificationContract {
+    pub contract: String,
+    pub schema_version: u8,
+    pub campaign_id: String,
+    pub nonce: String,
+    pub mode: String,
+    pub campaign_root: PathBuf,
+    pub application_root: PathBuf,
+    pub database_path: PathBuf,
+    pub writer_lock_path: PathBuf,
+    pub cache_root: PathBuf,
+    pub log_root: PathBuf,
+    pub result_path: PathBuf,
+    pub candidate_sha256: String,
+    pub source_commit: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceFacts {
+    pub exists: bool,
+    pub kind: String,
+    pub symlink_free: bool,
+    pub contained: bool,
+    pub active: Option<bool>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct InstalledAttestation {
+    pub contract: String,
+    pub schema_version: u8,
+    pub campaign_id: String,
+    pub nonce: String,
+    pub generation: u64,
+    pub session: String,
+    pub mode: String,
+    pub campaign_root: PathBuf,
+    pub application_root: PathBuf,
+    pub database_path: PathBuf,
+    pub writer_lock_path: PathBuf,
+    pub cache_root: PathBuf,
+    pub log_root: PathBuf,
+    pub database: ResourceFacts,
+    pub writer_lock: ResourceFacts,
+    pub cache: ResourceFacts,
+    pub logs: ResourceFacts,
+    pub sequence: u64,
+}
+
+#[derive(Serialize)]
+struct NativeResult<'a> {
+    contract: &'static str,
+    result: &'a str,
+    campaign_id: &'a str,
+    attestation_contract: &'static str,
+    mode: &'a str,
+    candidate_sha256: &'a str,
+    source_commit: &'a str,
+    root_roles: [&'static str; 5],
+    database: bool,
+    writer_lock: bool,
+    cache: bool,
+    logs: bool,
+    containment: bool,
+    symlink_checks: bool,
+    readiness_ordering: bool,
+    ui_gating: bool,
+    first_unmet_requirement: Option<&'a str>,
+}
+
+impl QualificationContract {
+    pub fn from_environment() -> Result<Option<Self>, String> {
+        let raw = std::env::var("MONEY_MAP_QUALIFICATION_CONTRACT").ok();
+        let fake_home = std::env::var_os("MONEY_MAP_ACCEPTANCE_FAKE_HOME");
+        if raw.is_none() && fake_home.is_none() {
+            return Ok(None);
+        }
+        let raw = raw.ok_or_else(|| "Synthetic qualification contract is required.".to_string())?;
+        if raw.len() > MAX_LAUNCH_BYTES || raw.contains('\n') || raw.contains('\0') {
+            return Err("Synthetic qualification contract was rejected.".to_string());
+        }
+        for field in [
+            "contract",
+            "schema_version",
+            "campaign_id",
+            "nonce",
+            "mode",
+            "campaign_root",
+            "application_root",
+            "database_path",
+            "writer_lock_path",
+            "cache_root",
+            "log_root",
+            "result_path",
+            "candidate_sha256",
+            "source_commit",
+        ] {
+            if raw.matches(&format!("\"{field}\"")).count() != 1 {
+                return Err("Synthetic qualification contract was rejected.".to_string());
+            }
+        }
+        let value: Self = serde_json::from_str(&raw)
+            .map_err(|_| "Synthetic qualification contract was rejected.".to_string())?;
+        if let Err(error) = value.validate(fake_home.as_deref().map(Path::new)) {
+            let _ = value.write_result(false, Some("qualification-contract"));
+            return Err(error);
+        }
+        Ok(Some(value))
+    }
+
+    fn validate(&self, fake_home: Option<&Path>) -> Result<(), String> {
+        if self.contract != LAUNCH_CONTRACT
+            || self.schema_version != 1
+            || self.mode != "acceptance-synthetic-v1"
+            || !is_lower_hex(&self.campaign_id, 32)
+            || !is_lower_hex(&self.nonce, 64)
+            || !is_lower_hex(&self.candidate_sha256, 64)
+            || !is_lower_hex(&self.source_commit, 40)
+        {
+            return Err("Synthetic qualification contract was rejected.".to_string());
+        }
+        let campaign = normalized(&self.campaign_root)?;
+        if !(campaign.starts_with("/private/tmp") || campaign.starts_with("/tmp"))
+            || fake_home.map(normalized).transpose()?.as_ref() != Some(&campaign)
+        {
+            return Err("Synthetic qualification root was rejected.".to_string());
+        }
+        reject_symlink_chain(&campaign)?;
+        let expected = [
+            campaign.join("Library/Application Support/Money Map"),
+            campaign.join("Library/Application Support/Money Map/data/paycheck-map.sqlite3"),
+            campaign.join("Library/Application Support/Money Map/.money-map-writer.lock"),
+            campaign.join("Library/Caches/com.moneymap.desktop"),
+            campaign.join("Library/Logs/Money Map"),
+            campaign.join("native-attestation-result.json"),
+        ];
+        let supplied = [
+            &self.application_root,
+            &self.database_path,
+            &self.writer_lock_path,
+            &self.cache_root,
+            &self.log_root,
+            &self.result_path,
+        ];
+        for (actual, expected) in supplied.into_iter().zip(expected) {
+            let actual = normalized(actual)?;
+            if actual != expected || !actual.starts_with(&campaign) {
+                return Err("Synthetic qualification path was rejected.".to_string());
+            }
+            reject_symlink_chain(&actual)?;
+        }
+        Ok(())
+    }
+
+    pub fn verify_attestation(
+        &self,
+        attestation: &InstalledAttestation,
+        generation: u64,
+        session: &str,
+        nonce: &str,
+    ) -> Result<(), String> {
+        if attestation.contract != ATTESTATION_CONTRACT
+            || attestation.schema_version != 1
+            || attestation.campaign_id != self.campaign_id
+            || attestation.nonce != nonce
+            || attestation.generation != generation
+            || attestation.session != session
+            || attestation.mode != "acceptance-synthetic-v1"
+            || attestation.sequence != 1
+        {
+            return Err("Installed root attestation was rejected.".to_string());
+        }
+        let expected = [
+            (&attestation.campaign_root, &self.campaign_root),
+            (&attestation.application_root, &self.application_root),
+            (&attestation.database_path, &self.database_path),
+            (&attestation.writer_lock_path, &self.writer_lock_path),
+            (&attestation.cache_root, &self.cache_root),
+            (&attestation.log_root, &self.log_root),
+        ];
+        for (actual, expected) in expected {
+            if canonical_existing(actual)? != canonical_existing(expected)?
+                || !canonical_existing(actual)?
+                    .starts_with(canonical_existing(&self.campaign_root)?)
+            {
+                return Err("Installed root attestation was rejected.".to_string());
+            }
+            reject_symlink_chain(actual)?;
+        }
+        let facts = [
+            (&attestation.database, "file", None),
+            (&attestation.writer_lock, "file", Some(true)),
+            (&attestation.cache, "directory", None),
+            (&attestation.logs, "directory", None),
+        ];
+        if facts.into_iter().any(|(fact, kind, active)| {
+            !fact.exists
+                || fact.kind != kind
+                || !fact.symlink_free
+                || !fact.contained
+                || active.is_some_and(|required| fact.active != Some(required))
+        }) {
+            return Err("Installed root attestation facts were rejected.".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn write_result(&self, passed: bool, first_unmet: Option<&str>) -> Result<(), String> {
+        let campaign = normalized(&self.campaign_root)?;
+        let result_path = normalized(&self.result_path)?;
+        if !(campaign.starts_with("/private/tmp") || campaign.starts_with("/tmp"))
+            || result_path != campaign.join("native-attestation-result.json")
+            || !result_path.starts_with(&campaign)
+        {
+            return Err("Attestation result location was rejected.".to_string());
+        }
+        reject_symlink_chain(&result_path)?;
+        let result = NativeResult {
+            contract: RESULT_CONTRACT,
+            result: if passed { "pass" } else { "failed" },
+            campaign_id: &self.campaign_id,
+            attestation_contract: ATTESTATION_CONTRACT,
+            mode: &self.mode,
+            candidate_sha256: &self.candidate_sha256,
+            source_commit: &self.source_commit,
+            root_roles: [
+                "campaign",
+                "application-data",
+                "database",
+                "cache",
+                "safe-log",
+            ],
+            database: passed,
+            writer_lock: passed,
+            cache: passed,
+            logs: passed,
+            containment: passed,
+            symlink_checks: passed,
+            readiness_ordering: passed,
+            ui_gating: passed,
+            first_unmet_requirement: first_unmet,
+        };
+        let bytes = serde_json::to_vec_pretty(&result)
+            .map_err(|_| "Attestation result could not be retained.".to_string())?;
+        let temporary = self.result_path.with_extension("json.tmp");
+        fs::write(&temporary, bytes)
+            .map_err(|_| "Attestation result could not be retained.".to_string())?;
+        fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))
+            .map_err(|_| "Attestation result could not be retained.".to_string())?;
+        fs::rename(&temporary, &self.result_path)
+            .map_err(|_| "Attestation result could not be retained.".to_string())
+    }
+}
+
+fn is_lower_hex(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn normalized(path: &Path) -> Result<PathBuf, String> {
+    if !path.is_absolute() {
+        return Err("Synthetic qualification path was rejected.".to_string());
+    }
+    let mut value = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::RootDir => value.push("/"),
+            Component::Normal(part) => value.push(part),
+            _ => return Err("Synthetic qualification path was rejected.".to_string()),
+        }
+    }
+    Ok(value)
+}
+
+fn canonical_existing(path: &Path) -> Result<PathBuf, String> {
+    path.canonicalize()
+        .map_err(|_| "Installed attested resource was unavailable.".to_string())
+}
+
+fn reject_symlink_chain(path: &Path) -> Result<(), String> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err("Synthetic qualification symlink was rejected.".to_string())
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err("Synthetic qualification path could not be verified.".to_string()),
+        }
+    }
+    Ok(())
+}
+
+pub fn parse_attestation(line: &str) -> Result<InstalledAttestation, String> {
+    let raw = line
+        .strip_prefix("MONEY_MAP_ATTEST ")
+        .ok_or_else(|| "Installed root attestation was malformed.".to_string())?;
+    if raw.len() > MAX_ATTESTATION_BYTES || raw.contains('\n') || raw.contains('\0') {
+        return Err("Installed root attestation was malformed.".to_string());
+    }
+    let value: InstalledAttestation = serde_json::from_str(raw)
+        .map_err(|_| "Installed root attestation was malformed.".to_string())?;
+    let keys: BTreeSet<&str> = [
+        "contract",
+        "schema_version",
+        "campaign_id",
+        "nonce",
+        "generation",
+        "session",
+        "mode",
+        "campaign_root",
+        "application_root",
+        "database_path",
+        "writer_lock_path",
+        "cache_root",
+        "log_root",
+        "database",
+        "writer_lock",
+        "cache",
+        "logs",
+        "sequence",
+    ]
+    .into_iter()
+    .collect();
+    if keys
+        .iter()
+        .any(|key| raw.matches(&format!("\"{key}\"")).count() != 1)
+    {
+        return Err("Installed root attestation was malformed.".to_string());
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> (
+        tempfile::TempDir,
+        QualificationContract,
+        InstalledAttestation,
+    ) {
+        let campaign = tempfile::Builder::new()
+            .prefix("money-map-attestation-test-")
+            .tempdir_in("/private/tmp")
+            .unwrap();
+        let application = campaign
+            .path()
+            .join("Library/Application Support/Money Map");
+        let database = application.join("data/paycheck-map.sqlite3");
+        let writer_lock = application.join(".money-map-writer.lock");
+        let cache = campaign.path().join("Library/Caches/com.moneymap.desktop");
+        let logs = campaign.path().join("Library/Logs/Money Map");
+        fs::create_dir_all(database.parent().unwrap()).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        fs::create_dir_all(&logs).unwrap();
+        fs::write(&database, b"sqlite").unwrap();
+        fs::write(&writer_lock, b"held").unwrap();
+        let contract = QualificationContract {
+            contract: LAUNCH_CONTRACT.into(),
+            schema_version: 1,
+            campaign_id: "a".repeat(32),
+            nonce: "b".repeat(64),
+            mode: "acceptance-synthetic-v1".into(),
+            campaign_root: campaign.path().to_path_buf(),
+            application_root: application.clone(),
+            database_path: database.clone(),
+            writer_lock_path: writer_lock.clone(),
+            cache_root: cache.clone(),
+            log_root: logs.clone(),
+            result_path: campaign.path().join("native-attestation-result.json"),
+            candidate_sha256: "c".repeat(64),
+            source_commit: "d".repeat(40),
+        };
+        let file = ResourceFacts {
+            exists: true,
+            kind: "file".into(),
+            symlink_free: true,
+            contained: true,
+            active: None,
+        };
+        let directory = ResourceFacts {
+            exists: true,
+            kind: "directory".into(),
+            symlink_free: true,
+            contained: true,
+            active: None,
+        };
+        let attestation = InstalledAttestation {
+            contract: ATTESTATION_CONTRACT.into(),
+            schema_version: 1,
+            campaign_id: contract.campaign_id.clone(),
+            nonce: contract.nonce.clone(),
+            generation: 1,
+            session: "e".repeat(64),
+            mode: contract.mode.clone(),
+            campaign_root: campaign.path().to_path_buf(),
+            application_root: application,
+            database_path: database,
+            writer_lock_path: writer_lock,
+            cache_root: cache,
+            log_root: logs,
+            database: file.clone(),
+            writer_lock: ResourceFacts {
+                active: Some(true),
+                ..file
+            },
+            cache: directory.clone(),
+            logs: directory,
+            sequence: 1,
+        };
+        (campaign, contract, attestation)
+    }
+
+    #[test]
+    fn exact_live_resource_attestation_passes() {
+        let (_campaign, contract, attestation) = fixture();
+        contract
+            .verify_attestation(&attestation, 1, &"e".repeat(64), &contract.nonce)
+            .unwrap();
+    }
+
+    #[test]
+    fn identity_replay_mode_and_order_are_rejected() {
+        let (_campaign, contract, attestation) = fixture();
+        for changed in [
+            InstalledAttestation {
+                nonce: "f".repeat(64),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                generation: 2,
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                session: "f".repeat(64),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                mode: "production-v1".into(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                sequence: 2,
+                ..attestation.clone()
+            },
+        ] {
+            assert!(contract
+                .verify_attestation(&changed, 1, &"e".repeat(64), &contract.nonce)
+                .is_err());
+        }
+    }
+
+    #[test]
+    fn escaped_missing_wrong_type_and_inactive_resources_are_rejected() {
+        let (campaign, contract, attestation) = fixture();
+        let outside = campaign.path().parent().unwrap().join("outside.sqlite3");
+        fs::write(&outside, b"sqlite").unwrap();
+        let cases = [
+            InstalledAttestation {
+                database_path: outside.clone(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                database: ResourceFacts {
+                    exists: false,
+                    ..attestation.database.clone()
+                },
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                cache: ResourceFacts {
+                    kind: "file".into(),
+                    ..attestation.cache.clone()
+                },
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                writer_lock: ResourceFacts {
+                    active: Some(false),
+                    ..attestation.writer_lock.clone()
+                },
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                logs: ResourceFacts {
+                    contained: false,
+                    ..attestation.logs.clone()
+                },
+                ..attestation.clone()
+            },
+        ];
+        for changed in cases {
+            assert!(contract
+                .verify_attestation(&changed, 1, &"e".repeat(64), &contract.nonce)
+                .is_err());
+        }
+        fs::remove_file(outside).unwrap();
+    }
+
+    #[test]
+    fn qualification_contract_rejects_production_missing_nonce_traversal_and_symlinks() {
+        let (campaign, contract, _attestation) = fixture();
+        assert!(contract.validate(Some(campaign.path())).is_ok());
+        assert!(QualificationContract {
+            mode: "production-v1".into(),
+            ..contract.clone()
+        }
+        .validate(Some(campaign.path()))
+        .is_err());
+        assert!(QualificationContract {
+            nonce: String::new(),
+            ..contract.clone()
+        }
+        .validate(Some(campaign.path()))
+        .is_err());
+        assert!(QualificationContract {
+            database_path: campaign.path().join("child/../escape"),
+            ..contract.clone()
+        }
+        .validate(Some(campaign.path()))
+        .is_err());
+        let link = campaign.path().join("linked-cache");
+        std::os::unix::fs::symlink(&contract.cache_root, &link).unwrap();
+        assert!(QualificationContract {
+            cache_root: link,
+            ..contract
+        }
+        .validate(Some(campaign.path()))
+        .is_err());
+    }
+
+    #[test]
+    fn malformed_duplicate_and_oversized_attestations_are_rejected() {
+        assert!(parse_attestation("MONEY_MAP_ATTEST not-json").is_err());
+        assert!(parse_attestation(&format!(
+            "MONEY_MAP_ATTEST {}",
+            "x".repeat(MAX_ATTESTATION_BYTES + 1)
+        ))
+        .is_err());
+        let (_campaign, _contract, attestation) = fixture();
+        let mut raw = serde_json::to_string(&serde_json::json!({
+            "contract": attestation.contract, "schema_version": 1, "campaign_id": attestation.campaign_id,
+            "nonce": attestation.nonce, "generation": 1, "session": attestation.session,
+            "mode": attestation.mode, "campaign_root": attestation.campaign_root,
+            "application_root": attestation.application_root, "database_path": attestation.database_path,
+            "writer_lock_path": attestation.writer_lock_path, "cache_root": attestation.cache_root,
+            "log_root": attestation.log_root, "database": {"exists":true,"kind":"file","symlink_free":true,"contained":true,"active":null},
+            "writer_lock": {"exists":true,"kind":"file","symlink_free":true,"contained":true,"active":true},
+            "cache": {"exists":true,"kind":"directory","symlink_free":true,"contained":true,"active":null},
+            "logs": {"exists":true,"kind":"directory","symlink_free":true,"contained":true,"active":null}, "sequence": 1
+        })).unwrap();
+        raw = raw.replacen("{", "{\"nonce\":\"f\",", 1);
+        assert!(parse_attestation(&format!("MONEY_MAP_ATTEST {raw}")).is_err());
+    }
+}

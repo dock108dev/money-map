@@ -47,11 +47,21 @@ def test_cli_identity_rejects_malformed_values(digest: str, commit: str) -> None
 
 def test_runtime_environment_is_minimal_and_credential_free(tmp_path: Path) -> None:
     loaded = module()
-    env = loaded.clean_runtime_env(tmp_path)
+    contract = loaded.launch_contract(
+        tmp_path,
+        campaign_id="a" * 32,
+        nonce="b" * 64,
+        candidate_sha256="c" * 64,
+        source_commit="d" * 40,
+    )
+    env = loaded.clean_runtime_env(tmp_path, contract)
     assert env == {
         "PATH": "/usr/bin:/bin",
         "HOME": str(tmp_path),
         "MONEY_MAP_ACCEPTANCE_FAKE_HOME": str(tmp_path),
+        "MONEY_MAP_QUALIFICATION_CONTRACT": json.dumps(
+            contract, sort_keys=True, separators=(",", ":")
+        ),
     }
     assert "PYTHONPATH" not in env
     assert "NODE_PATH" not in env
@@ -156,33 +166,89 @@ def test_wait_gone_does_not_trust_a_reused_sidecar_pid(
     assert loaded.wait_gone(process, [43123], timeout=0.1) >= 0
 
 
-def test_synthetic_root_attestation_requires_exact_mode_and_roots(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_launcher_contract_derives_exact_nonce_bound_roots(tmp_path: Path) -> None:
     loaded = module()
-    roots = {
-        "PAYCHECK_MAP_DESKTOP_APP_ROOT": tmp_path / "Library/Application Support/Money Map",
-        "PAYCHECK_MAP_DESKTOP_CACHE_ROOT": tmp_path / "Library/Caches/com.moneymap.desktop",
-        "PAYCHECK_MAP_DESKTOP_LOG_ROOT": tmp_path / "Library/Logs/Money Map",
+    contract = loaded.launch_contract(
+        tmp_path,
+        campaign_id="a" * 32,
+        nonce="b" * 64,
+        candidate_sha256="c" * 64,
+        source_commit="d" * 40,
+    )
+    application = tmp_path / "Library/Application Support/Money Map"
+    assert contract == {
+        "contract": loaded.LAUNCH_CONTRACT,
+        "schema_version": 1,
+        "campaign_id": "a" * 32,
+        "nonce": "b" * 64,
+        "mode": "acceptance-synthetic-v1",
+        "campaign_root": str(tmp_path),
+        "application_root": str(application),
+        "database_path": str(application / "data/paycheck-map.sqlite3"),
+        "writer_lock_path": str(application / ".money-map-writer.lock"),
+        "cache_root": str(tmp_path / "Library/Caches/com.moneymap.desktop"),
+        "log_root": str(tmp_path / "Library/Logs/Money Map"),
+        "result_path": str(tmp_path / "native-attestation-result.json"),
+        "candidate_sha256": "c" * 64,
+        "source_commit": "d" * 40,
     }
-    for path in roots.values():
-        path.mkdir(parents=True)
-    environment = " ".join(
-        [
-            *(f"{name}={value}" for name, value in roots.items()),
-            f"PAYCHECK_MAP_LOCAL_DIR={roots['PAYCHECK_MAP_DESKTOP_APP_ROOT']}",
-            "PAYCHECK_MAP_DESKTOP_DATA_MODE=acceptance-synthetic-v1",
-        ]
+
+
+def test_native_result_is_the_attestation_authority(tmp_path: Path) -> None:
+    loaded = module()
+    contract = loaded.launch_contract(
+        tmp_path,
+        campaign_id="a" * 32,
+        nonce="b" * 64,
+        candidate_sha256="c" * 64,
+        source_commit="d" * 40,
     )
-    monkeypatch.setattr(
-        loaded.subprocess,
-        "run",
-        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=environment),
+    result = {
+        "contract": loaded.NATIVE_RESULT_CONTRACT,
+        "result": "pass",
+        "campaign_id": "a" * 32,
+        "mode": "acceptance-synthetic-v1",
+        "candidate_sha256": "c" * 64,
+        "source_commit": "d" * 40,
+        "attestation_contract": "money-map-installed-root-attestation-v1",
+        "root_roles": ["campaign", "application-data", "database", "cache", "safe-log"],
+        "database": True,
+        "writer_lock": True,
+        "cache": True,
+        "logs": True,
+        "containment": True,
+        "symlink_checks": True,
+        "readiness_ordering": True,
+        "ui_gating": True,
+        "first_unmet_requirement": None,
+    }
+    result_path = tmp_path / "native-attestation-result.json"
+    result_path.write_text(json.dumps(result))
+    loaded.require_native_attestation(
+        loaded.wait_native_result(result_path, expected="pass"), contract
     )
-    loaded.attest_synthetic_roots([43123, 43124], tmp_path)
-    environment = environment.replace("acceptance-synthetic-v1", "production-v1")
-    with pytest.raises(loaded.QualificationFailure, match="attestation"):
-        loaded.attest_synthetic_roots([43123], tmp_path)
+    result["database"] = False
+    with pytest.raises(loaded.QualificationFailure, match="did not attest"):
+        loaded.require_native_attestation(result, contract)
+
+
+def test_financial_webview_is_constructed_only_after_native_startup_passes() -> None:
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    setup = source[source.index(".setup(|app|") : source.index(".on_menu_event")]
+    assert setup.index("controller.start_initial().is_ok()") < setup.index("build_main_window")
+    assert "visible(false)" not in setup
+    safe_capability = json.loads(
+        (PROJECT_ROOT / "desktop/src-tauri/capabilities/safe-error.json").read_text()
+    )
+    assert "allow-desktop-fetch" not in safe_capability["permissions"]
+    assert all(
+        forbidden not in safe_capability["permissions"]
+        for forbidden in (
+            "allow-desktop-select-import",
+            "allow-desktop-report-action",
+            "allow-desktop-export-diagnostics",
+        )
+    )
 
 
 def test_cleanup_failure_labels_are_sanitized_and_specific() -> None:
