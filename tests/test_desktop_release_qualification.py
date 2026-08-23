@@ -276,6 +276,13 @@ def test_financial_webview_is_constructed_only_after_native_startup_passes() -> 
     assert "writer_lock_path" not in combined_frontend
 
 
+def test_matrix_observer_uses_the_accessible_navigation_label() -> None:
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    observer = source[source.index("fn qualification_observer_script") :]
+    assert 'button.getAttribute("aria-label")' in observer
+    assert "buttonLabel(button) === label" in observer
+
+
 def test_cleanup_failure_labels_are_sanitized_and_specific() -> None:
     source = (PROJECT_ROOT / "scripts/qualify_desktop_release.py").read_text()
     for label in ("writer-lock", "session-material", "graceful-stop", "single-instance"):

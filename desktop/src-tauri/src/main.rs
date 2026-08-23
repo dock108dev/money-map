@@ -672,8 +672,10 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
           const text = (element) => (element?.textContent || "").replace(/\s+/g, " ").trim();
           const values = (selector, limit) => Array.from(document.querySelectorAll(selector))
             .map(text).filter(Boolean).slice(0, limit);
+          const buttonLabel = (button) => (button.getAttribute("aria-label") || text(button))
+            .replace(/, \d+ issues$/u, "");
           const clickLabel = (label) => Array.from(document.querySelectorAll("button"))
-            .find((button) => text(button) === label)?.click();
+            .find((button) => buttonLabel(button) === label)?.click();
           const timer = window.setInterval(() => {{
             attempts += 1;
             if (attempts === 4) {{

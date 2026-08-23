@@ -277,6 +277,15 @@ def run_combination(
                 os.killpg(process.pid, signal.SIGTERM)
             with contextlib.suppress(subprocess.TimeoutExpired):
                 process.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            alive = {pid for pid, _, _ in base.process_rows()} & set(sidecars)
+            if not alive:
+                break
+            for pid in alive:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(pid, signal.SIGTERM)
+            time.sleep(0.1)
 
 
 def qualification(args: argparse.Namespace) -> Path:
@@ -342,6 +351,20 @@ def qualification(args: argparse.Namespace) -> Path:
             except (MatrixFailure, base.QualificationFailure) as error:
                 report["first_failed_combination"] = expected["combination_id"]
                 report["failure_classification"] = str(error)
+                report["first_failure_expectation"] = {
+                    "safe_state_language": expected["expected_safe_state_language"],
+                    "accessible_role": expected["expected_accessible_role"],
+                    "http_status": expected["expected_http_status"],
+                }
+                observation_path = (
+                    campaign
+                    / f"combination-{expected['combination_id'].replace('::', '--')}"
+                    / "matrix-observation.json"
+                )
+                with contextlib.suppress(OSError, json.JSONDecodeError):
+                    observation = json.loads(observation_path.read_text(encoding="utf-8"))
+                    if isinstance(observation, dict):
+                        report["first_failure_observation"] = observation
                 raise
         report["result"] = "pass" if len(combinations) == 221 else "diagnostic-pass"
         report["passed_combinations"] = len(report["results"])
