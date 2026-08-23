@@ -52,6 +52,9 @@ Shutdown uses a separate inherited Unix-domain socket duplicated to descriptor 6
 PyInstaller one-file bootloader's internal low-descriptor range. It accepts only
 the fixed bounded control record, and its nonsecret descriptor marker is removed before readiness.
 Neither bootstrap nor lifecycle control uses stdin, arguments, files, WebView state, or loopback.
+If the one-file bootloader does not preserve the control descriptor into its child, the native
+supervisor sends a data-free `SIGTERM` to the isolated sidecar group. The child maps it to the same
+graceful server exit, with a bounded `SIGKILL` retained only as the final cleanup fallback.
 
 The server binds `127.0.0.1:0`. It requires one exact Host and session, at most one trusted Origin,
 rejects duplicate security headers, Content-Length plus Transfer-Encoding, control bytes,

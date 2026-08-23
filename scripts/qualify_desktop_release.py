@@ -303,18 +303,18 @@ def quit_app() -> None:
     )
 
 
-def wait_gone(pids: list[int], timeout: float = 15) -> int:
+def wait_gone(
+    process: subprocess.Popen[bytes], sidecar_pids: list[int], timeout: float = 15
+) -> int:
     started = time.monotonic()
     while time.monotonic() - started < timeout:
-        alive = []
-        for pid in pids:
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                continue
-            else:
-                alive.append(pid)
-        if not alive:
+        app_alive = process.poll() is None
+        rows = process_rows()
+        sidecars_alive = any(
+            pid in sidecar_pids and Path(command).name == "money-map-sidecar"
+            for pid, _, command in rows
+        )
+        if not app_alive and not sidecars_alive:
             return round((time.monotonic() - started) * 1000)
         time.sleep(0.1)
     raise QualificationFailure("normal quit left an installed-app process alive")
@@ -367,7 +367,7 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
             if not single_instance:
                 raise QualificationFailure("second launch created another app, sidecar, or writer")
         quit_app()
-        shutdown_ms = wait_gone([process.pid, *sidecars])
+        shutdown_ms = wait_gone(process, sidecars)
         for _ in range(50):
             if not lock.exists():
                 break
@@ -394,15 +394,18 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
             graceful_stop=graceful,
             second_launch_single_instance=single_instance,
         )
-        if not all(
-            [
-                result.writer_lock_clean,
-                result.session_material_clean,
-                result.graceful_stop,
-                result.second_launch_single_instance,
-            ]
-        ):
-            raise QualificationFailure("normal quit cleanup contract failed")
+        failed_cleanup = [
+            name
+            for name, passed in (
+                ("writer-lock", result.writer_lock_clean),
+                ("session-material", result.session_material_clean),
+                ("graceful-stop", result.graceful_stop),
+                ("single-instance", result.second_launch_single_instance),
+            )
+            if not passed
+        ]
+        if failed_cleanup:
+            raise QualificationFailure("normal quit cleanup failed: " + ", ".join(failed_cleanup))
         return result
     finally:
         if process.poll() is None:

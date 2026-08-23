@@ -19,7 +19,8 @@ use serde::Serialize;
 
 const READY_SIGNAL_TIMEOUT: Duration = Duration::from_secs(30);
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(45);
-const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(1500);
+const CONTROL_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(250);
+const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const DISAPPEARANCE_TIMEOUT: Duration = Duration::from_secs(5);
 const FAILURE_MESSAGE: &str =
     "Money Map's local service is unavailable. Financial data was not repaired or changed.";
@@ -489,6 +490,15 @@ impl RuntimeController {
             let _ = control
                 .write_all(b"{\"command\":\"shutdown\",\"contract\":\"money-map-control-v1\"}\n");
             let _ = control.flush();
+        }
+        let control_deadline = Instant::now() + CONTROL_SHUTDOWN_TIMEOUT;
+        while Instant::now() < control_deadline && child_is_running(&process.child) {
+            thread::sleep(Duration::from_millis(25));
+        }
+        if child_is_running(&process.child) {
+            unsafe {
+                libc::kill(-(process.pid as i32), libc::SIGTERM);
+            }
         }
         let graceful_deadline = Instant::now() + GRACEFUL_SHUTDOWN_TIMEOUT;
         while Instant::now() < graceful_deadline && child_is_running(&process.child) {

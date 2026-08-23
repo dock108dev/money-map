@@ -262,6 +262,17 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
         )
 
 
+def test_sigterm_requests_graceful_sidecar_cleanup(tmp_path: Path) -> None:
+    root = tmp_path / "money-map-runtime-signal-integration" / "money-map-synthetic-data"
+    with running_sidecar(root) as (process, _port):
+        assert (root / ".money-map-writer.lock").is_file()
+        process.terminate()
+        assert process.wait(timeout=5) == 0
+    assert not (root / ".money-map-writer.lock").exists()
+    events = (root.parent / "logs/desktop-events.jsonl").read_text()
+    assert '"code":"MM-DESKTOP-STOP"' in events
+
+
 def test_desktop_python_boundary_rejects_method_path_size_and_redacts(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

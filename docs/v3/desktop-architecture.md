@@ -46,6 +46,11 @@ bootstrap, and event-log shutdown. This keeps lifecycle control out of arguments
 WebView, and the network and prevents an orphan when macOS ends the shell without delivering
 Tauri's exit callback.
 
+After the bounded descriptor attempt, the shell sends `SIGTERM` to the isolated sidecar process
+group. The frozen child converts that signal into Uvicorn's graceful-exit flag so SQLite, the
+writer lock, bootstrap state, and safe event log close before the shell uses its final bounded
+`SIGKILL` fallback. The signal carries no data and is unavailable to the WebView or network.
+
 The shell owns an explicit `Starting`, `Ready`, `Failed`, `Restarting`, `Stopping`, and `Stopped`
 state machine. Every generation receives a new session and exactly one process group. The sidecar
 reserves an OS-selected port by binding `127.0.0.1:0`, then prints only `MONEY_MAP_READY <port>`.

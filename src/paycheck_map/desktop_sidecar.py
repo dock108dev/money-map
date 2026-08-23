@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import signal
 import socket
 import threading
 import time
@@ -163,6 +164,11 @@ def main() -> None:
             h11_max_incomplete_event_size=16_384,
         )
         server = uvicorn.Server(config)
+
+        def request_graceful_shutdown(_signal: int, _frame: object) -> None:
+            server.should_exit = True
+
+        signal.signal(signal.SIGTERM, request_graceful_shutdown)
 
         def await_shutdown() -> None:
             with control:

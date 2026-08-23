@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -136,6 +137,29 @@ def test_sanitized_report_allows_boolean_cleanup_facts_but_rejects_raw_details()
     ]:
         with pytest.raises(loaded.QualificationFailure):
             loaded.sanitize_report(report)
+
+
+def test_wait_gone_reaps_the_harness_owned_native_process() -> None:
+    loaded = module()
+    process = subprocess.Popen(["/usr/bin/true"])
+    assert loaded.wait_gone(process, [], timeout=1) >= 0
+    assert process.returncode == 0
+
+
+def test_wait_gone_does_not_trust_a_reused_sidecar_pid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded = module()
+    process = subprocess.Popen(["/usr/bin/true"])
+    process.wait()
+    monkeypatch.setattr(loaded, "process_rows", lambda: [(43123, 1, "/usr/bin/unrelated")])
+    assert loaded.wait_gone(process, [43123], timeout=0.1) >= 0
+
+
+def test_cleanup_failure_labels_are_sanitized_and_specific() -> None:
+    source = (PROJECT_ROOT / "scripts/qualify_desktop_release.py").read_text()
+    for label in ("writer-lock", "session-material", "graceful-stop", "single-instance"):
+        assert f'("{label}",' in source
 
 
 def test_required_campaign_matrix_is_checked_in_and_complete() -> None:
