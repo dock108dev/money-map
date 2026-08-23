@@ -356,6 +356,10 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
                 raise QualificationFailure(
                     "second launch did not activate the existing app"
                 ) from error
+            # Launch Services can return from the activation request before the
+            # Apple event has been fully delivered.  Do not race that event with
+            # the normal-quit event below.
+            time.sleep(0.5)
             rows = process_rows()
             app_count = sum(Path(command).name == "money-map-desktop" for _, _, command in rows)
             current_sidecars = descendants(process.pid, rows)
@@ -406,6 +410,10 @@ def run_cycle(app: Path, campaign: Path, cycle: int, *, second_launch: bool) -> 
         ]
         if failed_cleanup:
             raise QualificationFailure("normal quit cleanup failed: " + ", ".join(failed_cleanup))
+        # A successful process/lock cleanup is necessary but not sufficient for
+        # the macOS application service to have retired the prior instance.
+        # Give that bounded service transition time to settle before relaunch.
+        time.sleep(1.0)
         return result
     finally:
         if process.poll() is None:
@@ -507,10 +515,14 @@ def qualification(args: argparse.Namespace) -> Path:
             ],
             timeout=300,
         )
-        cycles = [
-            run_cycle(app, campaign, cycle, second_launch=True)
-            for cycle in range(1, args.launch_cycles + 1)
-        ]
+        cycles: list[CycleResult] = []
+        for cycle in range(1, args.launch_cycles + 1):
+            try:
+                cycles.append(run_cycle(app, campaign, cycle, second_launch=True))
+            except QualificationFailure as error:
+                report["completed_cycles"] = [asdict(item) for item in cycles]
+                report["failed_cycle"] = cycle
+                raise QualificationFailure(f"cycle {cycle}: {error}") from error
         report.update(
             {
                 "result": "pass",
