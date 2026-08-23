@@ -13,6 +13,7 @@ import re
 import secrets
 import shutil
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,14 @@ class CycleResult:
     attestation_campaign_id: str
     attestation_contract: str
     root_roles: tuple[str, ...]
+    schema_attested: bool
+    integrity_attested: bool
+    foreign_keys_attested: bool
+    database_identity_stable: bool
+    engine_database_identity: bool
+    permissions_attested: bool
+    ownership_attested: bool
+    hard_links_attested: bool
 
 
 def sha256(path: Path) -> str:
@@ -361,6 +370,15 @@ def require_native_attestation(result: dict[str, Any], contract: dict[str, objec
         "symlink_checks",
         "readiness_ordering",
         "ui_gating",
+        "main_window_absent_at_result",
+        "permissions",
+        "ownership",
+        "hard_links",
+        "schema",
+        "integrity",
+        "foreign_keys",
+        "database_identity_stable",
+        "engine_database_identity",
     )
     if (
         result.get("campaign_id") != contract["campaign_id"]
@@ -369,11 +387,32 @@ def require_native_attestation(result: dict[str, Any], contract: dict[str, objec
         or result.get("source_commit") != contract["source_commit"]
         or result.get("attestation_contract") != "money-map-installed-root-attestation-v1"
         or result.get("root_roles")
-        != ["campaign", "application-data", "database", "cache", "safe-log"]
+        != [
+            "campaign",
+            "application-data",
+            "database",
+            "writer-lock",
+            "cache",
+            "safe-log",
+        ]
         or any(result.get(name) is not True for name in required_true)
         or result.get("first_unmet_requirement") is not None
+        or result.get("safe_error_required") is not False
     ):
         raise QualificationFailure("native launcher did not attest the installed synthetic roots")
+
+
+def stop_probe(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is None:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGTERM)
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=5)
+    time.sleep(1.0)
 
 
 def prove_production_refusal(
@@ -406,9 +445,89 @@ def prove_production_refusal(
             raise QualificationFailure("production qualification reached a financial data location")
         return result.get("first_unmet_requirement") == "qualification-contract"
     finally:
-        if process.poll() is None:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGTERM)
+        stop_probe(process)
+
+
+def prove_missing_contract_refusal(app: Path, campaign: Path) -> bool:
+    fake_home = campaign / "missing-contract-refusal"
+    fake_home.mkdir(mode=0o700)
+    process = subprocess.Popen(
+        [str(app / "Contents/MacOS/money-map-desktop")],
+        cwd=campaign,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(fake_home)},
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            return False
+        return process.returncode != 0 and not any(fake_home.iterdir())
+    finally:
+        stop_probe(process)
+
+
+def prove_attestation_failure_cleanup(
+    app: Path, campaign: Path, candidate_sha256: str, source_commit: str
+) -> bool:
+    fake_home = campaign / "attestation-failure"
+    database = fake_home / "Library/Application Support/Money Map/data/paycheck-map.sqlite3"
+    fake_home.mkdir(mode=0o700)
+    database.parent.mkdir(mode=0o700, parents=True)
+    for directory in (
+        fake_home / "Library",
+        fake_home / "Library/Application Support",
+        fake_home / "Library/Application Support/Money Map",
+        database.parent,
+    ):
+        directory.chmod(0o700)
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0010_forbidden')")
+    database.chmod(0o600)
+    contract = launch_contract(
+        fake_home,
+        campaign_id=secrets.token_hex(16),
+        nonce=secrets.token_hex(32),
+        candidate_sha256=candidate_sha256,
+        source_commit=source_commit,
+    )
+    process = subprocess.Popen(
+        [str(app / "Contents/MacOS/money-map-desktop")],
+        cwd=campaign,
+        env=clean_runtime_env(fake_home, contract),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        result = wait_native_result(fake_home / "native-attestation-result.json", expected="failed")
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and descendants(process.pid, process_rows()):
+            time.sleep(0.1)
+        rows = process_rows()
+        descendants_alive = descendants(process.pid, rows)
+        lock = fake_home / "Library/Application Support/Money Map/.money-map-writer.lock"
+        session_files = [
+            path
+            for path in fake_home.rglob("*")
+            if path.is_file() and ("session" in path.name.lower() or path.suffix == ".sock")
+        ]
+        return (
+            process.poll() is None
+            and not descendants_alive
+            and not lock.exists()
+            and not session_files
+            and result.get("first_unmet_requirement") == "installed-root-attestation"
+            and result.get("main_window_absent_at_result") is True
+            and result.get("safe_error_required") is True
+        )
+    finally:
+        stop_probe(process)
 
 
 def quit_app() -> None:
@@ -540,6 +659,14 @@ def run_cycle(
             attestation_campaign_id=str(contract["campaign_id"]),
             attestation_contract=str(native_result["attestation_contract"]),
             root_roles=tuple(str(role) for role in native_result["root_roles"]),
+            schema_attested=bool(native_result["schema"]),
+            integrity_attested=bool(native_result["integrity"]),
+            foreign_keys_attested=bool(native_result["foreign_keys"]),
+            database_identity_stable=bool(native_result["database_identity_stable"]),
+            engine_database_identity=bool(native_result["engine_database_identity"]),
+            permissions_attested=bool(native_result["permissions"]),
+            ownership_attested=bool(native_result["ownership"]),
+            hard_links_attested=bool(native_result["hard_links"]),
         )
         failed_cleanup = [
             name
@@ -662,6 +789,14 @@ def qualification(args: argparse.Namespace) -> Path:
         )
         if not production_mode_refused:
             raise QualificationFailure("native launcher did not refuse production qualification")
+        missing_contract_refused = prove_missing_contract_refusal(app, campaign)
+        if not missing_contract_refused:
+            raise QualificationFailure("qualification candidate accepted a missing synthetic home")
+        attestation_failure_clean = prove_attestation_failure_cleanup(
+            app, campaign, args.expected_sha256, args.expected_source_commit
+        )
+        if not attestation_failure_clean:
+            raise QualificationFailure("failed attestation did not cleanly gate the financial UI")
         cycles: list[CycleResult] = []
         for cycle in range(1, args.launch_cycles + 1):
             try:
@@ -695,6 +830,8 @@ def qualification(args: argparse.Namespace) -> Path:
                 },
                 "cycles": [asdict(cycle) for cycle in cycles],
                 "owner_data_accessed": False,
+                "failed_attestation_cleanup": attestation_failure_clean,
+                "missing_contract_refused": missing_contract_refused,
                 "lifecycle_bounds": {
                     "cycles": len(cycles),
                     "maximum_ready_ms": max(cycle.ready_ms for cycle in cycles),

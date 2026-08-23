@@ -60,7 +60,7 @@ pub struct RuntimeController {
 }
 
 enum OutputEvent {
-    Attestation(InstalledAttestation),
+    Attestation(Box<InstalledAttestation>),
     Ready(u16),
     Invalid,
     Closed,
@@ -68,7 +68,7 @@ enum OutputEvent {
 
 #[derive(Debug, Eq, PartialEq)]
 enum ReadinessResult {
-    Ready(InstalledAttestation, u16),
+    Ready(Box<InstalledAttestation>, u16),
     TimedOut,
     Terminated,
 }
@@ -269,6 +269,9 @@ impl RuntimeController {
             ReadinessResult::Ready(attestation, port) => (attestation, port),
             ReadinessResult::TimedOut | ReadinessResult::Terminated => {
                 self.remove_and_stop(generation, &process, None);
+                if let Some(contract) = &self.qualification {
+                    let _ = contract.write_result(false, Some("installed-root-attestation"));
+                }
                 return self.fail_generation(generation);
             }
         };
@@ -289,6 +292,9 @@ impl RuntimeController {
                 || !process.protocol_valid.load(Ordering::SeqCst)
             {
                 self.remove_and_stop(generation, &process, Some(port));
+                if let Some(contract) = &self.qualification {
+                    let _ = contract.write_result(false, Some("installed-root-attestation"));
+                }
                 return self.fail_generation(generation);
             }
             if health_ready(port, &session) {
@@ -298,6 +304,9 @@ impl RuntimeController {
         }
         if !health_ready(port, &session) {
             self.remove_and_stop(generation, &process, Some(port));
+            if let Some(contract) = &self.qualification {
+                let _ = contract.write_result(false, Some("installed-root-attestation"));
+            }
             return self.fail_generation(generation);
         }
         {
@@ -444,7 +453,7 @@ impl RuntimeController {
                     match (attested, ready, parse_attestation(&line)) {
                         (false, false, Ok(value)) => {
                             attested = true;
-                            let _ = sender.send(OutputEvent::Attestation(value));
+                            let _ = sender.send(OutputEvent::Attestation(Box::new(value)));
                         }
                         _ => {
                             reader_protocol_valid.store(false, Ordering::SeqCst);
@@ -705,7 +714,7 @@ where
                     return ReadinessResult::Ready(value, port);
                 }
                 if !require_attestation {
-                    return ReadinessResult::Ready(empty_attestation(), port);
+                    return ReadinessResult::Ready(Box::new(empty_attestation()), port);
                 }
                 return ReadinessResult::Terminated;
             }
@@ -728,6 +737,9 @@ fn empty_attestation() -> InstalledAttestation {
         symlink_free: false,
         contained: false,
         active: None,
+        mode: 0,
+        owned_by_current_user: false,
+        single_link: false,
     };
     InstalledAttestation {
         contract: String::new(),
@@ -747,6 +759,11 @@ fn empty_attestation() -> InstalledAttestation {
         writer_lock: facts.clone(),
         cache: facts.clone(),
         logs: facts,
+        schema_revision: String::new(),
+        integrity: false,
+        foreign_keys: false,
+        database_identity_stable: false,
+        engine_database_identity: false,
         sequence: 0,
     }
 }
@@ -812,7 +829,7 @@ mod tests {
     fn attestation_must_precede_readiness_exactly_once() {
         let (sender, receiver) = mpsc::channel();
         sender
-            .send(OutputEvent::Attestation(empty_attestation()))
+            .send(OutputEvent::Attestation(Box::new(empty_attestation())))
             .unwrap();
         sender.send(OutputEvent::Ready(43123)).unwrap();
         assert!(matches!(
@@ -829,10 +846,10 @@ mod tests {
 
         let (sender, receiver) = mpsc::channel();
         sender
-            .send(OutputEvent::Attestation(empty_attestation()))
+            .send(OutputEvent::Attestation(Box::new(empty_attestation())))
             .unwrap();
         sender
-            .send(OutputEvent::Attestation(empty_attestation()))
+            .send(OutputEvent::Attestation(Box::new(empty_attestation())))
             .unwrap();
         assert_eq!(
             wait_for_readiness(&receiver, Duration::from_millis(10), true, || true),

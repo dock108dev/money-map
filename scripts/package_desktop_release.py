@@ -111,6 +111,7 @@ def sanitized_env(identity: str, build_id: str) -> dict[str, str]:
             "LANG": "C",
             "PYTHONHASHSEED": "0",
             "MONEY_MAP_ALLOW_ACCEPTANCE_HOME": "1",
+            "MONEY_MAP_REQUIRE_QUALIFICATION": "1",
         }
     )
     return env

@@ -304,6 +304,14 @@ def test_sidecar_attestation_uses_open_sqlite_identity_and_live_resources(tmp_pa
     }
     application.mkdir(parents=True, exist_ok=True)
     with WriterLock(application), sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO alembic_version (version_num) VALUES ('0009_goal_persistence')"
+        )
+        connection.commit()
+        database.chmod(0o600)
+        for directory in (campaign, application, database.parent, cache, logs):
+            directory.chmod(0o700)
         record = _attestation_record(spec, "c" * 64, connection)
         assert record["database_path"] == str(database.resolve())
         assert record["writer_lock"] == {
@@ -312,7 +320,15 @@ def test_sidecar_attestation_uses_open_sqlite_identity_and_live_resources(tmp_pa
             "symlink_free": True,
             "contained": True,
             "active": True,
+            "mode": 0o600,
+            "owned_by_current_user": True,
+            "single_link": True,
         }
+        assert record["schema_revision"] == "0009_goal_persistence"
+        assert record["integrity"] is True
+        assert record["foreign_keys"] is True
+        assert record["database_identity_stable"] is True
+        assert record["engine_database_identity"] is True
         assert all(
             cast(dict[str, object], record[name])["contained"]
             for name in ("database", "cache", "logs")
@@ -324,6 +340,90 @@ def test_sidecar_attestation_uses_open_sqlite_identity_and_live_resources(tmp_pa
             pytest.raises(RuntimeError, match="SQLite identity"),
         ):
             _attestation_record(spec, "c" * 64, wrong_connection)
+
+
+def test_sidecar_prepares_and_attests_the_actual_financial_engine_before_ready(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "campaign"
+    application = campaign / "Library/Application Support/Money Map"
+    database = application / "data/paycheck-map.sqlite3"
+    cache = campaign / "Library/Caches/com.moneymap.desktop"
+    logs = campaign / "Library/Logs/Money Map"
+    campaign.mkdir(mode=0o700)
+    spec = {
+        "contract": "money-map-installed-root-attestation-v1",
+        "schema_version": 1,
+        "campaign_id": "a" * 32,
+        "nonce": "b" * 64,
+        "generation": 1,
+        "mode": "acceptance-synthetic-v1",
+        "campaign_root": str(campaign),
+        "application_root": str(application),
+        "database_path": str(database),
+        "writer_lock_path": str(application / ".money-map-writer.lock"),
+        "cache_root": str(cache),
+        "log_root": str(logs),
+    }
+    environment = {
+        "PATH": os.environ.get("PATH", ""),
+        "LC_ALL": "C",
+        "PAYCHECK_MAP_DESKTOP_MODE": "true",
+        "PAYCHECK_MAP_DESKTOP_DATA_MODE": "acceptance-synthetic-v1",
+        "PAYCHECK_MAP_DESKTOP_APP_ROOT": str(application),
+        "PAYCHECK_MAP_DESKTOP_CACHE_ROOT": str(cache),
+        "PAYCHECK_MAP_DESKTOP_LOG_ROOT": str(logs),
+        "PAYCHECK_MAP_LOCAL_DIR": str(application),
+        "PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT": str(Path(__file__).resolve().parents[1]),
+        "PAYCHECK_MAP_DESKTOP_OWNER_PID": str(os.getpid()),
+    }
+    bootstrap_read, bootstrap_write = os.pipe()
+    control_read, control_write = os.pipe()
+    environment["PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"] = str(bootstrap_read)
+    environment["PAYCHECK_MAP_DESKTOP_CONTROL_FD"] = str(control_read)
+    process = subprocess.Popen(
+        [sys.executable, "-m", "paycheck_map.desktop_sidecar"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=environment,
+        pass_fds=(bootstrap_read, control_read),
+    )
+    os.close(bootstrap_read)
+    os.close(control_read)
+    os.write(
+        bootstrap_write,
+        json.dumps(
+            {
+                "attestation": spec,
+                "contract": "money-map-desktop-bootstrap-v1",
+                "session": "c" * 64,
+            },
+            separators=(",", ":"),
+        ).encode()
+        + b"\n",
+    )
+    os.close(bootstrap_write)
+    assert process.stdout is not None
+    attestation_line = process.stdout.readline().strip()
+    ready_line = process.stdout.readline().strip()
+    assert attestation_line.startswith("MONEY_MAP_ATTEST ")
+    record = json.loads(attestation_line.removeprefix("MONEY_MAP_ATTEST "))
+    assert record["schema_revision"] == "0009_goal_persistence"
+    assert record["integrity"] is True
+    assert record["foreign_keys"] is True
+    assert record["database_identity_stable"] is True
+    assert record["engine_database_identity"] is True
+    assert ready_line.startswith("MONEY_MAP_READY ")
+    os.write(control_write, b'{"command":"shutdown","contract":"money-map-control-v1"}\n')
+    assert process.wait(timeout=5) == 0
+    os.close(control_write)
+    assert not (application / ".money-map-writer.lock").exists()
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0009_goal_persistence",
+        )
 
 
 def test_desktop_python_boundary_rejects_method_path_size_and_redacts(

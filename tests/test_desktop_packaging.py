@@ -52,6 +52,7 @@ def test_native_exit_request_owns_runtime_shutdown_before_process_exit() -> None
 def test_release_builder_embeds_the_exact_source_commit_in_about() -> None:
     source = (PROJECT_ROOT / "scripts/package_desktop_release.py").read_text()
     assert 'env["MONEY_MAP_BUILD_COMMIT"] = args.commit' in source
+    assert '"MONEY_MAP_REQUIRE_QUALIFICATION": "1"' in source
 
 
 def test_packaged_shutdown_uses_a_private_control_descriptor() -> None:

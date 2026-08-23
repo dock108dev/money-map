@@ -41,6 +41,22 @@ development servers, inherited credential-bearing names, production application 
 production Keychain namespaces are unavailable. The signed sidecar uses the accepted in-memory
 synthetic secret store.
 
+The signed qualification candidate is compiled with
+`MONEY_MAP_REQUIRE_QUALIFICATION=1`. It refuses to start when either the exact versioned native
+qualification contract or its matching disposable fake home is absent; it cannot fall back to
+`production-v1`. A later production build must omit this compile-time requirement and the
+acceptance-home capability together.
+
+Before a financial WebView exists, native code validates exact disposable paths and starts the
+signed sidecar. The sidecar prepares or verifies the synthetic `0009_goal_persistence` database,
+opens it through the same SQLAlchemy engine used by the API, and returns a nonce-, session-, and
+generation-bound attestation over the private bootstrap channel. Native code independently checks
+canonical equality, file types, ownership, single-link files, `0700` directories, `0600` files,
+schema, integrity, foreign keys, stable database identity, and exact application/cache/log roles.
+Only after the attestation and authenticated health check pass may lifecycle become Ready and the
+main financial window be constructed. Failure stops the sidecar and permits only the sanitized
+recovery window.
+
 The harness observes the descendant process topology, ephemeral IPv4 loopback listener class,
 external connection count, writer-lock presence, safe event codes, readiness/shutdown durations,
 second-launch behavior, and final process/listener/lock/session cleanup. It never records raw PIDs,

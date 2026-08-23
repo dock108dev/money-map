@@ -8,6 +8,7 @@ import secrets
 import signal
 import socket
 import sqlite3
+import stat
 import threading
 import time
 from pathlib import Path
@@ -68,12 +69,16 @@ def _resource_facts(
     symlink_free = all(
         not parent.is_symlink() for parent in (path, *path.parents) if parent.exists()
     )
+    metadata = canonical.stat(follow_symlinks=False)
     facts: dict[str, object] = {
         "exists": True,
         "kind": kind,
         "symlink_free": symlink_free,
         "contained": canonical.is_relative_to(campaign),
         "active": active,
+        "mode": stat.S_IMODE(metadata.st_mode),
+        "owned_by_current_user": metadata.st_uid == os.geteuid(),
+        "single_link": metadata.st_nlink == 1,
     }
     return facts
 
@@ -98,6 +103,7 @@ def _attestation_record(
     if set(spec) != required or spec.get("mode") != "acceptance-synthetic-v1":
         raise RuntimeError("Desktop attestation bootstrap was rejected")
     campaign = Path(str(spec["campaign_root"])).resolve(strict=True)
+    identity_before = database_identity = None
     rows = connection.execute("PRAGMA database_list").fetchall()
     main_rows = [row for row in rows if row[1] == "main"]
     if len(main_rows) != 1 or not main_rows[0][2]:
@@ -106,6 +112,19 @@ def _attestation_record(
     expected_database = Path(str(spec["database_path"])).resolve(strict=True)
     if actual_database != expected_database:
         raise RuntimeError("Desktop SQLite identity was rejected")
+    metadata = actual_database.stat(follow_symlinks=False)
+    identity_before = (metadata.st_dev, metadata.st_ino)
+    versions = connection.execute(
+        "SELECT version_num FROM alembic_version ORDER BY version_num"
+    ).fetchall()
+    integrity = connection.execute("PRAGMA integrity_check").fetchall()
+    foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
+    rows_after = connection.execute("PRAGMA database_list").fetchall()
+    main_after = [row for row in rows_after if row[1] == "main"]
+    if len(main_after) == 1 and main_after[0][2]:
+        after_path = Path(str(main_after[0][2])).resolve(strict=True)
+        after_metadata = after_path.stat(follow_symlinks=False)
+        database_identity = (after_metadata.st_dev, after_metadata.st_ino)
     application = Path(str(spec["application_root"])).resolve(strict=True)
     writer_lock = Path(str(spec["writer_lock_path"])).resolve(strict=True)
     cache = Path(str(spec["cache_root"])).resolve(strict=True)
@@ -128,6 +147,11 @@ def _attestation_record(
         "writer_lock": _resource_facts(writer_lock, campaign, "file", active=True),
         "cache": _resource_facts(cache, campaign, "directory"),
         "logs": _resource_facts(logs, campaign, "directory"),
+        "schema_revision": str(versions[0][0]) if len(versions) == 1 else "unavailable",
+        "integrity": integrity == [("ok",)],
+        "foreign_keys": not foreign_keys,
+        "database_identity_stable": identity_before == database_identity,
+        "engine_database_identity": actual_database == expected_database,
         "sequence": 1,
     }
 
@@ -226,15 +250,26 @@ def main() -> None:
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.chmod(0o700)
     with WriterLock(root):
-        attestation_connection: sqlite3.Connection | None = None
+        attestation_connection: Any | None = None
         if attestation_spec is not None:
             cache_root = Path(str(attestation_spec["cache_root"]))
             cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
             Path(log_root).mkdir(mode=0o700, parents=True, exist_ok=True)
-            database_path = Path(str(attestation_spec["database_path"]))
-            database_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            attestation_connection = sqlite3.connect(database_path)
-            record = _attestation_record(attestation_spec, session, attestation_connection)
+            from paycheck_map.data_home import Phase
+            from paycheck_map.db import engine
+            from paycheck_map.desktop_data_api import data_home_manager
+
+            manager = data_home_manager()
+            status = manager.prepare()
+            if status.get("phase") == Phase.FRESH_SETUP_AVAILABLE:
+                status = manager.fresh_setup()
+            if not status.get("ready") or status.get("schema_revision") != "0009_goal_persistence":
+                raise RuntimeError("Desktop synthetic database was not ready for attestation")
+            attestation_connection = engine.connect()
+            driver = attestation_connection.connection.driver_connection
+            if not isinstance(driver, sqlite3.Connection):
+                raise RuntimeError("Desktop SQLite engine identity was unavailable")
+            record = _attestation_record(attestation_spec, session, driver)
             print(
                 "MONEY_MAP_ATTEST " + json.dumps(record, sort_keys=True, separators=(",", ":")),
                 flush=True,

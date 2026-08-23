@@ -211,7 +211,14 @@ def test_native_result_is_the_attestation_authority(tmp_path: Path) -> None:
         "candidate_sha256": "c" * 64,
         "source_commit": "d" * 40,
         "attestation_contract": "money-map-installed-root-attestation-v1",
-        "root_roles": ["campaign", "application-data", "database", "cache", "safe-log"],
+        "root_roles": [
+            "campaign",
+            "application-data",
+            "database",
+            "writer-lock",
+            "cache",
+            "safe-log",
+        ],
         "database": True,
         "writer_lock": True,
         "cache": True,
@@ -220,6 +227,16 @@ def test_native_result_is_the_attestation_authority(tmp_path: Path) -> None:
         "symlink_checks": True,
         "readiness_ordering": True,
         "ui_gating": True,
+        "main_window_absent_at_result": True,
+        "safe_error_required": False,
+        "permissions": True,
+        "ownership": True,
+        "hard_links": True,
+        "schema": True,
+        "integrity": True,
+        "foreign_keys": True,
+        "database_identity_stable": True,
+        "engine_database_identity": True,
         "first_unmet_requirement": None,
     }
     result_path = tmp_path / "native-attestation-result.json"
@@ -249,6 +266,13 @@ def test_financial_webview_is_constructed_only_after_native_startup_passes() -> 
             "allow-desktop-export-diagnostics",
         )
     )
+    combined_frontend = "\n".join(
+        path.read_text() for path in (PROJECT_ROOT / "web/src").rglob("*") if path.is_file()
+    )
+    assert "MONEY_MAP_ATTEST" not in combined_frontend
+    assert "MONEY_MAP_QUALIFICATION_CONTRACT" not in combined_frontend
+    assert "database_path" not in combined_frontend
+    assert "writer_lock_path" not in combined_frontend
 
 
 def test_cleanup_failure_labels_are_sanitized_and_specific() -> None:

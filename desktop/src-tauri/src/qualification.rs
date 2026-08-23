@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 
@@ -38,6 +39,9 @@ pub struct ResourceFacts {
     pub symlink_free: bool,
     pub contained: bool,
     pub active: Option<bool>,
+    pub mode: u32,
+    pub owned_by_current_user: bool,
+    pub single_link: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -60,6 +64,11 @@ pub struct InstalledAttestation {
     pub writer_lock: ResourceFacts,
     pub cache: ResourceFacts,
     pub logs: ResourceFacts,
+    pub schema_revision: String,
+    pub integrity: bool,
+    pub foreign_keys: bool,
+    pub database_identity_stable: bool,
+    pub engine_database_identity: bool,
     pub sequence: u64,
 }
 
@@ -72,15 +81,25 @@ struct NativeResult<'a> {
     mode: &'a str,
     candidate_sha256: &'a str,
     source_commit: &'a str,
-    root_roles: [&'static str; 5],
+    root_roles: [&'static str; 6],
     database: bool,
     writer_lock: bool,
     cache: bool,
     logs: bool,
     containment: bool,
     symlink_checks: bool,
+    permissions: bool,
+    ownership: bool,
+    hard_links: bool,
+    schema: bool,
+    integrity: bool,
+    foreign_keys: bool,
+    database_identity_stable: bool,
+    engine_database_identity: bool,
     readiness_ordering: bool,
     ui_gating: bool,
+    main_window_absent_at_result: bool,
+    safe_error_required: bool,
     first_unmet_requirement: Option<&'a str>,
 }
 
@@ -89,6 +108,9 @@ impl QualificationContract {
         let raw = std::env::var("MONEY_MAP_QUALIFICATION_CONTRACT").ok();
         let fake_home = std::env::var_os("MONEY_MAP_ACCEPTANCE_FAKE_HOME");
         if raw.is_none() && fake_home.is_none() {
+            if option_env!("MONEY_MAP_REQUIRE_QUALIFICATION") == Some("1") {
+                return Err("Synthetic qualification contract is required.".to_string());
+            }
             return Ok(None);
         }
         let raw = raw.ok_or_else(|| "Synthetic qualification contract is required.".to_string())?;
@@ -183,6 +205,11 @@ impl QualificationContract {
             || attestation.session != session
             || attestation.mode != "acceptance-synthetic-v1"
             || attestation.sequence != 1
+            || attestation.schema_revision != "0009_goal_persistence"
+            || !attestation.integrity
+            || !attestation.foreign_keys
+            || !attestation.database_identity_stable
+            || !attestation.engine_database_identity
         {
             return Err("Installed root attestation was rejected.".to_string());
         }
@@ -204,20 +231,42 @@ impl QualificationContract {
             reject_symlink_chain(actual)?;
         }
         let facts = [
-            (&attestation.database, "file", None),
-            (&attestation.writer_lock, "file", Some(true)),
-            (&attestation.cache, "directory", None),
-            (&attestation.logs, "directory", None),
+            (&attestation.database, "file", None, 0o600, true),
+            (&attestation.writer_lock, "file", Some(true), 0o600, true),
+            (&attestation.cache, "directory", None, 0o700, false),
+            (&attestation.logs, "directory", None, 0o700, false),
         ];
-        if facts.into_iter().any(|(fact, kind, active)| {
-            !fact.exists
-                || fact.kind != kind
-                || !fact.symlink_free
-                || !fact.contained
-                || active.is_some_and(|required| fact.active != Some(required))
-        }) {
+        if facts
+            .into_iter()
+            .any(|(fact, kind, active, mode, single_link)| {
+                !fact.exists
+                    || fact.kind != kind
+                    || !fact.symlink_free
+                    || !fact.contained
+                    || fact.mode != mode
+                    || !fact.owned_by_current_user
+                    || (single_link && !fact.single_link)
+                    || active.is_some_and(|required| fact.active != Some(required))
+            })
+        {
             return Err("Installed root attestation facts were rejected.".to_string());
         }
+        verify_live_resource(&self.database_path, false, 0o600, true)?;
+        verify_live_resource(&self.writer_lock_path, false, 0o600, true)?;
+        verify_live_resource(&self.cache_root, true, 0o700, false)?;
+        verify_live_resource(&self.log_root, true, 0o700, false)?;
+        for directory in [
+            &self.campaign_root,
+            &self.application_root,
+            self.database_path
+                .parent()
+                .ok_or_else(|| "Installed root attestation was rejected.".to_string())?,
+        ] {
+            verify_live_resource(directory, true, 0o700, false)?;
+        }
+        verify_private_tree(&self.application_root)?;
+        verify_private_tree(&self.cache_root)?;
+        verify_private_tree(&self.log_root)?;
         Ok(())
     }
 
@@ -243,6 +292,7 @@ impl QualificationContract {
                 "campaign",
                 "application-data",
                 "database",
+                "writer-lock",
                 "cache",
                 "safe-log",
             ],
@@ -252,8 +302,18 @@ impl QualificationContract {
             logs: passed,
             containment: passed,
             symlink_checks: passed,
-            readiness_ordering: passed,
-            ui_gating: passed,
+            permissions: passed,
+            ownership: passed,
+            hard_links: passed,
+            schema: passed,
+            integrity: passed,
+            foreign_keys: passed,
+            database_identity_stable: passed,
+            engine_database_identity: passed,
+            readiness_ordering: true,
+            ui_gating: true,
+            main_window_absent_at_result: true,
+            safe_error_required: !passed,
             first_unmet_requirement: first_unmet,
         };
         let bytes = serde_json::to_vec_pretty(&result)
@@ -293,6 +353,50 @@ fn normalized(path: &Path) -> Result<PathBuf, String> {
 fn canonical_existing(path: &Path) -> Result<PathBuf, String> {
     path.canonicalize()
         .map_err(|_| "Installed attested resource was unavailable.".to_string())
+}
+
+fn verify_live_resource(
+    path: &Path,
+    directory: bool,
+    expected_mode: u32,
+    single_link: bool,
+) -> Result<(), String> {
+    reject_symlink_chain(path)?;
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| "Installed attested resource was unavailable.".to_string())?;
+    let kind_matches = if directory {
+        metadata.is_dir()
+    } else {
+        metadata.is_file()
+    };
+    if !kind_matches
+        || metadata.file_type().is_symlink()
+        || metadata.permissions().mode() & 0o777 != expected_mode
+        || metadata.uid() != unsafe { libc::geteuid() }
+        || (single_link && metadata.nlink() != 1)
+    {
+        return Err("Installed attested resource metadata was rejected.".to_string());
+    }
+    Ok(())
+}
+
+fn verify_private_tree(root: &Path) -> Result<(), String> {
+    for entry in fs::read_dir(root)
+        .map_err(|_| "Installed attested resource was unavailable.".to_string())?
+    {
+        let path = entry
+            .map_err(|_| "Installed attested resource was unavailable.".to_string())?
+            .path();
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|_| "Installed attested resource was unavailable.".to_string())?;
+        if metadata.is_dir() {
+            verify_live_resource(&path, true, 0o700, false)?;
+            verify_private_tree(&path)?;
+        } else {
+            verify_live_resource(&path, false, 0o600, true)?;
+        }
+    }
+    Ok(())
 }
 
 fn reject_symlink_chain(path: &Path) -> Result<(), String> {
@@ -338,6 +442,11 @@ pub fn parse_attestation(line: &str) -> Result<InstalledAttestation, String> {
         "writer_lock",
         "cache",
         "logs",
+        "schema_revision",
+        "integrity",
+        "foreign_keys",
+        "database_identity_stable",
+        "engine_database_identity",
         "sequence",
     ]
     .into_iter()
@@ -367,6 +476,7 @@ mod tests {
         let application = campaign
             .path()
             .join("Library/Application Support/Money Map");
+        fs::set_permissions(campaign.path(), fs::Permissions::from_mode(0o700)).unwrap();
         let database = application.join("data/paycheck-map.sqlite3");
         let writer_lock = application.join(".money-map-writer.lock");
         let cache = campaign.path().join("Library/Caches/com.moneymap.desktop");
@@ -376,6 +486,17 @@ mod tests {
         fs::create_dir_all(&logs).unwrap();
         fs::write(&database, b"sqlite").unwrap();
         fs::write(&writer_lock, b"held").unwrap();
+        for directory in [
+            application.clone(),
+            database.parent().unwrap().to_path_buf(),
+            cache.clone(),
+            logs.clone(),
+        ] {
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        for file in [&database, &writer_lock] {
+            fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
+        }
         let contract = QualificationContract {
             contract: LAUNCH_CONTRACT.into(),
             schema_version: 1,
@@ -398,6 +519,9 @@ mod tests {
             symlink_free: true,
             contained: true,
             active: None,
+            mode: 0o600,
+            owned_by_current_user: true,
+            single_link: true,
         };
         let directory = ResourceFacts {
             exists: true,
@@ -405,6 +529,9 @@ mod tests {
             symlink_free: true,
             contained: true,
             active: None,
+            mode: 0o700,
+            owned_by_current_user: true,
+            single_link: false,
         };
         let attestation = InstalledAttestation {
             contract: ATTESTATION_CONTRACT.into(),
@@ -427,6 +554,11 @@ mod tests {
             },
             cache: directory.clone(),
             logs: directory,
+            schema_revision: "0009_goal_persistence".into(),
+            integrity: true,
+            foreign_keys: true,
+            database_identity_stable: true,
+            engine_database_identity: true,
             sequence: 1,
         };
         (campaign, contract, attestation)
@@ -519,6 +651,73 @@ mod tests {
     }
 
     #[test]
+    fn every_exact_path_role_schema_and_database_check_is_fail_closed() {
+        let (_campaign, contract, attestation) = fixture();
+        let cases = [
+            InstalledAttestation {
+                application_root: attestation.cache_root.clone(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                database_path: attestation.writer_lock_path.clone(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                writer_lock_path: attestation.database_path.clone(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                cache_root: attestation.log_root.clone(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                log_root: attestation.cache_root.clone(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                schema_revision: "0008_life_lab_v01".into(),
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                integrity: false,
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                foreign_keys: false,
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                database_identity_stable: false,
+                ..attestation.clone()
+            },
+            InstalledAttestation {
+                engine_database_identity: false,
+                ..attestation.clone()
+            },
+        ];
+        for changed in cases {
+            assert!(contract
+                .verify_attestation(&changed, 1, &"e".repeat(64), &contract.nonce)
+                .is_err());
+        }
+    }
+
+    #[test]
+    fn permissions_and_hard_link_substitution_are_rejected_independently() {
+        let (campaign, contract, attestation) = fixture();
+        fs::set_permissions(&contract.database_path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(contract
+            .verify_attestation(&attestation, 1, &"e".repeat(64), &contract.nonce)
+            .is_err());
+        fs::set_permissions(&contract.database_path, fs::Permissions::from_mode(0o600)).unwrap();
+        let hard_link = campaign.path().join("database-hard-link");
+        fs::hard_link(&contract.database_path, &hard_link).unwrap();
+        assert!(contract
+            .verify_attestation(&attestation, 1, &"e".repeat(64), &contract.nonce)
+            .is_err());
+    }
+
+    #[test]
     fn qualification_contract_rejects_production_missing_nonce_traversal_and_symlinks() {
         let (campaign, contract, _attestation) = fixture();
         assert!(contract.validate(Some(campaign.path())).is_ok());
@@ -544,6 +743,17 @@ mod tests {
         std::os::unix::fs::symlink(&contract.cache_root, &link).unwrap();
         assert!(QualificationContract {
             cache_root: link,
+            ..contract.clone()
+        }
+        .validate(Some(campaign.path()))
+        .is_err());
+        let lookalike = campaign.path().parent().unwrap().join(format!(
+            "{}-lookalike",
+            campaign.path().file_name().unwrap().to_string_lossy()
+        ));
+        fs::create_dir(&lookalike).unwrap();
+        assert!(QualificationContract {
+            campaign_root: lookalike,
             ..contract
         }
         .validate(Some(campaign.path()))
@@ -568,9 +778,24 @@ mod tests {
             "log_root": attestation.log_root, "database": {"exists":true,"kind":"file","symlink_free":true,"contained":true,"active":null},
             "writer_lock": {"exists":true,"kind":"file","symlink_free":true,"contained":true,"active":true},
             "cache": {"exists":true,"kind":"directory","symlink_free":true,"contained":true,"active":null},
-            "logs": {"exists":true,"kind":"directory","symlink_free":true,"contained":true,"active":null}, "sequence": 1
+            "logs": {"exists":true,"kind":"directory","symlink_free":true,"contained":true,"active":null,"mode":448,"owned_by_current_user":true,"single_link":false},
+            "schema_revision":"0009_goal_persistence","integrity":true,"foreign_keys":true,
+            "database_identity_stable":true,"engine_database_identity":true,"sequence": 1
         })).unwrap();
         raw = raw.replacen("{", "{\"nonce\":\"f\",", 1);
         assert!(parse_attestation(&format!("MONEY_MAP_ATTEST {raw}")).is_err());
+    }
+
+    #[test]
+    fn retained_native_result_contains_no_attested_path_or_session() {
+        let (campaign, contract, _attestation) = fixture();
+        contract.write_result(true, None).unwrap();
+        let retained = fs::read_to_string(&contract.result_path).unwrap();
+        assert!(!retained.contains(campaign.path().to_string_lossy().as_ref()));
+        assert!(!retained.contains("session"));
+        assert!(!retained.contains("database_path"));
+        assert!(!retained.contains("writer_lock_path"));
+        assert!(!retained.contains("cache_root"));
+        assert!(!retained.contains("log_root"));
     }
 }
