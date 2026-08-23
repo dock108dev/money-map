@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import tomllib
 from pathlib import Path
@@ -78,9 +79,14 @@ def main() -> None:
         print(rendered, end="")
         return
     output = args.output.resolve()
-    evidence_root = (ROOT / ".slice4-evidence").resolve()
+    configured_root = os.environ.get("MONEY_MAP_EVIDENCE_ROOT")
+    evidence_root = (
+        Path(configured_root).resolve()
+        if configured_root
+        else (ROOT / ".slice4-evidence").resolve()
+    )
     if output.parent != evidence_root:
-        raise RuntimeError("Inventory output must use the ignored Slice 4 evidence root")
+        raise RuntimeError("Inventory output must use the selected ignored evidence root")
     evidence_root.mkdir(mode=0o700, exist_ok=True)
     output.write_text(rendered)
     output.chmod(0o600)

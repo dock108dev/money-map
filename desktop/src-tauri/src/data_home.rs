@@ -14,13 +14,19 @@ pub struct DataHomePaths {
 
 impl DataHomePaths {
     pub fn resolve(app: &tauri::AppHandle) -> Result<Self, String> {
-        if let Some(fake_home) = option_env!("MONEY_MAP_ACCEPTANCE_FAKE_HOME") {
+        let runtime_fake_home = (option_env!("MONEY_MAP_ALLOW_ACCEPTANCE_HOME") == Some("1"))
+            .then(|| std::env::var_os("MONEY_MAP_ACCEPTANCE_FAKE_HOME"))
+            .flatten();
+        if let Some(fake_home) = option_env!("MONEY_MAP_ACCEPTANCE_FAKE_HOME")
+            .map(std::ffi::OsString::from)
+            .or(runtime_fake_home)
+        {
             let mode = if option_env!("MONEY_MAP_KEYCHAIN_ACCEPTANCE") == Some("1") {
                 "keychain-acceptance-v1"
             } else {
                 "acceptance-synthetic-v1"
             };
-            return Self::from_home(Path::new(fake_home), mode);
+            return Self::from_home(Path::new(&fake_home), mode);
         }
         let home = app
             .path()

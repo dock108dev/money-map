@@ -25,7 +25,7 @@
       "alembic", "fastapi", "httpx", "keyring", "openpyxl", "pdfplumber",
       "pydantic", "pydantic-settings", "python-multipart", "sqlalchemy", "uvicorn"
     ],
-    "builder": "PyInstaller one-file 6.x via scripts/build_desktop_runtime.sh",
+    "builder": "PyInstaller one-file 6.x via scripts/package_desktop_release.py",
     "metadata": ["pyproject.toml", "src/paycheck_map/__init__.py"],
     "nativeLibraries": ["CPython arm64 runtime", "SQLite", "cryptography/keyring transitive libraries"]
   },
@@ -39,7 +39,14 @@
     "revisions": ["0001_local_v01", "0002_plaid_read_only", "0003_payroll_detail", "0004_completed_payroll_schedule", "0005_money_map_v1", "0006_daily_data_refresh", "0007_refresh_timestamp_integrity", "0008_life_lab_v01", "0009_goal_persistence"],
     "initialization": "paycheck_map.db.initialize_database"
   },
-  "approvedResources": ["config/contribution_limits.json"],
+  "approvedResources": ["config/contribution_limits.json", "desktop/src-tauri/icons/icon.png", "desktop/src-tauri/icons/icon.svg"],
+  "packaging": {
+    "entrypoint": "uv run --frozen python scripts/package_desktop_release.py",
+    "artifact": "Money Map-Slice5-arm64.dmg",
+    "iconPipeline": "scripts/generate_macos_icons.sh",
+    "manifestContract": "money-map-slice5-build-manifest-v1",
+    "signingOrder": ["nested Mach-O code", "main executable", "application bundle", "DMG"]
+  },
   "reportAndPrint": ["paycheck_map.reporting", "compiled React print CSS", "native WKWebView print panel"],
   "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore using com.moneymap.desktop.secrets.v1",
   "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"],

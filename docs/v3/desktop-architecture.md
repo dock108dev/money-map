@@ -210,10 +210,10 @@ signature verification, and executed after being copied outside the repository.
 PyInstaller's extracted CPython library receives an ad-hoc runtime signature, so combining this
 one-file layout with hardened runtime produced a Team-ID validation failure during the spike. The
 owner-only proof therefore uses Apple Development signing without hardened runtime. Before any
-external distribution, Slice 5 must use a Developer ID Application identity, hardened runtime,
-notarization, stapling, and Gatekeeper assessment, and must resolve the nested-runtime signing
-layout (for example by signing a one-folder sidecar's nested code explicitly). A DMG is not a
-Slice 0 artifact.
+external distribution, a separately authorized path must use a Developer ID Application identity,
+hardened runtime, notarization, stapling, and Gatekeeper assessment, and must resolve the nested-
+runtime signing layout (for example by signing a one-folder sidecar's nested code explicitly). A
+DMG is not a Slice 0 artifact.
 
 ## Why this architecture won
 
@@ -233,12 +233,25 @@ The complete capability table, CSP, navigation policy, Keychain decision, import
 database/recovery integrity gates, signed build evidence and attack campaigns are in
 `desktop-threat-model.md` and `security-acceptance.md`. The owner-machine bundle verifies the whole
 Apple Development team signature before sidecar spawn. Developer ID, a nested-code layout that can
-support hardened runtime, notarization and stapling remain Slice 5 distribution work.
+support hardened runtime, notarization and stapling remain external-distribution work.
+
+## Slice 5 packaging boundary
+
+`scripts/package_desktop_release.py` is the only release-packaging entrypoint. It builds from a
+fresh archive of an exact clean commit in a private disposable root, uses the frozen uv, pnpm and
+Cargo graphs offline, generates the ICNS from checked-in public artwork, packages the existing
+PyInstaller one-file sidecar and Tauri shell, signs all native code inside-out, creates the
+two-entry owner-candidate DMG, and runs artifact/privacy verification. Sanitized manifests and
+independent-build comparisons are described in `desktop-packaging.md`. Runtime topology, CSP,
+capabilities, authenticated pipe/loopback transport, Keychain namespaces, and data-home contracts
+do not change.
 
 ## Deferred risks
 
 - Owner validation: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
-- Slice 5: deterministic release build, DMG, Developer ID, hardened runtime, notarization,
-  stapling, installed-app/Gatekeeper tests, and final artifact-size/performance budgets.
+- Slice 5: deterministic owner-candidate build, Apple Development signing, DMG, scans,
+  reproducibility evidence, and isolated installed-artifact proof.
+- External distribution: Developer ID, hardened runtime, notarization, stapling, downloaded-copy
+  Gatekeeper assessment, and externally appropriate nested-code layout.
 - PyInstaller one-file extraction adds startup cost and transient files; later profiling may choose
   a signed one-folder layout while preserving PyInstaller as the frozen builder.

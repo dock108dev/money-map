@@ -18,6 +18,9 @@ ditto --norsrc config "$runtime_data/config"
 find "$runtime_data" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$runtime_data" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 pnpm --dir web build
+"$repo_root/scripts/generate_macos_icons.sh" \
+  "$repo_root/desktop/src-tauri/icons/icon.png" \
+  "$repo_root/desktop/src-tauri/icons/icon.icns"
 uv run pyinstaller \
   --noconfirm \
   --clean \

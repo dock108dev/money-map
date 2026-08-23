@@ -4,8 +4,10 @@ import argparse
 import hashlib
 import json
 import plistlib
+import re
 import stat
 import subprocess
+import tempfile
 from pathlib import Path
 
 from PyInstaller.archive.readers import CArchiveReader
@@ -21,8 +23,10 @@ FORBIDDEN_NAME_PARTS = (
 )
 FORBIDDEN_BYTES = (
     b"Desktop/savings/.local/",
+    b"/private/tmp/money-map-",
     b".map\x00sourceMappingURL",
     b"http://127.0.0.1:5173",
+    b"localhost:5173",
 )
 REQUIRED_MIGRATIONS = tuple(f"000{index}_" for index in range(1, 10))
 APP_COMMANDS = {
@@ -51,11 +55,12 @@ def _sha256(path: Path) -> str:
 
 
 def _reject_markers(label: str, content: bytes, markers: tuple[bytes, ...]) -> None:
-    if any(marker and marker in content for marker in markers):
+    has_posix_home = re.search(rb"(?<!:)\/Users\/", content) is not None
+    if has_posix_home or any(marker and marker in content for marker in markers):
         raise SystemExit(f"Forbidden private or development marker in {label}")
 
 
-def _scan_pyinstaller(sidecar: Path, markers: tuple[bytes, ...]) -> tuple[int, int]:
+def _scan_pyinstaller(sidecar: Path, markers: tuple[bytes, ...]) -> tuple[int, int, int]:
     archive = CArchiveReader(str(sidecar))
     names = set(archive.toc)
     migration_names = [
@@ -65,13 +70,47 @@ def _scan_pyinstaller(sidecar: Path, markers: tuple[bytes, ...]) -> tuple[int, i
         matches = [name for name in migration_names if f"/versions/{prefix}" in name]
         if len(matches) != 1:
             raise SystemExit(f"Required migration {prefix} is missing or duplicated")
-    for name in names:
-        lowered = name.lower()
-        if lowered.endswith((".sqlite", ".sqlite3", ".db", ".map")) or ".local" in lowered:
-            raise SystemExit(f"Forbidden archived resource: {name}")
-        extracted = archive.extract(name)
-        if isinstance(extracted, bytes):
-            _reject_markers(f"sidecar archive entry {name}", extracted, markers)
+    native_count = 0
+    with tempfile.TemporaryDirectory(prefix="money-map-artifact-native.") as temp:
+        temp_root = Path(temp)
+        for index, name in enumerate(sorted(names)):
+            lowered = name.lower()
+            if lowered.endswith((".sqlite", ".sqlite3", ".db", ".map")) or ".local" in lowered:
+                raise SystemExit(f"Forbidden archived resource: {name}")
+            extracted = archive.extract(name)
+            if isinstance(extracted, bytes):
+                _reject_markers(f"sidecar archive entry {name}", extracted, markers)
+                if extracted[:4] == bytes.fromhex("cffaedfe"):
+                    native_count += 1
+                    native = temp_root / f"native-{index}"
+                    native.write_bytes(extracted)
+                    architecture = subprocess.run(
+                        ["lipo", "-archs", str(native)],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    ).stdout.strip()
+                    if architecture != "arm64":
+                        raise SystemExit(f"Embedded code is not thin arm64: {name}")
+                    signature = subprocess.run(
+                        [
+                            "/usr/bin/codesign",
+                            "--verify",
+                            "--strict",
+                            (
+                                "-R=anchor apple generic and "
+                                'certificate leaf[subject.OU] = "E3G5D247ZN"'
+                            ),
+                            str(native),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    if signature.returncode:
+                        raise SystemExit(
+                            f"Embedded code lacks the exact Apple team signature: {name}"
+                        )
     pyz = archive.open_embedded_archive("PYZ.pyz")
     for name in pyz.toc:
         extracted = pyz.extract(name, raw=True)
@@ -88,7 +127,7 @@ def _scan_pyinstaller(sidecar: Path, markers: tuple[bytes, ...]) -> tuple[int, i
     missing = sorted(required_modules - set(pyz.toc))
     if missing:
         raise SystemExit(f"Missing frozen security modules: {missing}")
-    return len(names), len(pyz.toc)
+    return len(names), len(pyz.toc), native_count
 
 
 def _scan_capabilities() -> None:
@@ -183,7 +222,7 @@ def main() -> None:
     header = sidecar.read_bytes()[:8]
     if header != bytes.fromhex("cffaedfe0c000001"):
         raise SystemExit("Sidecar is not a thin Apple Silicon Mach-O")
-    archive_entries, frozen_modules = _scan_pyinstaller(sidecar, markers)
+    archive_entries, frozen_modules, native_files = _scan_pyinstaller(sidecar, markers)
     _scan_capabilities()
     inventory = [
         {
@@ -196,7 +235,7 @@ def main() -> None:
     print(
         "Desktop artifact security scan passed "
         f"({len(files)} files; {archive_entries} archive entries; "
-        f"{frozen_modules} frozen modules)"
+        f"{frozen_modules} frozen modules; {native_files} signed embedded native files)"
     )
     for item in inventory:
         print(f"{item['path']} {item['size']} {item['sha256']}")

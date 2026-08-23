@@ -5,6 +5,10 @@ macOS builds. Slice 0 freezes the gates; it does not claim the beta release is c
 
 ## Release identity and artifacts
 
+Slice 5 uses the locked entrypoint documented in `desktop-packaging.md` to produce the candidate
+`Money Map-Slice5-arm64.dmg`. It deliberately retains every `2.1.0` version surface; promotion to
+`3.0.0-beta.1` remains a later release slice.
+
 - One clean, reproducible release commit produces `Money Map.app` and an installable `Money
   Map-3.0.0-beta.1-arm64.dmg` through documented commands on the supported Apple Silicon builder.
 - `pyproject.toml`, the FastAPI version response, Tauri configuration, `Info.plist`, About UI,
@@ -27,6 +31,9 @@ macOS builds. Slice 0 freezes the gates; it does not claim the beta release is c
 - Creating a tag, GitHub Release, upload, external DMG distribution, deployment, or publication is
   a separate authorized action after all evidence is accepted. Build work alone never authorizes
   it.
+- Slice 5 signs nested Mach-O code, the app, and the DMG inside-out with timestamp-free Apple
+  Development signatures and no new entitlements. Developer ID, hardened runtime, notarization,
+  stapling, and Gatekeeper qualification remain the separate external-distribution path.
 
 ## Private-data and extracted-artifact inspection
 
