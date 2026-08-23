@@ -653,10 +653,7 @@ fn desktop_qualification_observe(
     qualification.write_matrix_result(&observation, &api)
 }
 
-fn qualification_observer_script(
-    contract: &QualificationContract,
-    sequence: u8,
-) -> Option<String> {
+fn qualification_observer_script(contract: &QualificationContract, sequence: u8) -> Option<String> {
     let (_, route) = contract.matrix_plan()?;
     let route_json = serde_json::to_string(route).ok()?;
     Some(format!(

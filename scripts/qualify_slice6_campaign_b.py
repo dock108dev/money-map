@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import qualify_desktop_release as base  # noqa: E402
 from materialize_release_state_contract import materialize  # noqa: E402
+
 from tests.release_state_materializer import materialize_release_state  # noqa: E402
 
 CONTRACT = "money-map-slice6-installed-state-route-matrix-v1"
@@ -36,7 +37,8 @@ class MatrixFailure(RuntimeError):
 
 
 def canonical(value: object) -> bytes:
-    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode()
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return f"{encoded}\n".encode()
 
 
 def database_manifest(database: Path) -> dict[str, Any]:
@@ -57,7 +59,10 @@ def database_manifest(database: Path) -> dict[str, Any]:
                 for row in connection.execute(f"SELECT * FROM {name}")
             ]
             rows.sort(key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":")))
-            tables[name] = {"count": len(rows), "rows_sha256": hashlib.sha256(canonical(rows)).hexdigest()}
+            tables[name] = {
+                "count": len(rows),
+                "rows_sha256": hashlib.sha256(canonical(rows)).hexdigest(),
+            }
     payload = {"tables": tables}
     return {
         "table_counts": {name: value["count"] for name, value in tables.items()},
@@ -230,7 +235,12 @@ def run_combination(
             stderr=subprocess.DEVNULL,
         )
         activation.wait(timeout=10)
-        if len([pid for pid, _, command in base.process_rows() if Path(command).name == "money-map-desktop"]) != 1:
+        app_processes = [
+            pid
+            for pid, _, command in base.process_rows()
+            if Path(command).name == "money-map-desktop"
+        ]
+        if len(app_processes) != 1:
             raise MatrixFailure("close and reopen changed single-instance topology")
         base.quit_app()
         shutdown_ms = base.wait_gone(process, sidecars)
