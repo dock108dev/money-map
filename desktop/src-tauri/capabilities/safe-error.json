@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "safe-error-window",
+  "description": "Minimal nonfinancial recovery authority for a dedicated safe-error surface.",
+  "windows": ["safe-error"],
+  "platforms": ["macOS"],
+  "permissions": [
+    "allow-desktop-runtime-status",
+    "allow-desktop-restart",
+    "allow-desktop-about"
+  ]
+}

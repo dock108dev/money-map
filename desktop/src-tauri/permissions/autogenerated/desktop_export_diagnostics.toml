@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-export-diagnostics"
+description = "Enables the desktop_export_diagnostics command without any pre-configured scope."
+commands.allow = ["desktop_export_diagnostics"]
+
+[[permission]]
+identifier = "deny-desktop-export-diagnostics"
+description = "Denies the desktop_export_diagnostics command without any pre-configured scope."
+commands.deny = ["desktop_export_diagnostics"]

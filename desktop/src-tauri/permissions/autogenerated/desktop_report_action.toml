@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-report-action"
+description = "Enables the desktop_report_action command without any pre-configured scope."
+commands.allow = ["desktop_report_action"]
+
+[[permission]]
+identifier = "deny-desktop-report-action"
+description = "Denies the desktop_report_action command without any pre-configured scope."
+commands.deny = ["desktop_report_action"]

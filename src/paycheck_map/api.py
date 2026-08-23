@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -173,9 +173,9 @@ class CorrectionInput(BaseModel):
 
 
 class PlaidConfigurationInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     environment: Literal["sandbox", "production"]
-    client_id: str = Field(default="", max_length=128)
-    secret: SecretStr
 
 
 class PlaidLinkInput(BaseModel):
@@ -206,7 +206,10 @@ _acceptance_secret_store = MemorySecretStore()
 
 
 def get_secret_store() -> SecretStore:
-    if settings.desktop_mode and settings.desktop_data_mode == "acceptance-synthetic-v1":
+    if settings.desktop_mode and settings.desktop_data_mode in {
+        "acceptance-synthetic-v1",
+        "keychain-acceptance-v1",
+    }:
         return _acceptance_secret_store
     return keychain
 
@@ -1065,15 +1068,18 @@ def set_plaid_configuration(
     store: SecretStore = Depends(get_secret_store),
 ) -> dict[str, Any]:
     try:
+        from .native_secrets import request_plaid_credentials
+
+        client_id, secret = request_plaid_credentials()
         configure_plaid(
             environment=payload.environment,
-            client_id=payload.client_id,
-            secret=payload.secret.get_secret_value(),
+            client_id=client_id,
+            secret=secret,
             store=store,
         )
         return plaid_configuration_status(store)
-    except (ValueError, SecretStoreError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, SecretStoreError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail="Plaid setup did not complete.") from exc
 
 
 @router.delete("/plaid/configuration/{environment}")

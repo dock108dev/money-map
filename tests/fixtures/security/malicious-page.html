@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Money Map hostile-page fixture</title>
+<h1>Hostile-page fixture</h1>
+<pre id="result">running</pre>
+<iframe id="frame"></iframe>
+<script>
+  const target = new URLSearchParams(location.search).get("target");
+  const results = { tauri: Boolean(window.__TAURI_INTERNALS__), iframeTauri: null, fetch: null };
+  addEventListener("message", (event) => { results.iframeTauri = event.data.tauri; render(); });
+  document.querySelector("#frame").srcdoc =
+    "<script>parent.postMessage({tauri:!!window.__TAURI_INTERNALS__},'*')</scr" + "ipt>";
+  function render() { document.querySelector("#result").textContent = JSON.stringify(results); }
+  fetch(`http://127.0.0.1:${target}/api/desktop/health`, {
+    method: "GET",
+    headers: { "X-Money-Map-Session": "hostile-page-canary" },
+  }).then((response) => { results.fetch = `unexpected-${response.status}`; render(); })
+    .catch(() => { results.fetch = "blocked"; render(); });
+  render();
+</script>

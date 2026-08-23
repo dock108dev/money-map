@@ -10,10 +10,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
 import stat
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -34,6 +36,10 @@ SCHEMA_HEAD = "0009_goal_persistence"
 PATH_CONTRACT = "money-map-macos-data-home-v1"
 JOURNAL_CONTRACT = "money-map-recovery-journal-v1"
 BACKUP_CONTRACT = "money-map-verified-backup-v1"
+METADATA_DIGEST_CONTRACT = "money-map-metadata-digest-v1"
+CONFIRMATION_TTL_SECONDS = 300
+_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+_OPERATION_ID = re.compile(r"^\d{8}T\d{6}-[0-9a-f]{12}$")
 SUPPORTED_REVISIONS = frozenset(
     {
         "0001_local_v01",
@@ -134,6 +140,14 @@ class DataHomePaths:
     def backup_catalog(self) -> Path:
         return self.state / "backup-catalog.json"
 
+    @property
+    def journal_digest(self) -> Path:
+        return self.state / "recovery-journal.sha256"
+
+    @property
+    def backup_catalog_digest(self) -> Path:
+        return self.state / "backup-catalog.sha256"
+
     @classmethod
     def from_trusted_environment(cls) -> DataHomePaths:
         required = {
@@ -154,7 +168,11 @@ class DataHomePaths:
         return paths
 
     def validate(self) -> None:
-        if self.mode not in {"production-v1", "acceptance-synthetic-v1"}:
+        if self.mode not in {
+            "production-v1",
+            "acceptance-synthetic-v1",
+            "keychain-acceptance-v1",
+        }:
             raise DataHomeError("path_mode", "The private data location was rejected.")
         roots = (self.application, self.cache, self.logs)
         if any(not path.is_absolute() for path in roots):
@@ -227,6 +245,7 @@ class Candidate:
     path: Path
     verification: DatabaseVerification
     required_space: int
+    expires_at: float
     classification: str = "selected existing Money Map data"
 
     def preview(self) -> dict[str, Any]:
@@ -269,6 +288,8 @@ class DataHomeManager:
         self.available_space = available_space or (lambda path: shutil.disk_usage(path).free)
         self._candidate: Candidate | None = None
         self._restore_preview: dict[str, Any] | None = None
+        self._restore_preview_expires_at: float | None = None
+        self._restore_active_digest: str | None = None
 
     def prepare(self) -> dict[str, Any]:
         self.paths.ensure_directories()
@@ -347,6 +368,7 @@ class DataHomeManager:
             path=path,
             verification=verification,
             required_space=required,
+            expires_at=time.monotonic() + CONFIRMATION_TTL_SECONDS,
         )
         self._candidate = candidate
         self._inject("after_source_inspection")
@@ -355,10 +377,21 @@ class DataHomeManager:
 
     def confirm_migration(self, token: str) -> dict[str, Any]:
         candidate = self._candidate
-        if candidate is None or not secrets.compare_digest(candidate.token, token):
+        if (
+            candidate is None
+            or time.monotonic() > candidate.expires_at
+            or not secrets.compare_digest(candidate.token, token)
+        ):
             raise DataHomeError(
                 "candidate_expired", "Choose the existing data again before importing."
             )
+        self._candidate = None
+        current_source = verify_database(candidate.path)
+        if (
+            current_source.sha256 != candidate.verification.sha256
+            or current_source.manifest_digest != candidate.verification.manifest_digest
+        ):
+            raise DataHomeError("source_changed", "The selected source changed before import.")
         prior = self._read_journal()
         if (
             prior
@@ -393,7 +426,6 @@ class DataHomeManager:
         )
         try:
             self._migrate(candidate, journal)
-            self._candidate = None
             return self._complete(journal, Phase.ACTIVATION_COMPLETE)
         except Exception as error:
             return self._record_failure(journal, error)
@@ -456,15 +488,35 @@ class DataHomeManager:
             "pre_restore_backup": True,
             "rollback_available": True,
             "confirmation_required": True,
+            "confirmation_token": secrets.token_urlsafe(32),
         }
         self._restore_preview = preview
+        self._restore_active_digest = verify_database(
+            self.paths.database, expected_revision=SCHEMA_HEAD
+        ).sha256
+        self._restore_preview_expires_at = time.monotonic() + CONFIRMATION_TTL_SECONDS
         return preview
 
-    def confirm_restore(self, backup_id: str) -> dict[str, Any]:
-        if self._restore_preview is None or self._restore_preview.get("backup_id") != backup_id:
+    def confirm_restore(self, backup_id: str, confirmation_token: str) -> dict[str, Any]:
+        preview = self._restore_preview
+        if (
+            preview is None
+            or preview.get("backup_id") != backup_id
+            or self._restore_preview_expires_at is None
+            or time.monotonic() > self._restore_preview_expires_at
+            or not secrets.compare_digest(
+                str(preview.get("confirmation_token", "")), confirmation_token
+            )
+        ):
             raise DataHomeError(
                 "restore_preview_required", "Preview the backup again before restore."
             )
+        current = verify_database(self.paths.database, expected_revision=SCHEMA_HEAD)
+        if current.sha256 != self._restore_active_digest:
+            raise DataHomeError("restore_state_changed", "Preview the backup again before restore.")
+        self._restore_preview = None
+        self._restore_preview_expires_at = None
+        self._restore_active_digest = None
         selected = self.backup_path(backup_id)
         if not self.paths.database.is_file():
             raise DataHomeError("no_active_database", "There is no current database to replace.")
@@ -498,7 +550,6 @@ class DataHomeManager:
             journal["expected_active_digest"] = restored.sha256
             journal["logical_manifest_digest"] = restored.manifest_digest
             self._replace_active(staging, journal)
-            self._restore_preview = None
             return self._complete(journal, Phase.RESTORE_COMPLETE)
         except Exception as error:
             return self._record_failure(journal, error)
@@ -793,35 +844,42 @@ class DataHomeManager:
     def _read_journal(self) -> dict[str, Any] | None:
         if not self.paths.journal.exists():
             return None
+        _verify_metadata_digest(self.paths.journal, self.paths.journal_digest)
         try:
             value = json.loads(self.paths.journal.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise DataHomeError(
                 "journal_invalid", "Recovery information could not be verified."
             ) from error
-        if not isinstance(value, dict) or value.get("contract") != JOURNAL_CONTRACT:
+        if not isinstance(value, dict) or not _valid_journal(value):
             raise DataHomeError("journal_invalid", "Recovery information could not be verified.")
         return value
 
     def _write_journal(self, journal: Mapping[str, Any]) -> None:
         self.paths.state.mkdir(mode=0o700, parents=True, exist_ok=True)
         _atomic_json(self.paths.journal, journal)
+        _write_metadata_digest(self.paths.journal, self.paths.journal_digest)
 
     def _catalog(self) -> list[dict[str, Any]]:
         if not self.paths.backup_catalog.exists():
             return []
+        _verify_metadata_digest(self.paths.backup_catalog, self.paths.backup_catalog_digest)
         try:
             payload = json.loads(self.paths.backup_catalog.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise DataHomeError(
                 "catalog_invalid", "Backup status could not be verified."
             ) from error
-        if not isinstance(payload, dict) or payload.get("contract") != BACKUP_CONTRACT:
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"contract", "backups"}
+            or payload.get("contract") != BACKUP_CONTRACT
+        ):
             raise DataHomeError("catalog_invalid", "Backup status could not be verified.")
         records = payload.get("backups", [])
-        if not isinstance(records, list):
+        if not isinstance(records, list) or not _valid_catalog(records):
             raise DataHomeError("catalog_invalid", "Backup status could not be verified.")
-        return [item for item in records if isinstance(item, dict)]
+        return records
 
     def _record_backup(
         self,
@@ -850,6 +908,7 @@ class DataHomeManager:
             self.paths.backup_catalog,
             {"contract": BACKUP_CONTRACT, "backups": records},
         )
+        _write_metadata_digest(self.paths.backup_catalog, self.paths.backup_catalog_digest)
         return self._public_backup(record)
 
     def _backup_record(self, backup_id: str) -> dict[str, Any]:
@@ -919,8 +978,13 @@ class DataHomeManager:
 
 def verify_database(path: Path, *, expected_revision: str | None = None) -> DatabaseVerification:
     _reject_existing_symlink_chain(path)
-    if path.is_symlink() or not path.is_file():
+    try:
+        metadata = path.stat(follow_symlinks=False)
+    except OSError as error:
+        raise DataHomeError("database_missing", "The database could not be verified.") from error
+    if path.is_symlink() or not path.is_file() or metadata.st_nlink != 1 or metadata.st_size == 0:
         raise DataHomeError("database_missing", "The database could not be verified.")
+    before = _file_identity(path)
     try:
         with _read_only_connection(path) as connection:
             connection.execute("PRAGMA foreign_keys=ON")
@@ -930,6 +994,12 @@ def verify_database(path: Path, *, expected_revision: str | None = None) -> Data
             versions = connection.execute(
                 "SELECT version_num FROM alembic_version ORDER BY version_num"
             ).fetchall()
+            tables = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
     except sqlite3.Error as error:
         raise DataHomeError("database_invalid", "The database could not be verified.") from error
     if integrity != [("ok",)]:
@@ -941,8 +1011,14 @@ def verify_database(path: Path, *, expected_revision: str | None = None) -> Data
     revision = str(versions[0][0])
     if expected_revision is not None and revision != expected_revision:
         raise DataHomeError("revision_incompatible", "The database version is not compatible.")
+    required_tables = {"institutions", "accounts", "import_batches", "alembic_version"}
+    if revision in SUPPORTED_REVISIONS and not required_tables.issubset(tables):
+        raise DataHomeError("database_incomplete", "The database structure is incomplete.")
     manifest = build_logical_manifest(path)
-    size = path.stat().st_size
+    after = _file_identity(path)
+    if before != after:
+        raise DataHomeError("database_changed", "The database changed during verification.")
+    size = after[2]
     return DatabaseVerification(
         revision=revision,
         size=size,
@@ -1045,6 +1121,157 @@ def _reject_existing_symlink_chain(path: Path) -> None:
             raise DataHomeError(
                 "symlink_rejected", "A symbolic link in the data path was rejected."
             )
+
+
+_JOURNAL_FIELDS = frozenset(
+    {
+        "contract",
+        "operation_id",
+        "operation_kind",
+        "source_classification",
+        "destination_classification",
+        "expected_schema_revision",
+        "phase",
+        "created_at",
+        "updated_at",
+        "activated",
+        "completed",
+        "recoverable",
+        "failure_code",
+        "source_revision",
+        "source_digest",
+        "source_manifest_digest",
+        "backup_name",
+        "staging_name",
+        "safety_backup_name",
+        "expected_active_digest",
+        "logical_manifest_digest",
+        "rollback_name",
+        "completed_at",
+        "rolled_back",
+    }
+)
+_CATALOG_FIELDS = frozenset(
+    {
+        "backup_id",
+        "filename",
+        "operation_id",
+        "label",
+        "created_at",
+        "schema_revision",
+        "size",
+        "sha256",
+        "manifest_digest",
+        "verified",
+    }
+)
+
+
+def _valid_journal(value: Mapping[str, Any]) -> bool:
+    if set(value) - _JOURNAL_FIELDS:
+        return False
+    if value.get("contract") != JOURNAL_CONTRACT:
+        return False
+    operation_id = value.get("operation_id")
+    if not isinstance(operation_id, str) or not _OPERATION_ID.fullmatch(operation_id):
+        return False
+    if value.get("operation_kind") not in {"fresh_setup", "migration", "restore"}:
+        return False
+    if value.get("expected_schema_revision") != SCHEMA_HEAD:
+        return False
+    if value.get("phase") not in {phase.value for phase in Phase}:
+        return False
+    if not all(
+        isinstance(value.get(name), bool) for name in ("activated", "completed", "recoverable")
+    ):
+        return False
+    for name in (
+        "source_digest",
+        "source_manifest_digest",
+        "expected_active_digest",
+        "logical_manifest_digest",
+    ):
+        digest = value.get(name)
+        if digest is not None and (not isinstance(digest, str) or not _DIGEST.fullmatch(digest)):
+            return False
+    for name in ("backup_name", "staging_name", "safety_backup_name", "rollback_name"):
+        filename = value.get(name)
+        if filename is not None and (
+            not isinstance(filename, str)
+            or Path(filename).name != filename
+            or not filename.endswith(".sqlite3")
+            or len(filename) > 180
+        ):
+            return False
+    failure = value.get("failure_code")
+    return failure is None or (
+        isinstance(failure, str) and len(failure) <= 64 and failure.replace("_", "").isalnum()
+    )
+
+
+def _valid_catalog(records: list[object]) -> bool:
+    ids: set[str] = set()
+    filenames: set[str] = set()
+    for record in records:
+        if not isinstance(record, dict) or set(record) != _CATALOG_FIELDS:
+            return False
+        operation_id = record.get("operation_id")
+        filename = record.get("filename")
+        backup_id = record.get("backup_id")
+        if (
+            not isinstance(operation_id, str)
+            or not _OPERATION_ID.fullmatch(operation_id)
+            or not isinstance(filename, str)
+            or Path(filename).name != filename
+            or not filename.endswith(".sqlite3")
+            or not isinstance(backup_id, str)
+            or len(backup_id) != 24
+            or backup_id != hashlib.sha256(f"{operation_id}:{filename}".encode()).hexdigest()[:24]
+            or backup_id in ids
+            or filename in filenames
+            or record.get("schema_revision") not in SUPPORTED_REVISIONS
+            or not isinstance(record.get("size"), int)
+            or int(record["size"]) <= 0
+            or record.get("verified") is not True
+        ):
+            return False
+        for name in ("sha256", "manifest_digest"):
+            digest = record.get(name)
+            if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
+                return False
+        if not isinstance(record.get("label"), str) or len(str(record["label"])) > 64:
+            return False
+        ids.add(backup_id)
+        filenames.add(filename)
+    return True
+
+
+def _write_metadata_digest(source: Path, destination: Path) -> None:
+    _atomic_json(
+        destination,
+        {"contract": METADATA_DIGEST_CONTRACT, "sha256": _sha256(source)},
+    )
+
+
+def _verify_metadata_digest(source: Path, digest_path: Path) -> None:
+    _reject_existing_symlink_chain(digest_path)
+    try:
+        metadata = digest_path.stat(follow_symlinks=False)
+        payload = json.loads(digest_path.read_text(encoding="ascii"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise DataHomeError(
+            "metadata_tampered", "Recovery metadata could not be verified."
+        ) from error
+    if (
+        digest_path.is_symlink()
+        or not digest_path.is_file()
+        or metadata.st_nlink != 1
+        or not isinstance(payload, dict)
+        or set(payload) != {"contract", "sha256"}
+        or payload.get("contract") != METADATA_DIGEST_CONTRACT
+        or payload.get("sha256") != _sha256(source)
+    ):
+        raise DataHomeError("metadata_tampered", "Recovery metadata could not be verified.")
 
 
 def _fsync_file(path: Path) -> None:

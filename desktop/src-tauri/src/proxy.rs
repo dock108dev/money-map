@@ -11,6 +11,7 @@ pub const MAX_RESPONSE_BODY: usize = 8_388_608;
 const MAX_PATH: usize = 4_096;
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DesktopRequest {
     pub path: String,
     pub method: String,
@@ -51,6 +52,15 @@ impl Default for ProxyLimits {
 
 pub fn validate_request(request: &DesktopRequest) -> Result<Method, String> {
     validate_path(&request.path)?;
+    if request.method.is_empty()
+        || request.method.len() > 8
+        || !request
+            .method
+            .bytes()
+            .all(|byte| byte.is_ascii_alphabetic())
+    {
+        return Err("The desktop request method was rejected.".to_string());
+    }
     let method = Method::from_bytes(request.method.to_ascii_uppercase().as_bytes())
         .map_err(|_| "The desktop request method was rejected.".to_string())?;
     if !matches!(
@@ -61,6 +71,18 @@ pub fn validate_request(request: &DesktopRequest) -> Result<Method, String> {
     }
     if request.body.as_deref().unwrap_or_default().len() > MAX_REQUEST_BODY {
         return Err("The desktop request was too large.".to_string());
+    }
+    Ok(method)
+}
+
+pub fn validate_frontend_request(request: &DesktopRequest) -> Result<Method, String> {
+    let method = validate_request(request)?;
+    let path = request
+        .path
+        .split_once('?')
+        .map_or(request.path.as_str(), |(path, _)| path);
+    if path == "/api/desktop/data-home/candidate" {
+        return Err("The native file selection boundary rejected the request.".to_string());
     }
     Ok(method)
 }
@@ -97,7 +119,7 @@ pub fn validate_path(value: &str) -> Result<(), String> {
             return Err("The desktop request path was rejected.".to_string());
         }
         let encoded = value[index + 1..index + 3].to_ascii_lowercase();
-        if matches!(encoded.as_str(), "0a" | "0d" | "2e" | "2f" | "5c") {
+        if matches!(encoded.as_str(), "0a" | "0d" | "25" | "2e" | "2f" | "5c") {
             return Err("The desktop request path was rejected.".to_string());
         }
         index += 3;
@@ -199,7 +221,10 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use super::{forward_with_limits, validate_request, DesktopRequest, ProxyLimits};
+    use super::{
+        forward_with_limits, validate_frontend_request, validate_request, DesktopRequest,
+        ProxyLimits,
+    };
 
     fn request(path: &str, method: &str, body: Option<String>) -> DesktopRequest {
         DesktopRequest {
@@ -207,6 +232,17 @@ mod tests {
             method: method.to_string(),
             body,
         }
+    }
+
+    #[test]
+    fn frontend_cannot_bypass_native_file_selection() {
+        assert!(validate_frontend_request(&request(
+            "/api/desktop/data-home/candidate",
+            "POST",
+            Some("{}".to_string())
+        ))
+        .is_err());
+        assert!(validate_frontend_request(&request("/api/accounts", "GET", None)).is_ok());
     }
 
     #[test]

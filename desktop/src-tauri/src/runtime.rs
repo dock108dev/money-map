@@ -1,5 +1,9 @@
-use std::io::{BufRead, BufReader, Write};
+use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::MetadataExt;
+use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -212,7 +216,7 @@ impl RuntimeController {
         if requested_generation("MONEY_MAP_RUNTIME_FAIL_GENERATION") == Some(generation) {
             return self.fail_generation(generation);
         }
-        if !self.sidecar_path.is_file() {
+        if verify_sidecar_artifact(&self.sidecar_path).is_err() {
             return self.fail_generation(generation);
         }
         let session = session_token()?;
@@ -289,6 +293,9 @@ impl RuntimeController {
         generation: u64,
         session: &str,
     ) -> Result<(RunningProcess, Receiver<OutputEvent>), String> {
+        let (mut bootstrap_writer, bootstrap_reader) = UnixStream::pair()
+            .map_err(|_| "Bundled service bootstrap could not start.".to_string())?;
+        let bootstrap_fd = bootstrap_reader.as_raw_fd();
         let mut command = Command::new(&self.sidecar_path);
         command
             .env_clear()
@@ -299,10 +306,13 @@ impl RuntimeController {
             .env("PAYCHECK_MAP_DESKTOP_CACHE_ROOT", &self.paths.cache)
             .env("PAYCHECK_MAP_DESKTOP_LOG_ROOT", &self.paths.logs)
             .env("PAYCHECK_MAP_LOCAL_DIR", &self.paths.application)
-            .env("PAYCHECK_MAP_DESKTOP_SESSION", session)
+            .env("PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD", "3")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        if self.paths.mode == "keychain-acceptance-v1" {
+            command.env("PAYCHECK_MAP_KEYCHAIN_ACCEPTANCE", "1");
+        }
         if let Some(bundle_root) = self
             .sidecar_path
             .parent()
@@ -317,17 +327,35 @@ impl RuntimeController {
             }
         }
         unsafe {
-            command.pre_exec(|| {
+            command.pre_exec(move || {
                 if libc::setsid() == -1 {
-                    Err(std::io::Error::last_os_error())
-                } else {
-                    Ok(())
+                    return Err(std::io::Error::last_os_error());
                 }
+                if libc::dup2(bootstrap_fd, 3) == -1 || libc::fcntl(3, libc::F_SETFD, 0) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
             });
         }
         let mut child = command
             .spawn()
             .map_err(|_| "Bundled service could not start.".to_string())?;
+        drop(bootstrap_reader);
+        let bootstrap = serde_json::to_vec(&serde_json::json!({
+            "contract": "money-map-desktop-bootstrap-v1",
+            "session": session,
+        }))
+        .map_err(|_| "Bundled service bootstrap was rejected.".to_string())?;
+        if bootstrap.len() > 511
+            || bootstrap_writer.write_all(&bootstrap).is_err()
+            || bootstrap_writer.write_all(b"\n").is_err()
+            || bootstrap_writer.flush().is_err()
+        {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Bundled service bootstrap was rejected.".to_string());
+        }
+        drop(bootstrap_writer);
         let pid = child.id();
         let stdout = child
             .stdout
@@ -444,7 +472,9 @@ impl RuntimeController {
     ) -> Result<(), String> {
         if let Ok(mut child) = process.child.lock() {
             if let Some(stdin) = child.stdin.as_mut() {
-                let _ = stdin.write_all(b"shutdown\n");
+                let _ = stdin.write_all(
+                    b"{\"command\":\"shutdown\",\"contract\":\"money-map-control-v1\"}\n",
+                );
                 let _ = stdin.flush();
             }
         }
@@ -472,6 +502,59 @@ impl RuntimeController {
         }
         Err("The local service cleanup did not finish safely.".to_string())
     }
+}
+
+fn verify_sidecar_artifact(path: &std::path::Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| "The bundled service identity could not be verified.".to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.nlink() != 1 {
+        return Err("The bundled service identity could not be verified.".to_string());
+    }
+    let macos = path
+        .parent()
+        .ok_or_else(|| "The signed application layout is invalid.".to_string())?;
+    if macos.file_name().and_then(|value| value.to_str()) != Some("MacOS")
+        || path.file_name().and_then(|value| value.to_str()) != Some("money-map-sidecar")
+    {
+        return Err("The signed application layout is invalid.".to_string());
+    }
+    let bundle = macos
+        .parent()
+        .and_then(|contents| contents.parent())
+        .ok_or_else(|| "The signed application layout is invalid.".to_string())?;
+    if bundle.extension().and_then(|value| value.to_str()) != Some("app") {
+        return Err("The signed application layout is invalid.".to_string());
+    }
+    let canonical_bundle = bundle
+        .canonicalize()
+        .map_err(|_| "The signed application identity could not be verified.".to_string())?;
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|_| "The bundled service identity could not be verified.".to_string())?;
+    if !canonical_path.starts_with(&canonical_bundle) {
+        return Err("The bundled service identity could not be verified.".to_string());
+    }
+    let mut header = [0_u8; 8];
+    fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut header))
+        .map_err(|_| "The bundled service identity could not be verified.".to_string())?;
+    if header[..4] != [0xcf, 0xfa, 0xed, 0xfe] || header[4..] != [0x0c, 0x00, 0x00, 0x01] {
+        return Err("The bundled service architecture was rejected.".to_string());
+    }
+    let status = Command::new("/usr/bin/codesign")
+        .arg("--verify")
+        .arg("--deep")
+        .arg("--strict")
+        .arg("-R=anchor apple generic and certificate leaf[subject.OU] = \"E3G5D247ZN\"")
+        .arg(&canonical_bundle)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|_| "The signed application identity could not be verified.".to_string())?;
+    if !status.success() {
+        return Err("The signed application identity could not be verified.".to_string());
+    }
+    Ok(())
 }
 
 fn session_token() -> Result<String, String> {

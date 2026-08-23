@@ -28,12 +28,13 @@ Money Map.app/Contents/MacOS/money-map-desktop
      -> PyInstaller-extracted Python/FastAPI runtime
 ```
 
-At launch, Tauri creates one private temporary parent named `money-map-runtime-*`, selects its
-`money-map-synthetic-data` child, generates a cryptographically random 256-bit session, and starts
-the sidecar without command-line arguments. It clears inherited environment variables and supplies
-only the locale, desktop-mode and synthetic-mode markers, data root, and session through the child
-environment. The session is never put in a URL, WebView storage, log, database, crash message, or
-process-list argument.
+At launch, Tauri generates a cryptographically random 256-bit session and starts the sidecar
+without command-line arguments. It creates a private Unix-domain socket pair, duplicates the child
+end to descriptor 3, clears close-on-exec, writes one bounded bootstrap JSON record from the parent,
+and closes both ends after delivery. The cleared child environment contains only trusted mode/path
+markers and the nonsecret descriptor number. The sidecar consumes and closes that descriptor and
+removes its marker before readiness. The session never enters an environment value, URL, WebView,
+storage, file, log, diagnostic, database, crash message, artifact, evidence, or argument.
 
 The shell owns an explicit `Starting`, `Ready`, `Failed`, `Restarting`, `Stopping`, and `Stopped`
 state machine. Every generation receives a new session and exactly one process group. The sidecar
@@ -93,7 +94,12 @@ The FastAPI wrapper independently requires:
 
 - an exact `Host` of `127.0.0.1:<port>`;
 - no origin or an origin of exactly `tauri://localhost` or `http://tauri.localhost`; and
-- a constant-time match of `X-Money-Map-Session` for every non-preflight request.
+- exactly one constant-time match of `X-Money-Map-Session` for every non-preflight request.
+
+It also rejects duplicate Host/origin/session/content-length fields, Content-Length combined with
+Transfer-Encoding, ASCII controls, unsupported content types/methods, bodies above 1 MiB, more
+than 32 active requests, traversal and double encoding. Preflight is permitted only for the exact
+trusted local origin and never enables credentials.
 
 Responses are `no-store`. An ordinary browser does not possess the session, while a hostile
 origin and a misleading host are rejected even if a session were supplied. The Python boundary
@@ -161,10 +167,17 @@ the chosen approved backup, creates and verifies a pre-restore safety backup, re
 and uses the same replacement contract. Finder reveal accepts only a backend-verified catalog ID
 and a basename under the Tauri-resolved backup root.
 
-Plaid credentials and access tokens remain in macOS Keychain under versioned Money Map service
-names. They may be requested only by the Python boundary, must never enter SQLite, frontend
-storage, arguments, logs, crash output, artifacts, or evidence, and must preserve manual import
-as a permanent fallback.
+Plaid credentials and access tokens remain in macOS Keychain under exact versioned Money Map
+service/account allowlists. Fixed sidecar-owned native macOS prompts collect the client ID and
+hidden secret without values entering React, API request bodies, arguments or environment. Failed
+multi-item configuration restores the prior Keychain state. Credentials must never enter SQLite,
+frontend storage, logs, crash output, artifacts, diagnostics or evidence; manual import remains a
+permanent fallback.
+
+Slice 4 also creates a separately labeled `safe-error` WebView. It contains no financial data and
+has only runtime-status, restart and About permissions. Startup integrity failure hides `main` and
+shows this surface; successful deliberate recovery restores the main window. Navigation and new
+windows fail closed on both surfaces.
 
 ## Plaid, printing, and file selection
 
@@ -214,9 +227,17 @@ The one permitted fallback—a Python-native WKWebView shell—was rejected with
 There was no failed required Tauri capability to justify maintaining or testing a second shell,
 and it would mix shell and service responsibilities while providing a weaker packaging path.
 
+## Slice 4 security hardening
+
+The complete capability table, CSP, navigation policy, Keychain decision, import budgets,
+database/recovery integrity gates, signed build evidence and attack campaigns are in
+`desktop-threat-model.md` and `security-acceptance.md`. The owner-machine bundle verifies the whole
+Apple Development team signature before sidecar spawn. Developer ID, a nested-code layout that can
+support hardened runtime, notarization and stapling remain Slice 5 distribution work.
+
 ## Deferred risks
 
-- Slice 4: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
+- Owner validation: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
 - Slice 5: deterministic release build, DMG, Developer ID, hardened runtime, notarization,
   stapling, installed-app/Gatekeeper tests, and final artifact-size/performance budgets.
 - PyInstaller one-file extraction adds startup cost and transient files; later profiling may choose

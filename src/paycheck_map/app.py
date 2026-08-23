@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.desktop_mode and settings.desktop_data_mode in {
         "production-v1",
         "acceptance-synthetic-v1",
+        "keychain-acceptance-v1",
     }:
         from .desktop_data_api import prepare_desktop_data_home
 
@@ -41,6 +42,7 @@ app.include_router(router)
 if settings.desktop_mode and settings.desktop_data_mode in {
     "production-v1",
     "acceptance-synthetic-v1",
+    "keychain-acceptance-v1",
 }:
     from .desktop_data_api import router as desktop_data_router
 

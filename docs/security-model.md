@@ -1,5 +1,27 @@
 # Security model
 
+## Slice 4 desktop boundary
+
+The normative desktop threat/control matrix is `docs/v3/desktop-threat-model.md`; the executed
+gates are `docs/v3/security-acceptance.md`. The signed shell activates two exact Tauri capability
+sets: 13 reviewed application commands for bundled `main`, and only status/restart/About for the
+nonfinancial `safe-error` window. Remote content, Plaid frames, and arbitrary windows receive no
+native authority. Shell, generic filesystem, generic HTTP, arbitrary opener, and window creation
+permissions are absent.
+
+Every sidecar generation receives a new 256-bit session through a private inherited descriptor,
+not arguments or environment values. The authenticated server binds only ephemeral
+`127.0.0.1`, requires the exact Host/session/origin contract, rejects duplicate or ambiguous
+framing, and bounds bodies, concurrency and responses. Rust supplies the destination and secret;
+React cannot read either. Startup verifies the strict Apple-team-signed bundle/arm64 sidecar before
+spawn, and database/recovery/import artifacts pass closed-schema, identity and resource gates.
+
+Plaid credentials are collected by fixed sidecar-owned native macOS prompts; React sends only the
+environment and never receives client credentials or access tokens. Keychain services and account
+patterns are versioned exact allowlists. Safe event logs contain only fixed code/classification/time
+fields and rotate at bounded size. These controls do not protect a fully compromised logged-in
+macOS account that can inspect memory or rewrite both a file and its unkeyed digest.
+
 ## Desktop reports and sanitized diagnostics
 
 React receives opaque report identities, never filesystem authority. The backend approves the one
@@ -28,7 +50,8 @@ and performs no write when canceled.
 
 ## Controls
 
-- The server refuses to bind outside `127.0.0.1`.
+- The desktop server binds only ephemeral IPv4 `127.0.0.1`; exact Host, origin, one-time session,
+  framing, size, method, content-type, path and concurrency rules fail closed.
 - `.local/` contains inbox files, SQLite data, reports, temporary renders, and backups,
   and is excluded from Git.
 - The privacy check rejects financial file types outside approved synthetic paths and
@@ -40,9 +63,9 @@ and performs no write when canceled.
 - Manual corrections append old/new values and a reason before reconciliation reruns.
 - Restore first creates a recoverable pre-restore backup and validates SQLite integrity.
 - Raw inputs are read-only. No code writes to financial-provider source files.
-- Plaid Client IDs, secrets, stable local client identity, and per-item access tokens
-  are stored in macOS Keychain. Only non-secret status and a four-character Client ID
-  hint are returned to the interface.
+- Plaid Client IDs, secrets, stable local client identity, and per-item access tokens are stored in
+  versioned exact macOS Keychain namespaces. Sidecar-owned native prompts prevent client
+  credentials from entering React; only non-secret status and a four-character hint return.
 - Plaid secrets are sent as request headers, not request-body fields. Access tokens are
   exchanged and used only by the loopback backend; Plaid Link public tokens are
   single-use.

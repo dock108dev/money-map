@@ -247,8 +247,6 @@ export default function App() {
 
   const runPlaidConfiguration = async (payload: {
     environment: "sandbox" | "production";
-    client_id: string;
-    secret: string;
   }) => {
     setBusy(true);
     setMessage("");

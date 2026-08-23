@@ -27,6 +27,7 @@ export interface DataHomeStatus {
   schema_revision?: string;
   backup_count?: number;
   candidate_token?: string;
+  confirmation_token?: string;
   source_classification?: string;
   destination_classification?: string;
   size?: number;
@@ -265,7 +266,7 @@ export default function DataHomePanel({
           </>
         )}
 
-        {restore?.backup_id && (
+        {restore?.backup_id && restore.confirmation_token && (
           <div ref={restoreRef} className="restore-warning" role="alertdialog" aria-modal="true" aria-labelledby="restore-title">
             <h2 id="restore-title">Replace the current database?</h2>
             <p>{restore.replacement_warning}</p>
@@ -273,7 +274,10 @@ export default function DataHomePanel({
             <div className="data-home-actions">
               <button disabled={busy} onClick={() => setRestore(null)}>Cancel</button>
               <button className="danger-button" disabled={busy} onClick={() => void run(async () => {
-                const result = await action("/api/desktop/data-home/restore", { backup_id: restore.backup_id });
+                const result = await action("/api/desktop/data-home/restore", {
+                  backup_id: restore.backup_id,
+                  confirmation_token: restore.confirmation_token,
+                });
                 setRestore(null);
                 return result;
               })}>Replace with verified backup</button>

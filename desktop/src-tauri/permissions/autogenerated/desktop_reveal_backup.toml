@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-reveal-backup"
+description = "Enables the desktop_reveal_backup command without any pre-configured scope."
+commands.allow = ["desktop_reveal_backup"]
+
+[[permission]]
+identifier = "deny-desktop-reveal-backup"
+description = "Denies the desktop_reveal_backup command without any pre-configured scope."
+commands.deny = ["desktop_reveal_backup"]

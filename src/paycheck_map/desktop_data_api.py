@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .config import settings
 from .data_home import DataHomeError, DataHomeManager, DataHomePaths
@@ -19,15 +19,22 @@ router = APIRouter(prefix="/api/desktop/data-home", tags=["desktop-data-home"])
 
 
 class CandidateSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     selected_path: str = Field(min_length=1, max_length=4096)
 
 
 class MigrationConfirmation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     candidate_token: str = Field(min_length=16, max_length=256)
 
 
 class BackupSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     backup_id: str = Field(pattern=r"^[0-9a-f]{24}$")
+
+
+class RestoreConfirmation(BackupSelection):
+    confirmation_token: str = Field(min_length=32, max_length=128)
 
 
 @lru_cache(maxsize=1)
@@ -111,9 +118,13 @@ def restore_preview(payload: BackupSelection) -> dict[str, Any]:
 
 
 @router.post("/restore")
-def restore(payload: BackupSelection) -> dict[str, Any]:
+def restore(payload: RestoreConfirmation) -> dict[str, Any]:
     engine.dispose()
-    return _call(data_home_manager().confirm_restore, payload.backup_id)
+    return _call(
+        data_home_manager().confirm_restore,
+        payload.backup_id,
+        payload.confirmation_token,
+    )
 
 
 @router.post("/resume")

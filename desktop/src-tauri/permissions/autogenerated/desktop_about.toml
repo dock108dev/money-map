@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-about"
+description = "Enables the desktop_about command without any pre-configured scope."
+commands.allow = ["desktop_about"]
+
+[[permission]]
+identifier = "deny-desktop-about"
+description = "Denies the desktop_about command without any pre-configured scope."
+commands.deny = ["desktop_about"]

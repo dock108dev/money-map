@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
-import hmac
+import asyncio
 import json
-import os
-import re
 from typing import Any
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .app import app
+from .desktop_bootstrap import active_bootstrap, matches_session
 
-_HOST = re.compile(r"^127\.0\.0\.1:\d{1,5}$")
 _ALLOWED_ORIGINS = frozenset({"http://tauri.localhost", "tauri://localhost"})
 _ALLOWED_METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "OPTIONS"})
 _MAX_REQUEST_BODY = 1_048_576
-_SESSION = os.environ.get("PAYCHECK_MAP_DESKTOP_SESSION", "")
-if not _SESSION:
-    raise RuntimeError("Desktop session configuration is unavailable")
+_MAX_SECURITY_HEADER = 512
+_MAX_ACTIVE_REQUESTS = 32
+_BODY_READ_TIMEOUT_SECONDS = 2.0
+_SECURITY_HEADERS = frozenset(
+    {b"host", b"origin", b"x-money-map-session", b"content-length", b"transfer-encoding"}
+)
 
 
 def _response(status: int, message: str) -> tuple[dict[str, Any], bytes]:
@@ -40,18 +41,29 @@ def _response(status: int, message: str) -> tuple[dict[str, Any], bytes]:
 class DesktopSecurityMiddleware:
     def __init__(self, inner: ASGIApp) -> None:
         self.inner = inner
+        self._active_requests = 0
+        self._request_lock = asyncio.Lock()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http":
             await self.inner(scope, receive, send)
             return
-        headers = {key.lower(): value for key, value in scope.get("headers", [])}
-        host = headers.get(b"host", b"").decode("ascii", "ignore")
-        origin = headers.get(b"origin", b"").decode("ascii", "ignore")
+        raw_headers = [
+            (bytes(key).lower(), bytes(value)) for key, value in scope.get("headers", [])
+        ]
+        grouped: dict[bytes, list[bytes]] = {}
+        for key, value in raw_headers:
+            grouped.setdefault(key, []).append(value)
+        if not self._valid_security_headers(grouped):
+            await self._reject(send, 400, "The desktop request headers were rejected.")
+            return
+        host = grouped[b"host"][0].decode("ascii")
+        origin_values = grouped.get(b"origin", [])
+        origin = origin_values[0].decode("ascii") if origin_values else ""
         method = str(scope.get("method", "")).upper()
         raw_path = bytes(scope.get("raw_path", b""))
         path = str(scope.get("path", ""))
-        if not self._valid_host(host):
+        if host != f"127.0.0.1:{active_bootstrap().port}":
             await self._reject(send, 400, "The desktop service rejected the request host.")
             return
         if origin and origin not in _ALLOWED_ORIGINS:
@@ -76,12 +88,30 @@ class DesktopSecurityMiddleware:
             )
             await send({"type": "http.response.body", "body": b""})
             return
-        supplied = headers.get(b"x-money-map-session", b"").decode("ascii", "ignore")
-        if not supplied or not hmac.compare_digest(supplied, _SESSION):
+        if len(grouped.get(b"x-money-map-session", [])) != 1:
             await self._reject(send, 401, "Desktop session authentication is required.")
             return
+        supplied = grouped[b"x-money-map-session"][0].decode("ascii")
+        if not supplied or not matches_session(supplied):
+            await self._reject(send, 401, "Desktop session authentication is required.")
+            return
+        content_type = (
+            next((value for key, value in raw_headers if key == b"content-type"), b"")
+            .split(b";", 1)[0]
+            .strip()
+            .lower()
+        )
+        if method in {"POST", "PUT", "DELETE"} and content_type != b"application/json":
+            await self._reject(send, 415, "The desktop request content type was rejected.")
+            return
+        async with self._request_lock:
+            if self._active_requests >= _MAX_ACTIVE_REQUESTS:
+                await self._reject(send, 429, "The desktop service is busy.")
+                return
+            self._active_requests += 1
         bounded = await self._read_body(receive)
         if bounded is None:
+            await self._release_request()
             await self._reject(send, 413, "The desktop request was too large.")
             return
         messages = iter(bounded)
@@ -91,6 +121,7 @@ class DesktopSecurityMiddleware:
 
         if scope.get("path") == "/api/desktop/health":
             if method != "GET":
+                await self._release_request()
                 await self._reject(send, 405, "The desktop health request method was rejected.")
                 return
             body = json.dumps(
@@ -105,6 +136,7 @@ class DesktopSecurityMiddleware:
                 response_headers.extend(self._cors(origin))
             await send({"type": "http.response.start", "status": 200, "headers": response_headers})
             await send({"type": "http.response.body", "body": body})
+            await self._release_request()
             return
 
         async def secured_send(message: Message) -> None:
@@ -116,16 +148,32 @@ class DesktopSecurityMiddleware:
                 message["headers"] = response_headers
             await send(message)
 
-        await self.inner(scope, secured_receive, secured_send)
+        try:
+            await self.inner(scope, secured_receive, secured_send)
+        finally:
+            await self._release_request()
 
     @staticmethod
-    def _valid_host(host: str) -> bool:
-        if not _HOST.fullmatch(host):
+    def _valid_security_headers(grouped: dict[bytes, list[bytes]]) -> bool:
+        if len(grouped.get(b"host", [])) != 1:
             return False
-        try:
-            return 0 < int(host.rsplit(":", 1)[1]) <= 65_535
-        except ValueError:
+        if len(grouped.get(b"x-money-map-session", [])) > 1:
             return False
+        if len(grouped.get(b"origin", [])) > 1:
+            return False
+        if len(grouped.get(b"content-length", [])) > 1:
+            return False
+        if grouped.get(b"content-length") and grouped.get(b"transfer-encoding"):
+            return False
+        for key in _SECURITY_HEADERS:
+            for value in grouped.get(key, []):
+                if (
+                    len(value) > _MAX_SECURITY_HEADER
+                    or not value.isascii()
+                    or any(byte < 0x20 or byte == 0x7F for byte in value)
+                ):
+                    return False
+        return True
 
     @staticmethod
     def _valid_path(path: str, raw_path: bytes) -> bool:
@@ -143,7 +191,10 @@ class DesktopSecurityMiddleware:
         messages: list[Message] = []
         size = 0
         while True:
-            message = await receive()
+            try:
+                message = await asyncio.wait_for(receive(), timeout=_BODY_READ_TIMEOUT_SECONDS)
+            except TimeoutError:
+                return None
             messages.append(message)
             if message.get("type") != "http.request":
                 return messages
@@ -152,6 +203,10 @@ class DesktopSecurityMiddleware:
                 return None
             if not message.get("more_body", False):
                 return messages
+
+    async def _release_request(self) -> None:
+        async with self._request_lock:
+            self._active_requests = max(0, self._active_requests - 1)
 
     @staticmethod
     def _cors(origin: str) -> list[tuple[bytes, bytes]]:

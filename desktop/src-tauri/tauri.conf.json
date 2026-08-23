@@ -9,7 +9,8 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; connect-src http://127.0.0.1:*; script-src 'self' https://cdn.plaid.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-src https://*.plaid.com https://*.plaidusercontent.com; form-action 'none'; object-src 'none'; base-uri 'none'"
+      "capabilities": ["main-window", "safe-error-window"],
+      "csp": "default-src 'none'; script-src 'self' https://cdn.plaid.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.plaid.com; font-src 'self'; frame-src https://cdn.plaid.com; connect-src https://sandbox.plaid.com https://production.plaid.com; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; worker-src 'none'; media-src 'none'"
     }
   },
   "bundle": {

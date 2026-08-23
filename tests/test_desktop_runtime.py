@@ -105,7 +105,7 @@ def test_writer_lock_conflict_clean_release_and_stale_recovery(tmp_path: Path) -
 
 @contextmanager
 def running_sidecar(
-    root: Path, session: str = "synthetic-session-value"
+    root: Path, session: str = "a" * 64
 ) -> Iterator[tuple[subprocess.Popen[str], int]]:
     environment = {
         "PATH": os.environ.get("PATH", ""),
@@ -113,9 +113,12 @@ def running_sidecar(
         "PAYCHECK_MAP_DESKTOP_MODE": "true",
         "PAYCHECK_MAP_DESKTOP_DATA_MODE": "disposable-synthetic",
         "PAYCHECK_MAP_LOCAL_DIR": str(root),
-        "PAYCHECK_MAP_DESKTOP_SESSION": session,
+        "PAYCHECK_MAP_DESKTOP_LOG_ROOT": str(root.parent / "logs"),
         "PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT": str(Path(__file__).resolve().parents[1]),
     }
+    bootstrap_read, bootstrap_write = os.pipe()
+    environment["PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"] = str(bootstrap_read)
+
     process = subprocess.Popen(
         [sys.executable, "-m", "paycheck_map.desktop_sidecar"],
         stdin=subprocess.PIPE,
@@ -123,7 +126,18 @@ def running_sidecar(
         stderr=subprocess.PIPE,
         text=True,
         env=environment,
+        pass_fds=(bootstrap_read,),
     )
+    os.close(bootstrap_read)
+    os.write(
+        bootstrap_write,
+        json.dumps(
+            {"contract": "money-map-desktop-bootstrap-v1", "session": session},
+            separators=(",", ":"),
+        ).encode()
+        + b"\n",
+    )
+    os.close(bootstrap_write)
     assert process.stdout is not None
     deadline = time.monotonic() + 15
     port: int | None = None
@@ -156,7 +170,7 @@ def running_sidecar(
     finally:
         if process.poll() is None:
             assert process.stdin is not None
-            process.stdin.write("shutdown\n")
+            process.stdin.write('{"command":"shutdown","contract":"money-map-control-v1"}\n')
             process.stdin.flush()
             process.wait(timeout=5)
 
@@ -169,11 +183,11 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
         base_url = f"http://127.0.0.1:{port}"
         unauthorized = httpx.get(f"{base_url}/api/desktop/health")
         assert unauthorized.status_code == 401
-        assert "synthetic-session-value" not in unauthorized.text
+        assert "a" * 64 not in unauthorized.text
         trusted = httpx.get(
             f"{base_url}/api/desktop/health",
             headers={
-                "X-Money-Map-Session": "synthetic-session-value",
+                "X-Money-Map-Session": "a" * 64,
                 "Origin": "http://tauri.localhost",
             },
         )
@@ -182,14 +196,14 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
         hostile = httpx.get(
             f"{base_url}/api/desktop/health",
             headers={
-                "X-Money-Map-Session": "synthetic-session-value",
+                "X-Money-Map-Session": "a" * 64,
                 "Origin": "https://untrusted.invalid",
             },
         )
         assert hostile.status_code == 403
         wrong_host = httpx.get(
             f"{base_url}/api/desktop/health",
-            headers={"Host": "localhost:43123", "X-Money-Map-Session": "synthetic-session-value"},
+            headers={"Host": "localhost:43123", "X-Money-Map-Session": "a" * 64},
         )
         assert wrong_host.status_code == 400
         contender_environment = {
@@ -198,18 +212,28 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
             "PAYCHECK_MAP_DESKTOP_MODE": "true",
             "PAYCHECK_MAP_DESKTOP_DATA_MODE": "disposable-synthetic",
             "PAYCHECK_MAP_LOCAL_DIR": str(root),
-            "PAYCHECK_MAP_DESKTOP_SESSION": "second-synthetic-session",
+            "PAYCHECK_MAP_DESKTOP_LOG_ROOT": str(root.parent / "logs"),
             "PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT": str(Path(__file__).resolve().parents[1]),
         }
+        bootstrap_read, bootstrap_write = os.pipe()
+        contender_environment["PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"] = str(bootstrap_read)
+
+        os.write(
+            bootstrap_write,
+            b'{"contract":"money-map-desktop-bootstrap-v1","session":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n',
+        )
+        os.close(bootstrap_write)
         contender = subprocess.run(
             [sys.executable, "-m", "paycheck_map.desktop_sidecar"],
-            input="shutdown\n",
+            input='{"command":"shutdown","contract":"money-map-control-v1"}\n',
             capture_output=True,
             text=True,
             env=contender_environment,
+            pass_fds=(bootstrap_read,),
             timeout=5,
             check=False,
         )
+        os.close(bootstrap_read)
         assert contender.returncode == 1
         assert contender.stdout.strip() == "MONEY_MAP_FAILED"
         assert contender.stderr == ""
@@ -231,20 +255,23 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
 def test_desktop_python_boundary_rejects_method_path_size_and_redacts(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_SESSION", "synthetic-session-value")
     monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_MODE", "true")
     monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_DATA_MODE", "disposable-synthetic")
     monkeypatch.setenv(
         "PAYCHECK_MAP_LOCAL_DIR",
         str(tmp_path / "money-map-runtime-auth" / "money-map-synthetic-data"),
     )
+    from paycheck_map.desktop_bootstrap import clear_bootstrap, install_bootstrap
+
+    clear_bootstrap()
+    install_bootstrap("a" * 64, 43123)
     import paycheck_map.desktop_app as module
 
     module = importlib.reload(module)
     transport = httpx.ASGITransport(app=module.desktop_app)
 
     async def exercise() -> None:
-        headers = {"X-Money-Map-Session": "synthetic-session-value"}
+        headers = {"X-Money-Map-Session": "a" * 64}
         async with httpx.AsyncClient(
             transport=transport, base_url="http://127.0.0.1:43123"
         ) as client:
@@ -253,11 +280,13 @@ def test_desktop_python_boundary_rejects_method_path_size_and_redacts(
             traversal = await client.get("/api/../private", headers=headers)
             assert traversal.status_code == 400
             oversized = await client.post(
-                "/api/plaid/configure", headers=headers, content=b"x" * 1_048_577
+                "/api/plaid/configure",
+                headers={**headers, "Content-Type": "application/json"},
+                content=b"x" * 1_048_577,
             )
             assert oversized.status_code == 413
             for response in (method, traversal, oversized):
-                assert "synthetic-session-value" not in response.text
+                assert "a" * 64 not in response.text
                 assert str(tmp_path) not in response.text
 
     import anyio

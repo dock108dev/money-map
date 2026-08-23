@@ -102,8 +102,9 @@ artifact; automated accessibility assertions do not replace manual inspection.
 
 ## Security gates
 
-- Generate at least 256 bits of per-launch session entropy. Keep the value out of URLs, WebView
-  storage, logs, crash reports, databases, artifacts, and process arguments; clear inherited
+- Generate at least 256 bits of per-launch session entropy. Deliver it through a bounded private
+  inherited pipe/socket, never an environment value. Keep it out of URLs, WebView/storage, files,
+  logs, diagnostics, crash reports, databases, artifacts, evidence and arguments; clear inherited
   credential-bearing environment variables before sidecar launch.
 - Reject requests without the session, non-loopback hosts, hostile origins, unsupported methods,
   traversal/newline paths, oversized bodies, and unauthenticated mutations. Responses containing
@@ -113,6 +114,10 @@ artifact; automated accessibility assertions do not replace manual inspection.
 - Write/read/delete a release-specific synthetic Keychain item and independently prove deletion.
   Never read production Plaid entries as a test. Scan logs and evidence for secrets and raw
   identifiers.
+- Verify explicit per-window Tauri capabilities, bundled-only top-level navigation, exact external
+  links, restrictive CSP, remote-frame denial, strict Apple-team bundle/sidecar identity, database
+  startup integrity, authenticated recovery metadata, crafted-import limits, and all six attack
+  campaigns described in `security-acceptance.md`.
 - Test forced sidecar death, readiness timeout, corrupt configuration, unavailable Keychain,
   unavailable/corrupt database, malformed import, and interrupted report generation. Errors must
   be safe, visible, recoverable, and leave the last accepted data intact.

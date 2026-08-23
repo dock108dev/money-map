@@ -1305,8 +1305,6 @@ export function ConnectionsView({
   message: string;
   onConfigure: (payload: {
     environment: "sandbox" | "production";
-    client_id: string;
-    secret: string;
   }) => void;
   onConnect: (
     target: "sofi" | "fidelity",
@@ -1321,15 +1319,6 @@ export function ConnectionsView({
   onAutoRefreshChange: (enabled: boolean) => void;
 }) {
   const [showOlderImports, setShowOlderImports] = useState(false);
-  const configure = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    onConfigure({
-      environment: "production",
-      client_id: "",
-      secret: String(form.get("secret") ?? ""),
-    });
-  };
   const liveReady = plaid.configuration.production.configured;
 
   return (
@@ -1424,7 +1413,8 @@ export function ConnectionsView({
         <section className="panel plaid-setup" id="plaid-live-setup">
           <div>
             <span className="eyebrow">Plaid setup</span>
-            <h2>Enter the production secret</h2>
+            <h2>Set up production access</h2>
+            <p>Your credentials are entered in a private macOS prompt, not this page.</p>
             <a
               className="secondary-button dashboard-link"
               href="https://dashboard.plaid.com/"
@@ -1434,21 +1424,13 @@ export function ConnectionsView({
               Plaid Dashboard
             </a>
           </div>
-          <form className="key-form" onSubmit={configure}>
-            <label>
-              Production secret
-              <input
-                id="plaid-production-secret"
-                name="secret"
-                type="password"
-                required
-                autoComplete="off"
-              />
-            </label>
-            <button className="primary-button" disabled={busy}>
-              {busy ? "Saving…" : "Save"}
-            </button>
-          </form>
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => onConfigure({ environment: "production" })}
+          >
+            {busy ? "Opening…" : "Enter credentials"}
+          </button>
         </section>
       )}
     </div>

@@ -27,6 +27,7 @@ class Settings(BaseSettings):
         if self.desktop_mode and self.desktop_data_mode in {
             "production-v1",
             "acceptance-synthetic-v1",
+            "keychain-acceptance-v1",
         }:
             if self.desktop_app_root is None:
                 raise RuntimeError("The trusted desktop application-data root is required")

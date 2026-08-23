@@ -129,6 +129,7 @@ describe("desktop data-home workflow", () => {
           phase: "restore_preview",
           ready: true,
           backup_id: backup.backup_id,
+          confirmation_token: "synthetic-restore-confirmation-token-0001",
           replacement_warning: "Restore replaces the current Money Map database.",
         });
       }

@@ -76,10 +76,27 @@ def configure_plaid(
     clean_secret = secret.strip()
     if len(clean_client) < 8 or len(clean_secret) < 8:
         raise ValueError("Plaid client ID and secret are required")
-    store.set(CONFIG_NAMESPACE, f"{environment}.client_id", clean_client)
-    store.set(CONFIG_NAMESPACE, f"{environment}.secret", clean_secret)
-    if store.get(CONFIG_NAMESPACE, "client_user_id") is None:
-        store.set(CONFIG_NAMESPACE, "client_user_id", str(uuid4()))
+    client_account = f"{environment}.client_id"
+    secret_account = f"{environment}.secret"
+    prior_client = store.get(CONFIG_NAMESPACE, client_account)
+    prior_secret = store.get(CONFIG_NAMESPACE, secret_account)
+    prior_user = store.get(CONFIG_NAMESPACE, "client_user_id")
+    try:
+        store.set(CONFIG_NAMESPACE, client_account, clean_client)
+        store.set(CONFIG_NAMESPACE, secret_account, clean_secret)
+        if prior_user is None:
+            store.set(CONFIG_NAMESPACE, "client_user_id", str(uuid4()))
+    except Exception:
+        for account, value in (
+            (client_account, prior_client),
+            (secret_account, prior_secret),
+            ("client_user_id", prior_user),
+        ):
+            if value is None:
+                store.delete(CONFIG_NAMESPACE, account)
+            else:
+                store.set(CONFIG_NAMESPACE, account, value)
+        raise
 
 
 def clear_plaid_configuration(environment: PlaidEnvironment, store: SecretStore = keychain) -> None:

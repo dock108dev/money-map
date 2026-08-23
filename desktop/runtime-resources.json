@@ -10,15 +10,15 @@
       "paycheck_map.api", "paycheck_map.app", "paycheck_map.balances",
       "paycheck_map.business_time", "paycheck_map.cash_flow_service",
       "paycheck_map.cash_months", "paycheck_map.cli", "paycheck_map.config",
-      "paycheck_map.data_home", "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_data_api", "paycheck_map.desktop_lock", "paycheck_map.desktop_sidecar",
+      "paycheck_map.data_home", "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_bootstrap", "paycheck_map.desktop_data_api", "paycheck_map.desktop_lock", "paycheck_map.desktop_sidecar",
       "paycheck_map.forecasting", "paycheck_map.goal_gap_service",
       "paycheck_map.goal_observation", "paycheck_map.goal_operations",
-      "paycheck_map.goal_service", "paycheck_map.ingestion", "paycheck_map.keychain",
+      "paycheck_map.goal_service", "paycheck_map.ingestion", "paycheck_map.import_security", "paycheck_map.keychain", "paycheck_map.native_secrets",
       "paycheck_map.life_plan", "paycheck_map.logical_manifest", "paycheck_map.models",
       "paycheck_map.money", "paycheck_map.payroll", "paycheck_map.plaid_client",
       "paycheck_map.plaid_service", "paycheck_map.reconciliation",
       "paycheck_map.recurring_outflow_service", "paycheck_map.refresh",
-      "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.services",
+      "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.safe_events", "paycheck_map.services",
       "paycheck_map.v21_contracts", "paycheck_map.v2_contracts"
     ],
     "dependencies": [
@@ -41,13 +41,17 @@
   },
   "approvedResources": ["config/contribution_limits.json"],
   "reportAndPrint": ["paycheck_map.reporting", "compiled React print CSS", "native WKWebView print panel"],
-  "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore",
-  "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_SESSION"],
+  "keychain": "paycheck_map.keychain.MacOSKeychainSecretStore using com.moneymap.desktop.secrets.v1",
+  "runtimeConfiguration": ["PAYCHECK_MAP_DESKTOP_MODE", "PAYCHECK_MAP_DESKTOP_DATA_MODE", "PAYCHECK_MAP_DESKTOP_APP_ROOT", "PAYCHECK_MAP_DESKTOP_CACHE_ROOT", "PAYCHECK_MAP_DESKTOP_LOG_ROOT", "PAYCHECK_MAP_LOCAL_DIR", "PAYCHECK_MAP_DESKTOP_BOOTSTRAP_FD"],
+  "sessionBootstrap": "money-map-desktop-bootstrap-v1 over private inherited descriptor 3; never argv or environment",
   "subprocesses": ["one supervised money-map-sidecar process group owned by the Tauri process"],
   "forbidden": [".local", "*.sqlite*", "statements", "reports", "backups", "credentials", "tokens", "source maps", "repository paths", "owner screenshots"],
   "desktop_experience": {
     "menus": ["application", "file", "view", "window"],
     "reports": {"identity": "trailing-12-month", "root": "application-support/reports"},
-    "diagnostics": "money-map-sanitized-diagnostics-v1"
+    "diagnostics": "money-map-sanitized-diagnostics-v1",
+    "safeEvents": "money-map-safe-events-v1; 256 KiB x 3; 0600",
+    "capabilities": ["main-window", "safe-error-window"],
+    "navigation": "bundled tauri://localhost top-level only; exact external HTTPS allowlist"
   }
 }

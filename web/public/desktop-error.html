@@ -3,14 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Money Map startup error</title>
-    <style>
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f3f5f1; color: #17382d; font: 16px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; }
-      main { width: min(520px, calc(100% - 48px)); background: white; border: 1px solid #d8ded9; border-radius: 18px; padding: 32px; box-shadow: 0 18px 50px #17382d18; }
-      h1 { margin-top: 0; font-size: 26px; }
-      p { color: #4f625b; }
-      button { border: 0; border-radius: 999px; padding: 11px 18px; background: #17382d; color: white; font: inherit; font-weight: 700; cursor: pointer; }
-    </style>
+    <title>Money Map recovery</title>
+    <link rel="stylesheet" href="/desktop-error.css" />
+    <script type="module" src="/desktop-error.js"></script>
   </head>
-  <body><main role="alert"><h1>Money Map couldn’t start safely.</h1><p>Your financial data was not opened, repaired, or changed. Retry deliberately; Money Map will not loop on its own.</p><button id="retry" type="button">Restart local service</button></main><script>document.getElementById("retry").addEventListener("click", async () => { const button = document.getElementById("retry"); button.disabled = true; button.textContent = "Restarting…"; try { await window.__MONEY_MAP_DESKTOP__.restart(); window.location.href = "index.html"; } catch (_) { button.disabled = false; button.textContent = "Try restart again"; } });</script></body>
+  <body>
+    <main>
+      <span>Money Map</span>
+      <h1>Your financial data stayed closed.</h1>
+      <p>The private local service did not pass its startup checks. No data is shown in this window.</p>
+      <div>
+        <button id="retry" type="button">Try again</button>
+        <button id="about" type="button">About Money Map</button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+  </body>
 </html>

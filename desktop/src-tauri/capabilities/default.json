@@ -1,7 +1,22 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "No frontend shell or filesystem authority is granted to the Money Map runtime.",
+  "description": "Reviewed bundled Money Map UI commands; no shell, filesystem, HTTP, opener, or window creation authority.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "platforms": ["macOS"],
+  "permissions": [
+    "allow-desktop-fetch",
+    "allow-desktop-reload",
+    "allow-desktop-print",
+    "allow-desktop-runtime-status",
+    "allow-desktop-restart",
+    "allow-desktop-about",
+    "allow-desktop-select-import",
+    "allow-desktop-reveal-backup",
+    "allow-desktop-report-action",
+    "allow-desktop-diagnostics-preview",
+    "allow-desktop-export-diagnostics",
+    "allow-desktop-set-operations-enabled",
+    "allow-desktop-open-external"
+  ]
 }

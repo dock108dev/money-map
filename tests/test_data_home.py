@@ -268,7 +268,7 @@ def test_backup_and_restore_verify_manifest_and_retain_pre_restore_safety_copy(
     assert changed.manifest_digest != active_before.manifest_digest
 
     preview = manager.preview_restore(first_backup["backup_id"])
-    result = manager.confirm_restore(first_backup["backup_id"])
+    result = manager.confirm_restore(first_backup["backup_id"], preview["confirmation_token"])
 
     assert preview["replacement_warning"] == "Restore replaces the current Money Map database."
     assert result["phase"] == Phase.RESTORE_COMPLETE
@@ -424,9 +424,9 @@ def test_restore_interruption_preserves_current_and_selected_backup(tmp_path: Pa
     backup_path = setup.backup_path(backup["backup_id"])
     backup_before = _identity(backup_path)
     manager = _manager(tmp_path, failure_at="during_restore")
-    manager.preview_restore(backup["backup_id"])
+    preview = manager.preview_restore(backup["backup_id"])
 
-    result = manager.confirm_restore(backup["backup_id"])
+    result = manager.confirm_restore(backup["backup_id"], preview["confirmation_token"])
 
     assert result["phase"] == Phase.RECOVERABLE_FAILURE
     assert _identity(manager.paths.database) == active_before

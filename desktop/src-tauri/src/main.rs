@@ -12,9 +12,10 @@ use std::{fs, os::unix::fs::PermissionsExt};
 
 use data_home::DataHomePaths;
 use metadata::{about_info_for_mode, native_about_metadata, AboutInfo};
-use proxy::{forward, DesktopRequest, DesktopResponse};
+use proxy::{forward, validate_frontend_request, DesktopRequest, DesktopResponse};
 use runtime::{RuntimeController, RuntimeStatus};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::webview::NewWindowResponse;
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const OPERATION_MENU_IDS: &[&str] = &[
@@ -65,9 +66,19 @@ fn initialization_script() -> &'static str {
             reportAction: (reportId, action) => invoke("desktop_report_action", { reportId, action }),
             diagnosticsPreview: () => invoke("desktop_diagnostics_preview"),
             exportDiagnostics: () => invoke("desktop_export_diagnostics"),
+            openExternal: (url) => invoke("desktop_open_external", { url }),
             setOperationsEnabled: (enabled) => invoke("desktop_set_operations_enabled", { enabled })
           }), configurable: false });
           window.print = () => { void invoke("desktop_print"); };
+          document.addEventListener("click", (event) => {
+            const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
+            if (!target) return;
+            const href = target.getAttribute("href") || "";
+            if (!href.startsWith("https://")) return;
+            event.preventDefault();
+            event.stopPropagation();
+            void invoke("desktop_open_external", { url: href });
+          }, true);
           window.fetch = async (input, init = {}) => {
             const url = typeof input === "string" ? input : input.url;
             if (!url.startsWith("/api/")) return nativeFetch(input, init);
@@ -86,6 +97,23 @@ fn initialization_script() -> &'static str {
             return new Response(result.body, { status: result.status, headers });
           };
         })();"#
+}
+
+fn safe_error_initialization_script() -> &'static str {
+    r#"Object.defineProperty(window, "__MONEY_MAP_SAFE_ERROR__", { value: Object.freeze({
+          restart: () => window.__TAURI_INTERNALS__.invoke("desktop_restart"),
+          about: () => window.__TAURI_INTERNALS__.invoke("desktop_about")
+        }), configurable: false });"#
+}
+
+fn show_safe_error(app: &tauri::AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+    }
+    if let Some(error) = app.get_webview_window("safe-error") {
+        let _ = error.show();
+        let _ = error.set_focus();
+    }
 }
 
 #[tauri::command]
@@ -127,17 +155,62 @@ fn fetch_json(controller: &RuntimeController, path: String) -> Result<serde_json
 
 #[tauri::command]
 async fn desktop_restart(
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<RuntimeController>>,
 ) -> Result<RuntimeStatus, String> {
     let controller = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || controller.restart())
+    let status = tauri::async_runtime::spawn_blocking(move || controller.restart())
         .await
-        .map_err(|_| "Money Map could not restart the local service.".to_string())?
+        .map_err(|_| "Money Map could not restart the local service.".to_string())??;
+    if window.label() == "safe-error" {
+        let _ = window.hide();
+        if let Some(main) = window.app_handle().get_webview_window("main") {
+            let _ = main.show();
+            let _ = main.set_focus();
+        }
+    }
+    Ok(status)
 }
 
 #[tauri::command]
 fn desktop_about(state: tauri::State<'_, Arc<RuntimeController>>) -> AboutInfo {
     about_info_for_mode(state.data_mode())
+}
+
+const APPROVED_EXTERNAL_LINKS: &[&str] = &[
+    "https://dashboard.plaid.com/",
+    "https://www.irs.gov/retirement-plans/retirement-plans-faqs-regarding-loans",
+];
+
+fn approved_external_link(value: &str) -> bool {
+    APPROVED_EXTERNAL_LINKS.contains(&value)
+}
+
+fn internal_navigation_allowed(url: &tauri::Url) -> bool {
+    let approved_origin = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
+        || (url.scheme() == "http" && url.host_str() == Some("tauri.localhost"));
+    approved_origin
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && matches!(url.path(), "" | "/" | "/index.html")
+}
+
+#[tauri::command]
+fn desktop_open_external(url: String) -> Result<(), String> {
+    if url.len() > 256 || !url.is_ascii() || !approved_external_link(&url) {
+        return Err("The external link was rejected.".to_string());
+    }
+    let status = Command::new("/usr/bin/open")
+        .arg("--")
+        .arg(url)
+        .status()
+        .map_err(|_| "The approved external link could not open.".to_string())?;
+    if !status.success() {
+        return Err("The approved external link could not open.".to_string());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -410,6 +483,7 @@ async fn desktop_fetch(
 ) -> Result<DesktopResponse, String> {
     let controller = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
+        validate_frontend_request(&request)?;
         let (port, session) = controller.target()?;
         forward(port, &session, request)
     })
@@ -578,7 +652,8 @@ fn main() {
             desktop_report_action,
             desktop_diagnostics_preview,
             desktop_export_diagnostics,
-            desktop_set_operations_enabled
+            desktop_set_operations_enabled,
+            desktop_open_external
         ])
         .setup(|app| {
             let paths = DataHomePaths::resolve(app.handle()).map_err(std::io::Error::other)?;
@@ -594,7 +669,23 @@ fn main() {
                     .min_inner_size(900.0, 640.0)
                     .zoom_hotkeys_enabled(false)
                     .initialization_script(initialization_script())
+                    .on_navigation(internal_navigation_allowed)
+                    .on_new_window(|_, _| NewWindowResponse::Deny)
                     .build()?;
+            WebviewWindowBuilder::new(
+                app,
+                "safe-error",
+                WebviewUrl::App("desktop-error.html".into()),
+            )
+            .title("Money Map recovery")
+            .inner_size(640.0, 440.0)
+            .min_inner_size(560.0, 400.0)
+            .visible(false)
+            .zoom_hotkeys_enabled(false)
+            .initialization_script(safe_error_initialization_script())
+            .on_navigation(internal_navigation_allowed)
+            .on_new_window(|_, _| NewWindowResponse::Deny)
+            .build()?;
             let close_window = window.clone();
             window.on_window_event(move |event| {
                 if let WindowEvent::CloseRequested { api, .. } = event {
@@ -602,8 +693,11 @@ fn main() {
                     let _ = close_window.hide();
                 }
             });
+            let app_handle = app.handle().clone();
             std::thread::spawn(move || {
-                let _ = controller.start_initial();
+                if controller.start_initial().is_err() {
+                    show_safe_error(&app_handle);
+                }
             });
             Ok(())
         })
@@ -650,7 +744,7 @@ fn main() {
             if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
                 let status = controller.revalidate();
                 if status.state == lifecycle::LifecycleState::Failed {
-                    dispatch_menu_action(handle, "runtime-failed");
+                    show_safe_error(handle);
                 }
             }
         }
@@ -660,7 +754,9 @@ fn main() {
 
 #[cfg(test)]
 mod menu_tests {
-    use super::{MENU_ACTION_IDS, OPERATION_MENU_IDS};
+    use super::{
+        approved_external_link, internal_navigation_allowed, MENU_ACTION_IDS, OPERATION_MENU_IDS,
+    };
 
     #[test]
     fn native_menu_dispatch_covers_principal_operations_and_navigation() {
@@ -683,5 +779,36 @@ mod menu_tests {
         assert!(OPERATION_MENU_IDS
             .iter()
             .all(|id| MENU_ACTION_IDS.contains(id)));
+    }
+
+    #[test]
+    fn navigation_and_external_links_are_exact_allowlists() {
+        for allowed in [
+            "tauri://localhost",
+            "tauri://localhost/index.html#view=goals",
+        ] {
+            assert!(
+                internal_navigation_allowed(&allowed.parse().unwrap()),
+                "{allowed}"
+            );
+        }
+        for rejected in [
+            "https://example.invalid/",
+            "file:///private/tmp/private",
+            "data:text/html,attack",
+            "javascript:alert(1)",
+            "tauri://localhost/index.html?token=secret",
+            "tauri://evil.invalid/index.html",
+        ] {
+            assert!(
+                !internal_navigation_allowed(&rejected.parse().unwrap()),
+                "{rejected}"
+            );
+        }
+        assert!(approved_external_link("https://dashboard.plaid.com/"));
+        assert!(!approved_external_link(
+            "https://dashboard.plaid.com.evil.invalid/"
+        ));
+        assert!(!approved_external_link("http://dashboard.plaid.com/"));
     }
 }

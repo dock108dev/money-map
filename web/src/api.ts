@@ -233,8 +233,6 @@ export function createReport() {
 
 export function configurePlaid(payload: {
   environment: "sandbox" | "production";
-  client_id: string;
-  secret: string;
 }) {
   return request<PlaidStatus["configuration"]>("/api/plaid/configuration", {
     method: "POST",

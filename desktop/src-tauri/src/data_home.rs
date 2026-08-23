@@ -15,7 +15,12 @@ pub struct DataHomePaths {
 impl DataHomePaths {
     pub fn resolve(app: &tauri::AppHandle) -> Result<Self, String> {
         if let Some(fake_home) = option_env!("MONEY_MAP_ACCEPTANCE_FAKE_HOME") {
-            return Self::from_home(Path::new(fake_home), "acceptance-synthetic-v1");
+            let mode = if option_env!("MONEY_MAP_KEYCHAIN_ACCEPTANCE") == Some("1") {
+                "keychain-acceptance-v1"
+            } else {
+                "acceptance-synthetic-v1"
+            };
+            return Self::from_home(Path::new(fake_home), mode);
         }
         let home = app
             .path()
@@ -25,11 +30,16 @@ impl DataHomePaths {
     }
 
     pub fn from_home(home: &Path, mode: &'static str) -> Result<Self, String> {
-        if !home.is_absolute() || !matches!(mode, "production-v1" | "acceptance-synthetic-v1") {
+        if !home.is_absolute()
+            || !matches!(
+                mode,
+                "production-v1" | "acceptance-synthetic-v1" | "keychain-acceptance-v1"
+            )
+        {
             return Err("The macOS data-home boundary was rejected.".to_string());
         }
         let home = lexical_normalize(home)?;
-        if mode == "acceptance-synthetic-v1"
+        if matches!(mode, "acceptance-synthetic-v1" | "keychain-acceptance-v1")
             && !(home.starts_with("/tmp") || home.starts_with("/private/tmp"))
         {
             return Err("The synthetic acceptance home must be disposable.".to_string());

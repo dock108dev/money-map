@@ -12,6 +12,7 @@ from .adapters.canonical_ledger import CanonicalLedgerAdapter
 from .adapters.canonical_payroll import CanonicalPayrollAdapter
 from .adapters.payroll_oracle import OraclePayslipSummaryAdapter
 from .config import Settings, settings
+from .import_security import SUPPORTED_EXTENSIONS, ImportSecurityError, validate_import
 from .models import (
     Account,
     AccountTransaction,
@@ -45,11 +46,10 @@ def file_hash(path: Path) -> str:
 
 
 def _private_files(runtime_settings: Settings) -> list[Path]:
-    extensions = {".pdf", ".json", ".csv", ".xlsx"}
     return sorted(
         path
         for path in runtime_settings.inbox_dir.rglob("*")
-        if path.is_file() and path.suffix.lower() in extensions
+        if path.suffix.lower() in SUPPORTED_EXTENSIONS
     )
 
 
@@ -271,12 +271,15 @@ def import_private_inbox(session: Session, runtime_settings: Settings = settings
     canonical_payroll_adapter = CanonicalPayrollAdapter()
     ledger_adapter = CanonicalLedgerAdapter()
     for path in paths:
-        sha256 = file_hash(path)
-        existing = session.scalar(select(ImportArtifact.id).where(ImportArtifact.sha256 == sha256))
-        if existing is not None:
-            duplicates += 1
-            continue
         try:
+            validate_import(path, approved_root=runtime_settings.inbox_dir)
+            sha256 = file_hash(path)
+            existing = session.scalar(
+                select(ImportArtifact.id).where(ImportArtifact.sha256 == sha256)
+            )
+            if existing is not None:
+                duplicates += 1
+                continue
             with session.begin_nested():
                 if path.suffix.lower() == ".pdf":
                     parsed_payroll = payroll_adapter.parse(path)
@@ -321,8 +324,13 @@ def import_private_inbox(session: Session, runtime_settings: Settings = settings
                     raise UnsupportedLayoutError("No adapter supports this file")
                 session.flush()
             imported += 1
-        except (ValueError, OSError) as exc:
-            errors.append({"filename": path.name, "message": str(exc)})
+        except (ImportSecurityError, ValueError, OSError):
+            errors.append(
+                {
+                    "filename": "rejected import",
+                    "message": "This private import was rejected safely.",
+                }
+            )
 
     batch.imported_count = imported
     batch.duplicate_count = duplicates
