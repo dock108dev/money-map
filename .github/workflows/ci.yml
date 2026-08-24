@@ -153,6 +153,24 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Build locked frontend assets
+        run: |
+          pnpm --dir ../../web install --frozen-lockfile
+          pnpm --dir ../../web build
+
       - name: Create non-release sidecar fixture
         run: |
           install -d binaries
