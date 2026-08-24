@@ -52,7 +52,9 @@ cargo test --locked
 ```
 
 `rust-toolchain.toml` pins the local and CI toolchain. These checks compile and test native code but
-do not create, sign, install, or launch a release application.
+do not create, sign, install, or launch a release application. On a clean hosted runner, CI creates
+an empty executable sidecar fixture solely to satisfy Tauri's compile-time external-binary manifest;
+native unit tests do not treat that fixture as a built or qualified sidecar.
 
 ## Continuous integration
 

@@ -67,8 +67,9 @@ jobs:
 
       - name: Install locked dependencies
         run: |
-          uv sync --all-extras --locked
           pnpm --dir web install --frozen-lockfile
+          pnpm --dir web build
+          uv sync --all-extras --locked
 
       - name: Run complete source gate
         run: uv run paycheck-map verify
@@ -128,11 +129,9 @@ jobs:
 
       - name: Install locked dependencies
         run: |
-          uv sync --python "$PYTHON_VERSION" --all-extras --locked
           pnpm --dir web install --frozen-lockfile
-
-      - name: Build frontend test fixture
-        run: pnpm --dir web build
+          pnpm --dir web build
+          uv sync --python "$PYTHON_VERSION" --all-extras --locked
 
       - name: Run backend tests
         run: uv run --python "$PYTHON_VERSION" pytest
@@ -153,6 +152,11 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --check
+
+      - name: Create non-release sidecar fixture
+        run: |
+          install -d binaries
+          install -m 755 /dev/null "binaries/money-map-sidecar-$(rustc --print host-tuple)"
 
       - name: Lint native targets
         run: cargo clippy --locked --all-targets -- -D warnings
