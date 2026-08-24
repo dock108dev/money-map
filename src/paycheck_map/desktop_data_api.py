@@ -82,113 +82,135 @@ def prepare_desktop_data_home() -> dict[str, Any]:
     return data_home_manager().prepare()
 
 
-def _call[ResultT](action: Callable[..., ResultT], *args: Any, **kwargs: Any) -> ResultT:
+def _call[ResultT](action: Callable[[], ResultT]) -> ResultT:
     try:
-        return action(*args, **kwargs)
+        return action()
     except DataHomeError as error:
         status = 409 if error.recoverable else 422
         raise HTTPException(
             status_code=status,
             detail={"code": error.code, "message": str(error)},
         ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "desktop_data_failure",
+                "message": "The desktop data operation could not be completed.",
+            },
+        ) from None
+
+
+def _call_after_dispose[ResultT](action: Callable[[], ResultT]) -> ResultT:
+    def operation() -> ResultT:
+        engine.dispose()
+        return action()
+
+    return _call(operation)
 
 
 @router.get("/status")
 def status() -> dict[str, Any]:
-    return _call(data_home_manager().status)
+    return _call(lambda: data_home_manager().status())
 
 
 @router.post("/fresh")
 def fresh_setup() -> dict[str, Any]:
-    return _call(data_home_manager().fresh_setup)
+    return _call(lambda: data_home_manager().fresh_setup())
 
 
 @router.post("/candidate")
 def candidate(payload: CandidateSelection) -> dict[str, Any]:
-    return _call(cutover_readiness_manager().inspect, Path(payload.selected_path))
+    return _call(lambda: cutover_readiness_manager().inspect(Path(payload.selected_path)))
 
 
 @router.post("/cutover/rehearsal")
 def begin_cutover_rehearsal() -> dict[str, Any]:
-    return _call(cutover_readiness_manager().rehearse)
+    return _call(lambda: cutover_readiness_manager().rehearse())
 
 
 @router.post("/cutover/prepare")
 def prepare_cutover() -> dict[str, Any]:
-    return _call(cutover_readiness_manager().prepare_current_confirmation)
+    return _call(lambda: cutover_readiness_manager().prepare_current_confirmation())
 
 
 @router.post("/cutover/confirm")
 def confirm_cutover(payload: CutoverConfirmation) -> dict[str, Any]:
-    engine.dispose()
-    return _call(
-        cutover_readiness_manager().confirm_current,
-        payload.confirmation_token,
-        requested_action=payload.requested_action,
+    return _call_after_dispose(
+        lambda: cutover_readiness_manager().confirm_current(
+            payload.confirmation_token,
+            requested_action=payload.requested_action,
+        )
     )
 
 
 @router.post("/cutover/cancel")
 def cancel_cutover() -> dict[str, Any]:
-    return _call(cutover_readiness_manager().cancel)
+    return _call(lambda: cutover_readiness_manager().cancel())
 
 
 @router.post("/migration")
 def migrate(payload: MigrationConfirmation) -> dict[str, Any]:
-    engine.dispose()
-    return _call(data_home_manager().confirm_migration, payload.candidate_token)
+    return _call_after_dispose(
+        lambda: data_home_manager().confirm_migration(payload.candidate_token)
+    )
 
 
 @router.post("/backup")
 def create_backup() -> dict[str, Any]:
-    return _call(data_home_manager().create_backup)
+    return _call(lambda: data_home_manager().create_backup())
 
 
 @router.get("/backups")
 def backups() -> dict[str, Any]:
-    return {"backups": _call(data_home_manager().list_backups)}
+    return _call(lambda: {"backups": data_home_manager().list_backups()})
 
 
 @router.post("/restore-preview")
 def restore_preview(payload: BackupSelection) -> dict[str, Any]:
-    return _call(data_home_manager().preview_restore, payload.backup_id)
+    return _call(lambda: data_home_manager().preview_restore(payload.backup_id))
 
 
 @router.post("/restore")
 def restore(payload: RestoreConfirmation) -> dict[str, Any]:
-    engine.dispose()
-    return _call(
-        data_home_manager().confirm_restore,
-        payload.backup_id,
-        payload.confirmation_token,
+    return _call_after_dispose(
+        lambda: data_home_manager().confirm_restore(
+            payload.backup_id,
+            payload.confirmation_token,
+        )
     )
 
 
 @router.post("/resume")
 def resume() -> dict[str, Any]:
-    engine.dispose()
-    return _call(data_home_manager().resume)
+    return _call_after_dispose(lambda: data_home_manager().resume())
 
 
 @router.post("/rollback")
 def rollback() -> dict[str, Any]:
-    engine.dispose()
-    return _call(data_home_manager().rollback)
+    return _call_after_dispose(lambda: data_home_manager().rollback())
 
 
 @router.get("/backups/{backup_id}/reveal")
 def reveal_backup(backup_id: str) -> dict[str, Any]:
-    path = _call(data_home_manager().backup_path, backup_id)
-    return {"backup_id": backup_id, "filename": path.name, "approved": True}
+    def operation() -> dict[str, Any]:
+        path = data_home_manager().backup_path(backup_id)
+        return {"backup_id": backup_id, "filename": path.name, "approved": True}
+
+    return _call(operation)
 
 
 @router.get("/diagnostics")
 def diagnostics() -> dict[str, Any]:
     """Return only support-safe, allowlisted backend health categories."""
 
+    return _call(_diagnostics)
+
+
+def _diagnostics() -> dict[str, Any]:
     manager = data_home_manager()
-    status = _call(manager.status)
-    backups = _call(manager.list_backups) if status.get("ready") else []
+    status = manager.status()
+    backups = manager.list_backups() if status.get("ready") else []
     integrity = False
     foreign_keys = False
     if status.get("ready"):

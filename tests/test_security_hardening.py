@@ -9,8 +9,10 @@ from pathlib import Path
 import anyio
 import httpx
 import pytest
+from fastapi import HTTPException
 from starlette.types import Message, Receive, Scope, Send
 
+from paycheck_map import desktop_data_api
 from paycheck_map.app import app
 from paycheck_map.data_home import DataHomeError, _write_metadata_digest
 from paycheck_map.desktop_bootstrap import clear_bootstrap, install_bootstrap
@@ -214,8 +216,10 @@ def test_tauri_capabilities_equal_the_registered_application_commands() -> None:
 def test_csp_is_explicit_and_contains_no_wildcards_or_unsafe_eval() -> None:
     config = json.loads((ROOT / "desktop/src-tauri/tauri.conf.json").read_text())
     csp = config["app"]["security"]["csp"]
-    directives = {part.strip().split(" ", 1)[0] for part in csp.split(";") if part.strip()}
-    assert directives == {
+    directives = {
+        tokens[0]: set(tokens[1:]) for part in csp.split(";") if (tokens := part.strip().split())
+    }
+    assert set(directives) == {
         "default-src",
         "script-src",
         "style-src",
@@ -230,12 +234,33 @@ def test_csp_is_explicit_and_contains_no_wildcards_or_unsafe_eval() -> None:
         "worker-src",
         "media-src",
     }
-    assert "*" not in csp
-    assert "unsafe-eval" not in csp
-    assert "http://127.0.0.1" not in csp
-    assert "https://cdn.plaid.com" in csp
-    assert "https://sandbox.plaid.com" in csp
-    assert "https://production.plaid.com" in csp
+    sources = set().union(*directives.values())
+    assert "*" not in sources
+    assert "'unsafe-eval'" not in sources
+    assert "http://127.0.0.1" not in sources
+    assert directives["frame-src"] == {"https://cdn.plaid.com"}
+    assert directives["connect-src"] == {
+        "https://sandbox.plaid.com",
+        "https://production.plaid.com",
+    }
+
+
+def test_desktop_data_api_sanitizes_unexpected_exceptions() -> None:
+    private_detail = "/Users/owner/private/money-map.sqlite3"
+
+    def fail() -> dict[str, object]:
+        raise RuntimeError(private_detail)
+
+    with pytest.raises(HTTPException) as caught:
+        desktop_data_api._call(fail)
+
+    assert caught.value.status_code == 500
+    detail = json.loads(json.dumps(caught.value.detail))
+    assert detail == {
+        "code": "desktop_data_failure",
+        "message": "The desktop data operation could not be completed.",
+    }
+    assert private_detail not in json.dumps(detail)
 
 
 def test_private_bootstrap_is_bounded_single_use_and_not_environment_secret(
