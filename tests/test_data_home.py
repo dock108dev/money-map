@@ -245,6 +245,31 @@ def test_completed_migration_accepts_legitimate_post_activation_writes(tmp_path:
     assert status["ready"] is True
 
 
+def test_status_does_not_expose_database_verification_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = _manager(tmp_path)
+    manager.paths.ensure_directories()
+    manager.paths.database.write_bytes(b"synthetic invalid database")
+    private_detail = "/Users/owner/private/money-map.sqlite3"
+
+    def fail_verification(*_args: object, **_kwargs: object) -> None:
+        raise DataHomeError("private_failure_code", private_detail, recoverable=True)
+
+    monkeypatch.setattr("paycheck_map.data_home.verify_database", fail_verification)
+
+    status = manager.status()
+
+    assert status == {
+        "phase": Phase.RECOVERABLE_FAILURE,
+        "ready": False,
+        "failure_code": "database_verification_failed",
+        "recoverable": False,
+    }
+    assert private_detail not in json.dumps(status)
+    assert "private_failure_code" not in json.dumps(status)
+
+
 def test_backup_and_restore_verify_manifest_and_retain_pre_restore_safety_copy(
     tmp_path: Path,
 ) -> None:

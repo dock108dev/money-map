@@ -129,7 +129,7 @@ describe("isolated Life Lab", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit experiment" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByText("Route formulas and time convention"));
     fireEvent.change(screen.getByLabelText("Mission"), { target: { value: "freedom" } });
-    expect(screen.getByText(/01 · Earn it linearly/)).toBeInTheDocument();
+    expect(await screen.findByText(/01 · Earn it linearly/)).toBeInTheDocument();
     expect(screen.getByText(/02 · Compound sprint/)).toBeInTheDocument();
     expect(screen.getByText(/03 · Build it and sell it/)).toBeInTheDocument();
     expect(screen.getByText(/04 · 401\(k\) fuel/)).toBeInTheDocument();

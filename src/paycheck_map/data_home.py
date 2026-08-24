@@ -299,14 +299,14 @@ class DataHomeManager:
             if journal.get("completed"):
                 try:
                     verify_database(self.paths.database, expected_revision=SCHEMA_HEAD)
-                except DataHomeError as error:
-                    return self._failure(error)
+                except DataHomeError:
+                    return self._failure()
             return self._public_journal(journal)
         if self.paths.database.exists():
             try:
                 verification = verify_database(self.paths.database)
-            except DataHomeError as error:
-                return self._failure(error)
+            except DataHomeError:
+                return self._failure()
             return {
                 "phase": Phase.ALREADY_MIGRATED,
                 "ready": verification.revision == SCHEMA_HEAD,
@@ -829,13 +829,12 @@ class DataHomeManager:
         self._write_journal(journal)
         return self._public_journal(journal)
 
-    def _failure(self, error: DataHomeError) -> dict[str, Any]:
+    def _failure(self) -> dict[str, Any]:
         return {
             "phase": Phase.RECOVERABLE_FAILURE,
             "ready": False,
-            "failure_code": error.code,
-            "recoverable": error.recoverable,
-            "message": str(error),
+            "failure_code": "database_verification_failed",
+            "recoverable": False,
         }
 
     def _read_journal(self) -> dict[str, Any] | None:
