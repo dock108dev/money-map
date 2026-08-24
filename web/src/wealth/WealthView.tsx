@@ -1,26 +1,8 @@
 import { useState } from "react";
 
+import { currencyExact, shortDate, signedCurrencyExact } from "../format";
 import type { WealthDashboard } from "../types";
 import "./wealth.css";
-
-function currencyExact(value: string | null | undefined) {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value));
-}
-
-function signedCurrencyExact(value: string | null | undefined) {
-  if (value == null) return "—";
-  return `${Number(value) > 0 ? "+" : ""}${currencyExact(value)}`;
-}
-
-function shortDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(value));
-}
 
 function roleLabel(role: string) {
   return role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());

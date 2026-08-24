@@ -16,6 +16,8 @@ ALLOWED_CODES = frozenset(
         "MM-DESKTOP-FAIL",
         "MM-DATA-INTEGRITY-FAIL",
         "MM-IMPORT-REJECTED",
+        "MM-GOAL-CURRENTNESS-FAIL",
+        "MM-GOAL-CHECKIN-FAIL",
     }
 )
 MAX_LOG_BYTES = 256 * 1024
@@ -32,6 +34,7 @@ class SafeEventLog:
             "lifecycle",
             "data_integrity",
             "import",
+            "goal_observation",
         }:
             raise ValueError("Unsafe event classification")
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)

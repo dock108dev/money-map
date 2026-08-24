@@ -277,6 +277,42 @@ describe("application states", () => {
     expect(screen.getByRole("button", { name: "Roll back" })).toBeEnabled();
   });
 
+  it("fails closed when private-data readiness is unavailable and retries explicitly", async () => {
+    installReadyDesktop();
+    const base = workingFetch();
+    let statusAttempts = 0;
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/desktop/data-home/status") {
+        statusAttempts += 1;
+        if (statusAttempts === 1) {
+          return new Response(
+            JSON.stringify({
+              detail: {
+                code: "journal_invalid",
+                message: "Recovery information could not be verified.",
+              },
+            }),
+            { status: 422, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return json({ phase: "already_migrated", ready: true });
+      }
+      return base(input, init);
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Money Map paused safely." })).toBeVisible();
+    expect(screen.getByText("Recovery information could not be verified.")).toBeVisible();
+    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
+      "/api/desktop/data-home/status",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Cash Flow" })).toBeVisible();
+  });
+
   it("blocks stale controls after desktop service failure and restores the current route after one deliberate restart", async () => {
     window.location.hash = "#view=goals";
     let ready = false;
@@ -291,7 +327,7 @@ describe("application states", () => {
       configurable: true,
       value: { mode: true, reload: vi.fn(), print: vi.fn(), runtimeStatus, restart, about: vi.fn() },
     });
-    const fetch = workingFetch();
+    const fetch = withReadyDataHome(workingFetch());
     vi.stubGlobal("fetch", fetch);
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Money Map paused safely." })).toBeInTheDocument();

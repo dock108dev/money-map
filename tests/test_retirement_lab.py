@@ -517,7 +517,7 @@ def test_retirement_and_lab_api_reads_and_pure_commands_perform_no_writes(
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://test.local",
+                base_url="http://127.0.0.1:8765",
             ) as client:
                 responses = [
                     await client.get("/api/v2/retirement/profile"),

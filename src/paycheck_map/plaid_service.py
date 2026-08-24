@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from .keychain import SecretStore, keychain
+from .keychain import SecretStore, SecretStoreError, keychain
 from .models import (
     Account,
     AccountTransaction,
@@ -86,16 +86,25 @@ def configure_plaid(
         store.set(CONFIG_NAMESPACE, secret_account, clean_secret)
         if prior_user is None:
             store.set(CONFIG_NAMESPACE, "client_user_id", str(uuid4()))
-    except Exception:
+    except Exception as setup_error:
+        rollback_failed = False
         for account, value in (
             (client_account, prior_client),
             (secret_account, prior_secret),
             ("client_user_id", prior_user),
         ):
-            if value is None:
-                store.delete(CONFIG_NAMESPACE, account)
-            else:
-                store.set(CONFIG_NAMESPACE, account, value)
+            try:
+                if value is None:
+                    store.delete(CONFIG_NAMESPACE, account)
+                else:
+                    store.set(CONFIG_NAMESPACE, account, value)
+            except Exception:
+                rollback_failed = True
+        if rollback_failed:
+            raise SecretStoreError(
+                "Plaid setup failed and the prior Keychain configuration could not be "
+                "fully restored."
+            ) from setup_error
         raise
 
 

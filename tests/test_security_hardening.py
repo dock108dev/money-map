@@ -7,19 +7,175 @@ import zipfile
 from pathlib import Path
 
 import anyio
+import httpx
 import pytest
-from starlette.types import Message, Scope
+from starlette.types import Message, Receive, Scope, Send
 
+from paycheck_map.app import app
 from paycheck_map.data_home import DataHomeError, _write_metadata_digest
 from paycheck_map.desktop_bootstrap import clear_bootstrap, install_bootstrap
 from paycheck_map.import_security import LIMITS, ImportSecurityError, validate_import
 from paycheck_map.keychain import MacOSKeychainSecretStore, SecretStoreError
+from paycheck_map.local_security import LocalSecurityMiddleware
 from paycheck_map.native_secrets import request_plaid_credentials
 from paycheck_map.safe_events import SafeEventLog
 
 from .test_data_home import _manager
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _local_security_request(
+    headers: list[tuple[bytes, bytes]],
+    *,
+    method: str = "GET",
+    path: str = "/api/test",
+    body: bytes = b"",
+) -> tuple[list[Message], bool]:
+    messages: list[Message] = []
+    reached_inner = False
+    received = False
+
+    async def receive() -> Message:
+        nonlocal received
+        if received:
+            return {"type": "http.disconnect"}
+        received = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    async def inner(_scope: Scope, _receive: Receive, inner_send: Send) -> None:
+        nonlocal reached_inner
+        reached_inner = True
+        await inner_send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"cache-control", b"public"), (b"content-type", b"application/json")],
+            }
+        )
+        await inner_send({"type": "http.response.body", "body": b"{}"})
+
+    scope: Scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "headers": headers,
+        "server": ("127.0.0.1", 8765),
+        "client": ("127.0.0.1", 50000),
+    }
+    middleware = LocalSecurityMiddleware(inner)
+
+    async def exercise() -> None:
+        await middleware(scope, receive, send)
+
+    anyio.run(exercise)
+    return messages, reached_inner
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected_status"),
+    [
+        ([(b"host", b"evil.invalid")], 400),
+        (
+            [
+                (b"host", b"127.0.0.1:8765"),
+                (b"host", b"127.0.0.1:8765"),
+            ],
+            400,
+        ),
+        (
+            [
+                (b"host", b"127.0.0.1:8765"),
+                (b"content-length", b"0"),
+                (b"transfer-encoding", b"chunked"),
+            ],
+            400,
+        ),
+        (
+            [
+                (b"host", b"127.0.0.1:8765"),
+                (b"origin", b"https://evil.invalid"),
+            ],
+            403,
+        ),
+        (
+            [
+                (b"host", b"127.0.0.1:8765"),
+                (b"sec-fetch-site", b"cross-site"),
+            ],
+            403,
+        ),
+    ],
+)
+def test_standalone_loopback_rejects_dns_rebinding_and_cross_site_requests(
+    headers: list[tuple[bytes, bytes]], expected_status: int
+) -> None:
+    messages, reached_inner = _local_security_request(headers)
+    assert messages[0]["status"] == expected_status
+    assert reached_inner is False
+
+
+def test_standalone_loopback_requires_json_for_mutations_and_bounds_bodies() -> None:
+    base = [
+        (b"host", b"127.0.0.1:8765"),
+        (b"origin", b"http://127.0.0.1:8765"),
+    ]
+    rejected, reached_inner = _local_security_request(
+        [*base, (b"content-type", b"application/x-www-form-urlencoded")],
+        method="POST",
+    )
+    assert rejected[0]["status"] == 415
+    assert reached_inner is False
+
+    oversized, reached_inner = _local_security_request(
+        [*base, (b"content-type", b"application/json")],
+        method="POST",
+        body=b"x" * 1_048_577,
+    )
+    assert oversized[0]["status"] == 413
+    assert reached_inner is False
+
+    accepted, reached_inner = _local_security_request(
+        [*base, (b"content-type", b"application/json")],
+        method="POST",
+        body=b"{}",
+    )
+    assert accepted[0]["status"] == 200
+    assert reached_inner is True
+
+
+def test_standalone_loopback_adds_non_cacheable_browser_security_headers() -> None:
+    messages, reached_inner = _local_security_request([(b"host", b"127.0.0.1:8765")])
+    assert reached_inner is True
+    headers = dict(messages[0]["headers"])
+    assert headers[b"cache-control"] == b"no-store"
+    assert headers[b"x-content-type-options"] == b"nosniff"
+    assert headers[b"x-frame-options"] == b"DENY"
+    assert headers[b"referrer-policy"] == b"no-referrer"
+    assert headers[b"x-robots-tag"] == b"noindex, nofollow, noarchive"
+    assert b"frame-ancestors 'none'" in headers[b"content-security-policy"]
+
+
+def test_runtime_does_not_publish_framework_api_documentation() -> None:
+    async def exercise() -> tuple[httpx.Response, httpx.Response]:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://127.0.0.1:8765"
+        ) as client:
+            return await client.get("/api/docs"), await client.get("/openapi.json")
+
+    docs, schema = anyio.run(exercise)
+    assert docs.status_code == 404
+    assert schema.status_code == 404
+    assert "openapi" not in docs.text.lower()
+    assert "openapi" not in schema.text.lower()
 
 
 def test_tauri_capabilities_equal_the_registered_application_commands() -> None:
@@ -379,6 +535,21 @@ def test_safe_event_log_has_fixed_schema_permissions_rotation_and_no_canary(tmp_
     assert path.stat().st_mode & 0o777 == 0o600
     with pytest.raises(ValueError, match="Unsafe"):
         log.emit("CANARY-PRIVATE-DESCRIPTION", "lifecycle")
+
+
+def test_fatal_sidecar_failure_records_only_a_safe_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from paycheck_map.desktop_sidecar import _record_fatal_failure
+
+    log_root = tmp_path / "logs"
+    monkeypatch.setenv("PAYCHECK_MAP_DESKTOP_LOG_ROOT", str(log_root))
+    _record_fatal_failure()
+
+    payload = json.loads((log_root / "desktop-events.jsonl").read_text())
+    assert payload["code"] == "MM-DESKTOP-FAIL"
+    assert payload["classification"] == "lifecycle"
+    assert set(payload) == {"contract", "code", "classification", "at"}
 
 
 def test_native_secret_prompt_uses_a_fixed_process_contract(

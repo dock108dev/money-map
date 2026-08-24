@@ -305,7 +305,7 @@ export default function DataHomePanel({
           <>
             <div className="data-home-status" role="status">
               <strong>Current database verified</strong>
-              <span>Schema {status.schema_revision ?? "0009_goal_persistence"}</span>
+              <span>Schema {status.schema_revision ?? "unavailable"}</span>
             </div>
             <div className="data-home-actions">
               <button className="primary-button" disabled={busy} onClick={() => void run(() => action("/api/desktop/data-home/backup"))}>

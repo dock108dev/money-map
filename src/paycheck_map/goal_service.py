@@ -43,7 +43,7 @@ from .models import (
 )
 from .money import ZERO, money
 from .reconciliation import investment_performance_available
-from .services import DEBT_ACCOUNT_TYPES, RESTRICTED_HOLDING_MARKERS, _investment_access
+from .service_common import DEBT_ACCOUNT_TYPES, RESTRICTED_HOLDING_MARKERS, _investment_access
 from .v2_contracts import (
     CONTRACT_VERSION,
     FINGERPRINT_VERSION,

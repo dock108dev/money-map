@@ -28,7 +28,7 @@ from .models import (
     utcnow,
 )
 from .money import ZERO, money
-from .services import _account_category, _investment_access
+from .service_common import _account_category, _investment_access
 
 ENGINE_VERSION = "life-lab-v0.3.0"
 ASSUMPTION_VERSION = "life-lab-drive-paths-v3"

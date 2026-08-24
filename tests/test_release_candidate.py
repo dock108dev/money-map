@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from paycheck_map.product_metadata import PUBLIC_VERSION, PYTHON_PACKAGE_VERSION
 from paycheck_map.release_candidate import (
     ACCEPTED_STATE,
     CAMPAIGNS,
@@ -12,8 +13,6 @@ from paycheck_map.release_candidate import (
     FINAL_FIELDS,
     OWNER_FIELDS,
     OWNER_VALIDATIONS,
-    PUBLIC_VERSION,
-    PYTHON_VERSION,
     ReleaseContractError,
     candidate_manifest,
     promotion_copy,
@@ -42,7 +41,10 @@ def manifest() -> dict[str, object]:
 def test_candidate_is_explicitly_not_accepted_and_every_result_is_blank() -> None:
     value = manifest()
     assert value["release_state"] == CANDIDATE_STATE
-    assert value["version_mapping"] == {"public": PUBLIC_VERSION, "python": PYTHON_VERSION}
+    assert value["version_mapping"] == {
+        "public": PUBLIC_VERSION,
+        "python": PYTHON_PACKAGE_VERSION,
+    }
     assert value["schema_revision"] == "0009_goal_persistence"
     assert value["campaigns"] == dict.fromkeys(CAMPAIGNS)
     assert value["owner_validations"] == dict.fromkeys(OWNER_VALIDATIONS)

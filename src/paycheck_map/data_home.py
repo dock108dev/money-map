@@ -26,13 +26,14 @@ from typing import Any
 from alembic.config import Config
 
 from alembic import command
+from paycheck_map.desktop_policy import uses_managed_data_home
 from paycheck_map.logical_manifest import (
     build_logical_manifest,
     logical_tables,
     manifest_digest,
 )
+from paycheck_map.product_metadata import SCHEMA_HEAD
 
-SCHEMA_HEAD = "0009_goal_persistence"
 PATH_CONTRACT = "money-map-macos-data-home-v1"
 JOURNAL_CONTRACT = "money-map-recovery-journal-v1"
 BACKUP_CONTRACT = "money-map-verified-backup-v1"
@@ -168,11 +169,7 @@ class DataHomePaths:
         return paths
 
     def validate(self) -> None:
-        if self.mode not in {
-            "production-v1",
-            "acceptance-synthetic-v1",
-            "keychain-acceptance-v1",
-        }:
+        if not uses_managed_data_home(self.mode):
             raise DataHomeError("path_mode", "The private data location was rejected.")
         roots = (self.application, self.cache, self.logs)
         if any(not path.is_absolute() for path in roots):

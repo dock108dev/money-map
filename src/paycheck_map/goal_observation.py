@@ -11,12 +11,14 @@ from typing import Any, Final, Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .goal_service import (
     GoalCheckInTrigger,
     ensure_goal_check_in_result,
     primary_goal,
 )
 from .models import ApplicationSetting, ImportBatch, PlaidConnection, PlaidSyncRun, utcnow
+from .safe_events import SafeEventLog
 from .v2_contracts import GoalObservationResult
 
 CURRENTNESS_KEY: Final = "goals.source_currentness_v1"
@@ -50,6 +52,18 @@ class _Eligibility:
     unavailable: bool = False
 
 
+def _emit_observation_failure(code: str) -> None:
+    """Record a private-safe production event without changing the financial operation result."""
+
+    if settings.desktop_log_root is None:
+        return
+    try:
+        SafeEventLog(settings.desktop_log_root).emit(code, "goal_observation")
+    except (OSError, RuntimeError):
+        # Observation telemetry is deliberately secondary to the already committed operation.
+        return
+
+
 def plaid_source_key(connection_id: int) -> str:
     return f"plaid_connection:{connection_id}"
 
@@ -77,6 +91,7 @@ def coordinate_goal_observation(
             session.commit()
     except Exception:
         session.rollback()
+        _emit_observation_failure("MM-GOAL-CURRENTNESS-FAIL")
         return GoalObservationResult(
             status="unavailable",
             trigger=public_trigger,
@@ -144,6 +159,7 @@ def coordinate_goal_observation(
         session.commit()
     except Exception:
         session.rollback()
+        _emit_observation_failure("MM-GOAL-CHECKIN-FAIL")
         return GoalObservationResult(
             status="unavailable",
             trigger=public_trigger,

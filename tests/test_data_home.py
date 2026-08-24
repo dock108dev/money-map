@@ -10,7 +10,6 @@ import pytest
 from alembic import command
 from paycheck_map.data_home import (
     PATH_CONTRACT,
-    SCHEMA_HEAD,
     DataHomeError,
     DataHomeManager,
     DataHomePaths,
@@ -20,6 +19,7 @@ from paycheck_map.data_home import (
     verify_database,
 )
 from paycheck_map.logical_manifest import build_logical_manifest, logical_tables
+from paycheck_map.product_metadata import SCHEMA_HEAD
 
 from .conftest import PROJECT_ROOT
 from .v2_migration_support import materialize_state, migration_config, synthetic_states

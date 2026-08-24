@@ -59,6 +59,9 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/paycheck_map/api.py" = ["B008"]
+"src/paycheck_map/api_life_plan.py" = ["B008"]
+"src/paycheck_map/api_plaid.py" = ["B008"]
+"src/paycheck_map/api_v2.py" = ["B008"]
 "src/paycheck_map/reporting.py" = ["E501"]
 
 [tool.mypy]

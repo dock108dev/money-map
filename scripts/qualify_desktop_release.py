@@ -22,15 +22,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from paycheck_map.product_metadata import PUBLIC_VERSION, SCHEMA_HEAD, desktop_artifact_name
 from paycheck_map.release_candidate import CANDIDATE_STATE, validate_candidate
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "3.0.0-beta.1"
-SCHEMA = "0009_goal_persistence"
+VERSION = PUBLIC_VERSION
+SCHEMA = SCHEMA_HEAD
 TEAM = "E3G5D247ZN"
 BUNDLE_ID = "com.moneymap.desktop"
 MINIMUM_MACOS = "13.0"
-DMG_NAME = "Money Map-3.0.0-beta.1-arm64.dmg"
+DMG_NAME = desktop_artifact_name()
 CONTRACT = "money-map-slice6-installed-qualification-v1"
 LAUNCH_CONTRACT = "money-map-installed-attestation-launch-v1"
 NATIVE_RESULT_CONTRACT = "money-map-native-attestation-result-v1"

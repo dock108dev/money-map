@@ -484,6 +484,17 @@ async fn desktop_report_action(
     .map_err(|_| "The report could not be opened.".to_string())?
 }
 
+fn diagnostic_backup_verification(backend: &serde_json::Value) -> serde_json::Value {
+    backend
+        .get("backup_verification")
+        .cloned()
+        .unwrap_or(serde_json::json!({
+            "count": 0,
+            "all_verified": false,
+            "status": "unavailable"
+        }))
+}
+
 fn diagnostic_payload(controller: &RuntimeController) -> Result<serde_json::Value, String> {
     let backend = fetch_json(controller, "/api/desktop/data-home/diagnostics".to_string())?;
     let status = controller.status();
@@ -508,7 +519,7 @@ fn diagnostic_payload(controller: &RuntimeController) -> Result<serde_json::Valu
         "data_mode": about.data_mode,
         "runtime": { "state": status.state, "generation": status.generation },
         "data_home_phase": backend.get("data_home_phase").cloned().unwrap_or(serde_json::json!("unavailable")),
-        "backup_verification": backend.get("backup_verification").cloned().unwrap_or(serde_json::json!({"count": 0, "all_verified": true})),
+        "backup_verification": diagnostic_backup_verification(&backend),
         "database_checks": backend.get("database_checks").cloned().unwrap_or(serde_json::json!({"integrity": "unavailable", "foreign_keys": "unavailable"})),
         "network_mode": "local_data; connected updates are explicit",
         "artifact_identity": { "build": about.desktop_build, "source": about.source_commit }
@@ -1179,8 +1190,8 @@ fn main() {
 #[cfg(test)]
 mod menu_tests {
     use super::{
-        approved_external_link, internal_navigation_allowed, menu_action_script, MENU_ACTION_IDS,
-        OPERATION_MENU_IDS,
+        approved_external_link, diagnostic_backup_verification, internal_navigation_allowed,
+        menu_action_script, MENU_ACTION_IDS, OPERATION_MENU_IDS,
     };
 
     #[test]
@@ -1249,5 +1260,21 @@ mod menu_tests {
             "https://dashboard.plaid.com.evil.invalid/"
         ));
         assert!(!approved_external_link("http://dashboard.plaid.com/"));
+    }
+
+    #[test]
+    fn missing_backup_diagnostics_never_report_verified() {
+        let fallback = diagnostic_backup_verification(&serde_json::json!({}));
+        assert_eq!(fallback["count"], 0);
+        assert_eq!(fallback["all_verified"], false);
+        assert_eq!(fallback["status"], "unavailable");
+
+        let observed = serde_json::json!({"count": 2, "all_verified": true});
+        assert_eq!(
+            diagnostic_backup_verification(
+                &serde_json::json!({"backup_verification": observed.clone()})
+            ),
+            observed
+        );
     }
 }

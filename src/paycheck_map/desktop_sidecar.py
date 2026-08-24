@@ -24,7 +24,9 @@ from paycheck_map.desktop_bootstrap import (
     install_bootstrap,
 )
 from paycheck_map.desktop_lock import WriterLock
+from paycheck_map.desktop_policy import DISPOSABLE_DATA_MODE, uses_managed_data_home
 from paycheck_map.keychain import MacOSKeychainSecretStore
+from paycheck_map.product_metadata import SCHEMA_HEAD
 from paycheck_map.safe_events import SafeEventLog
 
 
@@ -214,7 +216,7 @@ def _synthetic_root() -> Path:
     if not raw:
         raise RuntimeError("Disposable desktop data root is required")
     root = Path(raw).resolve()
-    if os.environ.get("PAYCHECK_MAP_DESKTOP_DATA_MODE") != "disposable-synthetic":
+    if os.environ.get("PAYCHECK_MAP_DESKTOP_DATA_MODE") != DISPOSABLE_DATA_MODE:
         raise RuntimeError("Disposable synthetic desktop mode is required")
     if root.name != "money-map-synthetic-data" or not root.parent.name.startswith(
         "money-map-runtime-"
@@ -227,9 +229,9 @@ def _synthetic_root() -> Path:
 
 def _desktop_root() -> Path:
     mode = os.environ.get("PAYCHECK_MAP_DESKTOP_DATA_MODE")
-    if mode == "disposable-synthetic":
+    if mode == DISPOSABLE_DATA_MODE:
         return _synthetic_root()
-    if mode in {"production-v1", "acceptance-synthetic-v1", "keychain-acceptance-v1"}:
+    if uses_managed_data_home(mode):
         paths = DataHomePaths.from_trusted_environment()
         return paths.application
     raise RuntimeError("Desktop data mode is required")
@@ -283,7 +285,7 @@ def main() -> None:
             status = manager.prepare()
             if status.get("phase") == Phase.FRESH_SETUP_AVAILABLE:
                 status = manager.fresh_setup()
-            if not status.get("ready") or status.get("schema_revision") != "0009_goal_persistence":
+            if not status.get("ready") or status.get("schema_revision") != SCHEMA_HEAD:
                 raise RuntimeError("Desktop synthetic database was not ready for attestation")
             attestation_connection = engine.connect()
             driver = attestation_connection.connection.driver_connection
@@ -347,9 +349,22 @@ def main() -> None:
         clear_bootstrap()
 
 
+def _record_fatal_failure() -> None:
+    """Best-effort fixed-schema telemetry; never expose the exception or private values."""
+
+    log_root = os.environ.get("PAYCHECK_MAP_DESKTOP_LOG_ROOT")
+    if not log_root:
+        return
+    try:
+        SafeEventLog(Path(log_root)).emit("MM-DESKTOP-FAIL", "lifecycle")
+    except (OSError, RuntimeError, ValueError):
+        return
+
+
 if __name__ == "__main__":
     try:
         main()
     except Exception:
+        _record_fatal_failure()
         print("MONEY_MAP_FAILED", flush=True)
         raise SystemExit(1) from None

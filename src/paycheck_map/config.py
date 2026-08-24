@@ -5,6 +5,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .desktop_policy import uses_managed_data_home
+
 
 class Settings(BaseSettings):
     """Local-only runtime paths and safe defaults."""
@@ -24,11 +26,7 @@ class Settings(BaseSettings):
 
     @property
     def private_dir(self) -> Path:
-        if self.desktop_mode and self.desktop_data_mode in {
-            "production-v1",
-            "acceptance-synthetic-v1",
-            "keychain-acceptance-v1",
-        }:
+        if self.desktop_mode and uses_managed_data_home(self.desktop_data_mode):
             if self.desktop_app_root is None:
                 raise RuntimeError("The trusted desktop application-data root is required")
             return self.desktop_app_root

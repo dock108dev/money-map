@@ -8,6 +8,7 @@ import {
   loadOverviewRoute,
   loadRecurringOutflowCandidates,
   previewGoalGap,
+  request,
 } from "./api";
 import { candidateFixture, goalGapFixture } from "./cash-flow/goal-gap-test-fixtures";
 import { cashFlowFixture } from "./cash-flow/test-fixtures";
@@ -21,6 +22,18 @@ const json = (value: unknown, status = 200) =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Cash Flow API", () => {
+  it("preserves safe object-shaped error messages for general requests", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json({ detail: { code: "journal_invalid", message: "Recovery information could not be verified." } }, 422),
+      ),
+    );
+    await expect(request("/api/desktop/data-home/status")).rejects.toThrow(
+      "Recovery information could not be verified.",
+    );
+  });
+
   it("loads Overview period evidence with exact inclusive read-only requests", async () => {
     const fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);

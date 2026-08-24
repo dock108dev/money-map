@@ -43,7 +43,7 @@ def test_local_api_workflow(
         ]:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
-                transport=transport, base_url="http://test.local"
+                transport=transport, base_url="http://127.0.0.1:8765"
             ) as client:
                 health = await client.get("/api/health")
                 overview = await client.get("/api/overview")
@@ -92,7 +92,7 @@ def test_life_lab_api_profile_goal_projection_and_stale_snapshot(
         async def exercise_life_lab() -> tuple[dict[str, object], ...]:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
-                transport=transport, base_url="http://test.local"
+                transport=transport, base_url="http://127.0.0.1:8765"
             ) as client:
                 empty_profile = (await client.get("/api/life-plan/profile")).json()
                 profile = (

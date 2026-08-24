@@ -821,7 +821,11 @@ def test_partial_source_state_blocks_load_until_same_source_recovers(
 def test_observation_failure_rolls_back_only_check_in_transaction(
     migrated_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    from paycheck_map.config import settings
+
+    monkeypatch.setattr(settings, "desktop_log_root", tmp_path / "logs")
     with Session(migrated_engine, expire_on_commit=False) as session:
         _seed(session)
         session.add(ApplicationSetting(key="financial-operation", value="committed"))
@@ -851,6 +855,9 @@ def test_observation_failure_rolls_back_only_check_in_transaction(
         assert result.retryable is True
         assert session.get(ApplicationSetting, "financial-operation") is not None
         assert session.scalar(select(func.count(GoalCheckIn.check_in_id))) == 0
+        event = (tmp_path / "logs" / "desktop-events.jsonl").read_text()
+        assert '"code":"MM-GOAL-CHECKIN-FAIL"' in event
+        assert "synthetic observation failure" not in event
 
 
 def test_caller_transaction_boundary_success_unchanged_and_rollback(
@@ -1364,7 +1371,7 @@ def test_read_apis_are_typed_explicit_and_never_create_check_ins(
             async def exercise() -> list[httpx.Response]:
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
-                    transport=transport, base_url="http://test.local"
+                    transport=transport, base_url="http://127.0.0.1:8765"
                 ) as client:
                     paths = [
                         "/api/v2/goals/primary",
@@ -1408,10 +1415,16 @@ def test_backfill_api_is_explicit_idempotent_and_accepts_no_browser_telemetry(
             async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
-                    transport=transport, base_url="http://test.local"
+                    transport=transport, base_url="http://127.0.0.1:8765"
                 ) as client:
-                    created = await client.post("/api/v2/goals/check-ins/backfill")
-                    unchanged = await client.post("/api/v2/goals/check-ins/backfill")
+                    created = await client.post(
+                        "/api/v2/goals/check-ins/backfill",
+                        headers={"Content-Type": "application/json"},
+                    )
+                    unchanged = await client.post(
+                        "/api/v2/goals/check-ins/backfill",
+                        headers={"Content-Type": "application/json"},
+                    )
                     rejected_telemetry = await client.post(
                         "/api/v2/goals/check-ins/backfill",
                         json={"opened_at": "2026-08-10T12:00:00Z"},
@@ -1446,7 +1459,7 @@ def test_api_goal_edit_and_selection_conflicts(migrated_engine: Engine) -> None:
             async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
                 transport = httpx.ASGITransport(app=app)
                 async with httpx.AsyncClient(
-                    transport=transport, base_url="http://test.local"
+                    transport=transport, base_url="http://127.0.0.1:8765"
                 ) as client:
                     token = program_edit_token(goal)
                     updated = await client.patch(

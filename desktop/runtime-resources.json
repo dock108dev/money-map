@@ -7,18 +7,18 @@
       "paycheck_map.__init__", "paycheck_map.adapters.__init__", "paycheck_map.adapters.base",
       "paycheck_map.adapters.canonical_ledger", "paycheck_map.adapters.canonical_payroll",
       "paycheck_map.adapters.payroll_oracle", "paycheck_map.allocations", "paycheck_map.analytics",
-      "paycheck_map.api", "paycheck_map.app", "paycheck_map.balances",
+      "paycheck_map.api", "paycheck_map.api_inputs", "paycheck_map.api_life_plan", "paycheck_map.api_plaid", "paycheck_map.api_v2", "paycheck_map.app", "paycheck_map.balances",
       "paycheck_map.business_time", "paycheck_map.cash_flow_service",
       "paycheck_map.cash_months", "paycheck_map.cli", "paycheck_map.config", "paycheck_map.cutover_readiness",
-      "paycheck_map.data_home", "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_bootstrap", "paycheck_map.desktop_data_api", "paycheck_map.desktop_lock", "paycheck_map.desktop_sidecar",
+      "paycheck_map.data_home", "paycheck_map.db", "paycheck_map.desktop_app", "paycheck_map.desktop_bootstrap", "paycheck_map.desktop_data_api", "paycheck_map.desktop_lock", "paycheck_map.desktop_policy", "paycheck_map.desktop_sidecar",
       "paycheck_map.forecasting", "paycheck_map.goal_gap_service",
       "paycheck_map.goal_observation", "paycheck_map.goal_operations",
       "paycheck_map.goal_service", "paycheck_map.ingestion", "paycheck_map.import_security", "paycheck_map.keychain", "paycheck_map.native_secrets",
-      "paycheck_map.life_plan", "paycheck_map.logical_manifest", "paycheck_map.models",
+      "paycheck_map.life_plan", "paycheck_map.local_security", "paycheck_map.logical_manifest", "paycheck_map.models",
       "paycheck_map.money", "paycheck_map.payroll", "paycheck_map.plaid_client",
-      "paycheck_map.plaid_service", "paycheck_map.reconciliation",
+      "paycheck_map.plaid_service", "paycheck_map.product_metadata", "paycheck_map.reconciliation",
       "paycheck_map.recurring_outflow_service", "paycheck_map.refresh",
-      "paycheck_map.release_candidate", "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.safe_events", "paycheck_map.services",
+      "paycheck_map.release_candidate", "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.safe_events", "paycheck_map.service_accounts", "paycheck_map.service_common", "paycheck_map.service_overview", "paycheck_map.service_payroll", "paycheck_map.service_summaries", "paycheck_map.service_wealth", "paycheck_map.services",
       "paycheck_map.v21_contracts", "paycheck_map.v2_contracts"
     ],
     "dependencies": [
@@ -26,7 +26,7 @@
       "pydantic", "pydantic-settings", "python-multipart", "sqlalchemy", "uvicorn"
     ],
     "builder": "PyInstaller one-file 6.x via scripts/package_desktop_release.py",
-    "metadata": ["pyproject.toml", "src/paycheck_map/__init__.py"],
+    "metadata": ["pyproject.toml", "src/paycheck_map/product_metadata.py"],
     "nativeLibraries": ["CPython arm64 runtime", "SQLite", "cryptography/keyring transitive libraries"]
   },
   "frontend": {

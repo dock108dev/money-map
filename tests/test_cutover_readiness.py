@@ -17,7 +17,8 @@ from paycheck_map.cutover_readiness import (
     secure_file_identity,
     validate_owner_worksheet,
 )
-from paycheck_map.data_home import SCHEMA_HEAD, DataHomeError, DataHomeManager, DataHomePaths
+from paycheck_map.data_home import DataHomeError, DataHomeManager, DataHomePaths
+from paycheck_map.product_metadata import SCHEMA_HEAD
 
 from .conftest import PROJECT_ROOT
 from .v2_migration_support import migration_config

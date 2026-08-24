@@ -7,9 +7,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-PUBLIC_VERSION = "3.0.0-beta.1"
-PYTHON_VERSION = "3.0.0b1"
-SCHEMA_REVISION = "0009_goal_persistence"
+from .product_metadata import PUBLIC_VERSION, PYTHON_PACKAGE_VERSION, SCHEMA_HEAD
+
 RELEASE_CONTRACT = "money-map-v3-release-manifest-v1"
 CANDIDATE_STATE = "candidate_not_accepted"
 ACCEPTED_STATE = "accepted"
@@ -55,8 +54,8 @@ def candidate_manifest(
         "release_state": CANDIDATE_STATE,
         "source_commit": source_commit,
         "clean_tree": clean_tree,
-        "version_mapping": {"public": PUBLIC_VERSION, "python": PYTHON_VERSION},
-        "schema_revision": SCHEMA_REVISION,
+        "version_mapping": {"public": PUBLIC_VERSION, "python": PYTHON_PACKAGE_VERSION},
+        "schema_revision": SCHEMA_HEAD,
         "bundle_identifier": bundle_identifier,
         "architecture": architecture,
         "signing": {
@@ -102,10 +101,10 @@ def validate_candidate(manifest: Mapping[str, Any]) -> None:
         raise ReleaseContractError("candidate source identity is incomplete")
     if manifest.get("version_mapping") != {
         "public": PUBLIC_VERSION,
-        "python": PYTHON_VERSION,
+        "python": PYTHON_PACKAGE_VERSION,
     }:
         raise ReleaseContractError("version mapping is inconsistent")
-    if manifest.get("schema_revision") != SCHEMA_REVISION:
+    if manifest.get("schema_revision") != SCHEMA_HEAD:
         raise ReleaseContractError("schema is inconsistent")
     if manifest.get("build_mode") not in {"qualification", "production"}:
         raise ReleaseContractError("build mode is invalid")
@@ -149,9 +148,12 @@ def validate_promotion(manifest: Mapping[str, Any]) -> None:
         or manifest.get("release_state") != ACCEPTED_STATE
     ):
         raise ReleaseContractError("an accepted manifest is required")
-    if manifest.get("version_mapping") != {"public": PUBLIC_VERSION, "python": PYTHON_VERSION}:
+    if manifest.get("version_mapping") != {
+        "public": PUBLIC_VERSION,
+        "python": PYTHON_PACKAGE_VERSION,
+    }:
         raise ReleaseContractError("version mapping is inconsistent")
-    if manifest.get("schema_revision") != SCHEMA_REVISION:
+    if manifest.get("schema_revision") != SCHEMA_HEAD:
         raise ReleaseContractError("schema is inconsistent")
     if manifest.get("build_mode") != "production":
         raise ReleaseContractError("production-mode rebuild evidence is required")

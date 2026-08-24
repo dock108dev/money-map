@@ -10,7 +10,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
-import paycheck_map.api as api_module
+import paycheck_map.api_v2 as api_module
 from paycheck_map.app import app
 from paycheck_map.db import get_session
 from paycheck_map.v21_contracts import CashFlowPeriodResult
@@ -35,7 +35,7 @@ def _get(session: Session, path: str) -> httpx.Response:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
-                base_url="http://test.local",
+                base_url="http://127.0.0.1:8765",
             ) as client:
                 return await client.get(path)
 

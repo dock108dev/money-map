@@ -19,22 +19,27 @@ from pathlib import Path
 
 from PyInstaller.archive.readers import CArchiveReader
 
+from paycheck_map.product_metadata import (
+    PUBLIC_VERSION,
+    PYTHON_PACKAGE_VERSION,
+    SCHEMA_HEAD,
+    desktop_artifact_name,
+)
 from paycheck_map.release_candidate import (
     CANDIDATE_STATE,
-    PUBLIC_VERSION,
-    PYTHON_VERSION,
     candidate_manifest,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = PUBLIC_VERSION
-SCHEMA = "0009_goal_persistence"
+PYTHON_VERSION = PYTHON_PACKAGE_VERSION
+SCHEMA = SCHEMA_HEAD
 TARGET = "aarch64-apple-darwin"
 TEAM = "E3G5D247ZN"
 IDENTIFIER = "com.moneymap.desktop"
 MINIMUM_MACOS = "13.0"
 CONTRACT = "money-map-v3-candidate-build-manifest-v1"
-ARTIFACT_NAME = "Money Map-3.0.0-beta.1-arm64.dmg"
+ARTIFACT_NAME = desktop_artifact_name()
 LOCKS = ("uv.lock", "web/pnpm-lock.yaml", "desktop/src-tauri/Cargo.lock")
 REQUIRED_INPUTS = (
     *LOCKS,

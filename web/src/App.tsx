@@ -113,6 +113,7 @@ export default function App() {
     desktopMode ? { state: "starting", generation: 0 } : null,
   );
   const [dataHome, setDataHome] = useState<DataHomeStatus | null>(null);
+  const [dataHomeError, setDataHomeError] = useState("");
   const [showDataHome, setShowDataHome] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<View>(() => initialView(desktopMode));
@@ -169,16 +170,28 @@ export default function App() {
     }
   }, [refresh]);
 
+  const refreshDataHome = useCallback(async () => {
+    setDataHomeError("");
+    try {
+      setDataHome(await loadDataHomeStatus());
+    } catch (reason) {
+      setDataHome(null);
+      setDataHomeError(
+        reason instanceof Error
+          ? reason.message
+          : "Private data readiness could not be verified.",
+      );
+    }
+  }, []);
+
   useEffect(() => {
     if (!desktopMode || (desktopRuntime?.state === "ready" && dataHome?.ready)) void refresh();
   }, [dataHome?.ready, desktopMode, desktopRuntime?.generation, desktopRuntime?.state, refresh]);
 
   useEffect(() => {
     if (!desktopMode || desktopRuntime?.state !== "ready") return;
-    void loadDataHomeStatus()
-      .then(setDataHome)
-      .catch(() => setDataHome({ phase: "already_migrated", ready: true }));
-  }, [desktopMode, desktopRuntime?.generation, desktopRuntime?.state]);
+    void refreshDataHome();
+  }, [desktopMode, desktopRuntime?.generation, desktopRuntime?.state, refreshDataHome]);
 
   useEffect(() => {
     if (!desktopMode) return;
@@ -446,6 +459,19 @@ export default function App() {
 
   if (desktopMode && dataHome && !dataHome.ready) {
     return <DataHomePanel initial={dataHome} onStatus={setDataHome} />;
+  }
+
+  if (desktopMode && desktopRuntime?.state === "ready" && dataHomeError) {
+    return (
+      <main className="fatal-state" role="alert">
+        <span>Private data status unavailable</span>
+        <h1>Money Map paused safely.</h1>
+        <p>{dataHomeError}</p>
+        <button className="primary-button" onClick={() => void refreshDataHome()}>
+          Try again
+        </button>
+      </main>
+    );
   }
 
   if (error && !data) {

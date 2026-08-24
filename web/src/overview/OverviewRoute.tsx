@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { loadOverviewRoute, type OverviewRouteData } from "../api";
-import { OverviewView } from "../components";
+import { OverviewView } from "./OverviewView";
 
 interface OverviewRouteProps {
   reloadVersion: number;

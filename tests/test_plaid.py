@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from paycheck_map.goal_operations import sync_connection_with_goal_observation
-from paycheck_map.keychain import MemorySecretStore
+from paycheck_map.keychain import MemorySecretStore, SecretStoreError
 from paycheck_map.models import (
     Account,
     AccountTransaction,
@@ -362,6 +362,35 @@ def test_production_secret_reuses_the_shared_client_id() -> None:
         "client_id_hint": "••••dbox",
     }
     assert store.get(CONFIG_NAMESPACE, "production.client_id") == "client-sandbox"
+
+
+def test_configuration_reports_an_explicit_failure_when_keychain_rollback_is_incomplete() -> None:
+    class RollbackFailingStore(MemorySecretStore):
+        def set(self, namespace: str, key: str, value: str) -> None:
+            if key == "sandbox.secret" and value == "replacement-secret":
+                raise RuntimeError("synthetic setup failure")
+            if key == "sandbox.client_id" and value == "original-client":
+                raise RuntimeError("synthetic rollback failure")
+            super().set(namespace, key, value)
+
+    store = RollbackFailingStore(
+        values={
+            (CONFIG_NAMESPACE, "sandbox.client_id"): "original-client",
+            (CONFIG_NAMESPACE, "sandbox.secret"): "original-secret",
+            (CONFIG_NAMESPACE, "client_user_id"): "synthetic-user",
+        }
+    )
+
+    with pytest.raises(SecretStoreError, match="could not be fully restored") as failure:
+        configure_plaid(
+            environment="sandbox",
+            client_id="replacement-client",
+            secret="replacement-secret",
+            store=store,
+        )
+
+    assert isinstance(failure.value.__cause__, RuntimeError)
+    assert store.get(CONFIG_NAMESPACE, "sandbox.secret") == "original-secret"
 
 
 def test_realized_gain_loss_is_not_counted_as_an_investment_deposit() -> None:

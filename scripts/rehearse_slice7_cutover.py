@@ -16,12 +16,12 @@ from alembic.config import Config
 from alembic import command
 from paycheck_map.cutover_readiness import CutoverReadinessManager, secure_file_identity
 from paycheck_map.data_home import (
-    SCHEMA_HEAD,
     DataHomeManager,
     DataHomePaths,
     Phase,
     verify_database,
 )
+from paycheck_map.product_metadata import SCHEMA_HEAD
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FAILURE_PHASES = (

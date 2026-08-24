@@ -1,5 +1,7 @@
 # Architecture
 
+The maintained authority map is [Current single sources of truth](v3/single-source-of-truth.md).
+
 ## Components
 
 ```text
@@ -37,6 +39,35 @@ verbatim; each response is canonicalized and SHA-256 hashed, with endpoint, retr
 time, request ID, parser version, and normalized record counts stored as evidence.
 Connection and provider account identifiers live only in the private database.
 Credentials and access tokens live only in macOS Keychain.
+
+## Runtime modes and process ownership
+
+Repository mode runs one Python process through `paycheck-map serve`. It owns SQLite, migrations,
+the loopback API, and the compiled React assets under the repository workflow. Its default private
+root is `.local/`.
+
+The packaged macOS mode runs a Tauri shell and one supervised Python sidecar. Tauri owns trusted
+macOS paths, the private bootstrap/session, lifecycle, native menus, and safe failure windows. The
+sidecar remains the only SQLite writer and binds an OS-selected loopback port. Desktop environment
+variables are launcher-owned protocol fields, not user configuration.
+
+There are no independent workers, queues, cron jobs, launch agents, or long-lived schedulers.
+Automatic Plaid refresh is a once-per-local-day request made by the loaded React application when
+the backend reports stale connected data. Import, payroll regeneration, reporting, backup, restore,
+and provider mutations are explicit operations.
+
+## Persistence and schema
+
+`models.py` defines the SQLAlchemy model authority. `alembic/versions/` contains the ordered schema
+history, and `product_metadata.SCHEMA_HEAD` identifies the required head. Repository startup upgrades
+the local database through Alembic. Packaged startup instead uses the data-home manager's staged,
+verified activation workflow; it never substitutes repository `.local` state.
+
+The main persistence groups are import provenance and evidence, institutions/accounts and dated
+values, payroll and allocations, transactions and reconciliation, Plaid connections and sync
+evidence, forecast scenarios, Life Lab profiles/projections, operational goals/check-ins, and manual
+corrections. Exact ownership is listed in the [SSOT map](v3/single-source-of-truth.md); migration and
+cutover behavior is documented in [desktop architecture](v3/desktop-architecture.md).
 
 ## Life Lab boundary
 

@@ -126,13 +126,14 @@ def _verify() -> None:
     if pnpm is None:
         raise RuntimeError("pnpm is required for verification")
     commands = [
+        [pnpm, "--dir", "web", "build"],
         [python, "-m", "pytest"],
         [python, "-m", "ruff", "format", "--check", "."],
         [python, "-m", "ruff", "check", "."],
         [python, "-m", "mypy", "src", "tests"],
         [pnpm, "--dir", "web", "test"],
         [pnpm, "--dir", "web", "lint"],
-        [pnpm, "--dir", "web", "build"],
+        [python, "scripts/check_docs.py"],
         [python, "scripts/check_private_data.py"],
     ]
     for command in commands:

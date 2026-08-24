@@ -18,7 +18,6 @@ from typing import Any
 
 from paycheck_map.data_home import (
     CONFIRMATION_TTL_SECONDS,
-    SCHEMA_HEAD,
     SUPPORTED_REVISIONS,
     Candidate,
     DatabaseVerification,
@@ -30,6 +29,7 @@ from paycheck_map.data_home import (
     verify_database,
 )
 from paycheck_map.desktop_bootstrap import active_bootstrap
+from paycheck_map.product_metadata import SCHEMA_HEAD
 
 CUTOVER_CONTRACT = "money-map-cutover-readiness-v1"
 CONFIRMATION_CONTRACT = "money-map-cutover-confirmation-v1"

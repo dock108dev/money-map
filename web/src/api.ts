@@ -73,8 +73,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(body.detail ?? `Request failed (${response.status})`);
+    const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+    throw new Error(detailMessage(body?.detail, `Request failed (${response.status})`));
   }
   return response.json() as Promise<T>;
 }
@@ -131,6 +131,10 @@ export async function loadOverviewRoute(
 
 function detailMessage(detail: unknown, fallback: string): string {
   if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
   if (Array.isArray(detail)) {
     const messages = detail
       .map((item) => {

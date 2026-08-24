@@ -11,11 +11,9 @@ import httpx
 
 from paycheck_map import __product_version__, __version__
 from paycheck_map.app import app
+from paycheck_map.product_metadata import PUBLIC_VERSION, PYTHON_PACKAGE_VERSION
 
 from .conftest import PROJECT_ROOT
-
-PUBLIC_VERSION = "3.0.0-beta.1"
-PYTHON_VERSION = "3.0.0b1"
 
 
 def test_every_current_version_surface_agrees() -> None:
@@ -37,7 +35,9 @@ def test_every_current_version_surface_agrees() -> None:
 
     async def health_version() -> str:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test.local") as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://127.0.0.1:8765"
+        ) as client:
             response = await client.get("/api/health")
         response.raise_for_status()
         return str(response.json()["version"])
@@ -51,7 +51,7 @@ def test_every_current_version_surface_agrees() -> None:
     )
 
     assert {
-        "expected": PYTHON_VERSION,
+        "expected": PYTHON_PACKAGE_VERSION,
         "python_package": __version__,
         "installed_metadata": installed_version("paycheck-map"),
         "pyproject": project_version,
@@ -64,7 +64,7 @@ def test_every_current_version_surface_agrees() -> None:
             "pyproject",
             "uv_lock",
         ],
-        PYTHON_VERSION,
+        PYTHON_PACKAGE_VERSION,
     )
     assert {
         "expected": PUBLIC_VERSION,

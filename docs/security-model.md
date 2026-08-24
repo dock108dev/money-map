@@ -35,6 +35,17 @@ database hashes, private filenames, raw exceptions, request/response bodies, rep
 screenshots, and environment dumps. Export requires a native destination panel, writes mode `0600`,
 and performs no write when canceled.
 
+## Standalone loopback browser boundary
+
+`uv run paycheck-map serve` is a single-owner local surface, not a public or multi-user service.
+It binds only the configured `127.0.0.1:8765` authority. The standalone middleware requires that
+exact Host, rejects cross-origin and cross-site browser requests, requires JSON for mutations,
+rejects ambiguous framing and duplicate security headers, and bounds bodies and active requests.
+Responses are `no-store`, non-indexable, non-frameable, MIME-sniff protected, referrer-free, and
+covered by a restrictive CSP and Permissions Policy. Framework API documentation and the OpenAPI
+schema are disabled. HSTS and cookie flags do not apply because this mode uses plain loopback HTTP
+and has no cookies; it must not be reverse-proxied or exposed on a network.
+
 ## Threats in scope
 
 - Accidentally committing statements or extracted personal information.
