@@ -24,10 +24,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "mypy>=1.14,<2",
+  "mypy>=1.14,<3",
   "pytest>=9.0.3,<10",
-  "pytest-cov>=6,<7",
-  "reportlab>=4.2,<5",
+  "pytest-cov>=6,<8",
+  "reportlab>=4.2,<6",
   "ruff>=0.9,<1",
   "types-openpyxl>=3.1.5,<4",
   "types-reportlab>=4.4,<5",
