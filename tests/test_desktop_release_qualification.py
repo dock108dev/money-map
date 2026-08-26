@@ -319,6 +319,17 @@ def test_matrix_observer_accepts_a_route_prefixed_safe_state_heading_for_readine
     assert '"retirement": "Retirement"' in observer
 
 
+def test_matrix_observer_prioritizes_active_dialog_copy_within_the_privacy_bound() -> None:
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    observer = source[source.index("fn qualification_observer_script") :]
+    assert "const prioritizedValues" in observer
+    assert "[...values(prioritySelector, limit), ...values(selector, limit)]" in observer
+    assert "combined.indexOf(value) === index" in observer
+    assert "messages: prioritizedValues(" in observer
+    assert "[role=\"dialog\"] p" in observer
+    assert observer.index("messages: prioritizedValues(") < observer.index("64\n              ),")
+
+
 def test_matrix_observer_waits_for_installed_runtime_before_requesting_a_route() -> None:
     source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
     observer = source[source.index("fn qualification_observer_script") :]

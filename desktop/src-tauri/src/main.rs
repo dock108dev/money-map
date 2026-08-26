@@ -806,6 +806,11 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
           const text = (element) => (element?.textContent || "").replace(/\s+/g, " ").trim();
           const values = (selector, limit) => Array.from(document.querySelectorAll(selector))
             .map(text).filter(Boolean).slice(0, limit);
+          const prioritizedValues = (prioritySelector, selector, limit) => {{
+            const combined = [...values(prioritySelector, limit), ...values(selector, limit)];
+            return combined.filter((value, index) => combined.indexOf(value) === index)
+              .slice(0, limit);
+          }};
           const buttonLabel = (button) => (button.getAttribute("aria-label") || text(button))
             .replace(/, \d+ issues$/u, "");
           const routeButton = () => {{
@@ -861,7 +866,11 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
               buttons: values("button", 64),
               disabled_buttons: Array.from(document.querySelectorAll("button:disabled"))
                 .map(text).filter(Boolean).slice(0, 64),
-              messages: values("main p,main small,main dt,main dd,main strong,.simple-empty", 64),
+              messages: prioritizedValues(
+                '[role="dialog"] p,[role="dialog"] small,[role="alertdialog"] p,[role="alertdialog"] small',
+                "main p,main small,main dt,main dd,main strong,.simple-empty",
+                64
+              ),
               loading_visible: Boolean(globalLoading()),
               loading_busy: globalLoading()?.getAttribute("aria-busy") === "true",
               loading_live: globalLoading()?.getAttribute("aria-live") || "",
