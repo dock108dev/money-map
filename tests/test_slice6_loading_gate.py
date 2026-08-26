@@ -244,14 +244,26 @@ def test_transient_failure_drivers_are_exact_and_not_candidate_selected() -> Non
             "failure_count": 1,
         }
     }
+    stale = {
+        "setup_driver": {
+            "type": "fixed_clock_stale_evidence",
+            "seed": "complete-current-v1",
+            "last_evidence_date": "2026-06-30",
+            "threshold_days": 32,
+        }
+    }
     campaign.validate_setup_driver(unavailable)
     campaign.validate_setup_driver(recovery)
+    campaign.validate_setup_driver(stale)
     unavailable["setup_driver"]["fault"] = "candidate-selected"
     recovery["setup_driver"]["failure_count"] = 2
+    stale["setup_driver"]["threshold_days"] = 31
     with pytest.raises(campaign.MatrixFailure, match="unavailable setup driver"):
         campaign.validate_setup_driver(unavailable)
     with pytest.raises(campaign.MatrixFailure, match="recovery setup driver"):
         campaign.validate_setup_driver(recovery)
+    with pytest.raises(campaign.MatrixFailure, match="stale-evidence setup driver"):
+        campaign.validate_setup_driver(stale)
 
 
 def test_harness_release_is_private_bounded_and_contains_no_runtime_secret() -> None:

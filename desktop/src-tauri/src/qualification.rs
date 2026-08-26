@@ -39,6 +39,10 @@ pub struct MatrixDriverPlan {
     pub fault: Option<String>,
     #[serde(default)]
     pub failure_count: Option<u8>,
+    #[serde(default)]
+    pub last_evidence_date: Option<String>,
+    #[serde(default)]
+    pub threshold_days: Option<u16>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -639,6 +643,8 @@ impl QualificationContract {
                     || driver.timeout_ms != Some(5_000)
                     || driver.fault.is_some()
                     || driver.failure_count.is_some()
+                    || driver.last_evidence_date.is_some()
+                    || driver.threshold_days.is_some()
                 {
                     return Err("Synthetic qualification response gate was rejected.".to_string());
                 }
@@ -654,6 +660,8 @@ impl QualificationContract {
                     || driver.release.is_some()
                     || driver.timeout_ms.is_some()
                     || driver.failure_count.is_some()
+                    || driver.last_evidence_date.is_some()
+                    || driver.threshold_days.is_some()
                 {
                     return Err(
                         "Synthetic qualification unavailable driver was rejected.".to_string()
@@ -671,8 +679,29 @@ impl QualificationContract {
                     || driver.gate.is_some()
                     || driver.release.is_some()
                     || driver.timeout_ms.is_some()
+                    || driver.last_evidence_date.is_some()
+                    || driver.threshold_days.is_some()
                 {
                     return Err("Synthetic qualification recovery driver was rejected.".to_string());
+                }
+            } else if state == "stale_evidence" {
+                let driver = self.matrix_driver.as_ref().ok_or_else(|| {
+                    "Synthetic qualification stale-evidence driver was rejected.".to_string()
+                })?;
+                if digest != SEALED_ORACLE_DIGEST
+                    || driver.driver_type != "fixed_clock_stale_evidence"
+                    || driver.seed != "complete-current-v1"
+                    || driver.last_evidence_date.as_deref() != Some("2026-06-30")
+                    || driver.threshold_days != Some(32)
+                    || driver.gate.is_some()
+                    || driver.release.is_some()
+                    || driver.timeout_ms.is_some()
+                    || driver.fault.is_some()
+                    || driver.failure_count.is_some()
+                {
+                    return Err(
+                        "Synthetic qualification stale-evidence driver was rejected.".to_string(),
+                    );
                 }
             } else if self.matrix_driver.is_some() {
                 return Err("Synthetic qualification response gate was rejected.".to_string());
@@ -1584,6 +1613,8 @@ mod tests {
                 timeout_ms: Some(5_000),
                 fault: None,
                 failure_count: None,
+                last_evidence_date: None,
+                threshold_days: None,
             }),
             ..contract
         };
@@ -1607,6 +1638,8 @@ mod tests {
                 timeout_ms: None,
                 fault: Some("qualification-unavailable-v1".into()),
                 failure_count: None,
+                last_evidence_date: None,
+                threshold_days: None,
             }),
             ..contract.clone()
         };
@@ -1625,10 +1658,32 @@ mod tests {
                 timeout_ms: None,
                 fault: Some("qualification-dashboard-read-once-v1".into()),
                 failure_count: Some(1),
+                last_evidence_date: None,
+                threshold_days: None,
             }),
             ..unavailable
         };
         recovery.validate(Some(campaign.path())).unwrap();
+
+        let stale = QualificationContract {
+            matrix_state: Some("stale_evidence".into()),
+            matrix_driver: Some(MatrixDriverPlan {
+                driver_type: "fixed_clock_stale_evidence".into(),
+                seed: "complete-current-v1".into(),
+                gate: None,
+                release: None,
+                timeout_ms: None,
+                fault: None,
+                failure_count: None,
+                last_evidence_date: Some("2026-06-30".into()),
+                threshold_days: Some(32),
+            }),
+            ..recovery
+        };
+        stale.validate(Some(campaign.path())).unwrap();
+        let mut wrong_stale = stale;
+        wrong_stale.matrix_driver.as_mut().unwrap().threshold_days = Some(31);
+        assert!(wrong_stale.validate(Some(campaign.path())).is_err());
     }
 
     fn gate_release(contract: &QualificationContract) -> GateRelease {
@@ -1784,6 +1839,8 @@ mod tests {
                 timeout_ms: Some(5_000),
                 fault: None,
                 failure_count: None,
+                last_evidence_date: None,
+                threshold_days: None,
             }),
             ..contract
         };

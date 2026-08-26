@@ -249,6 +249,20 @@ describe("application states", () => {
     expect(status).toHaveAttribute("role", "status");
   });
 
+  it("renders the fixed-clock stale evidence caution", async () => {
+    installReadyDesktop();
+    if (window.__MONEY_MAP_DESKTOP__) {
+      window.__MONEY_MAP_DESKTOP__.qualificationState = "stale_evidence";
+    }
+    vi.stubGlobal("fetch", withReadyDataHome(workingFetch()));
+
+    render(<App />);
+
+    const status = await screen.findByText("Not current. Last evidence Jun 30, 2026.");
+    expect(status).toBeVisible();
+    expect(status).toHaveAttribute("role", "status");
+  });
+
   it("renders the one-shot installed recovery state without stale financial success", async () => {
     installReadyDesktop();
     if (window.__MONEY_MAP_DESKTOP__) {

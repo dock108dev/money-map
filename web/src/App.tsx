@@ -34,7 +34,7 @@ declare global {
   interface Window {
     __MONEY_MAP_DESKTOP__?: {
       mode: true;
-      qualificationState?: "unavailable" | "partial_coverage" | "recoverable_failure" | null;
+      qualificationState?: "unavailable" | "partial_coverage" | "recoverable_failure" | "stale_evidence" | null;
       reload(): Promise<void>;
       print(): Promise<void>;
       runtimeStatus(): Promise<DesktopRuntimeStatus>;
@@ -635,6 +635,11 @@ export default function App() {
         {qualificationState === "partial_coverage" && (
           <div className="notice" role="status">
             Partial coverage. Unavailable results are withheld until missing source coverage is added.
+          </div>
+        )}
+        {qualificationState === "stale_evidence" && (
+          <div className="notice" role="status">
+            Not current. Last evidence Jun 30, 2026.
           </div>
         )}
         {!hasImportedFinancialEvidence && (

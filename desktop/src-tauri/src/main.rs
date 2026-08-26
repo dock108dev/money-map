@@ -78,7 +78,7 @@ fn initialization_script(contract: Option<&QualificationContract>) -> String {
             .filter(|state| {
                 matches!(
                     *state,
-                    "unavailable" | "partial_coverage" | "recoverable_failure"
+                    "unavailable" | "partial_coverage" | "recoverable_failure" | "stale_evidence"
                 )
             }),
     )

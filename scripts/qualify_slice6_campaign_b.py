@@ -100,6 +100,13 @@ def validate_setup_driver(expected: dict[str, Any]) -> None:
         "failure_count": 1,
     }:
         raise MatrixFailure("sealed recovery setup driver differs")
+    if driver.get("type") == "fixed_clock_stale_evidence" and driver != {
+        "type": "fixed_clock_stale_evidence",
+        "seed": "complete-current-v1",
+        "last_evidence_date": "2026-06-30",
+        "threshold_days": 32,
+    }:
+        raise MatrixFailure("sealed stale-evidence setup driver differs")
 
 
 def execute_setup_driver(database: Path, expected: dict[str, Any]) -> dict[str, Any]:
@@ -487,7 +494,7 @@ def run_combination(
         matrix_contract_digest=expected["contract_digest_sha256"],
         matrix_driver=(
             expected["setup_driver"]
-            if state in {"loading", "unavailable", "recoverable_failure"}
+            if state in {"loading", "unavailable", "recoverable_failure", "stale_evidence"}
             else None
         ),
     )
