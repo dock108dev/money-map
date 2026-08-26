@@ -816,7 +816,9 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
               .find((button) => buttonLabel(button) === label) : null;
           }};
           const globalLoading = () => document.querySelector(globalSelector);
-          const routeLocalLoading = () => Array.from(document.querySelectorAll(".loading-state"))
+          const routeLocalLoading = () => Array.from(document.querySelectorAll(
+            ".loading-state,.goals-loading,.retirement-loading,.cash-flow-busy"
+          ))
             .some((element) => !element.matches(globalSelector));
           const hashMatched = () => !expectedHashes[requestedRoute]
             || window.location.hash === expectedHashes[requestedRoute];
