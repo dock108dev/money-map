@@ -60,6 +60,7 @@ def materialize_release_state(database: Path, state_id: str) -> dict[str, Any]:
         _seed_large(database)
     else:
         _seed_life_tables(database, state["tables"])
+        _seed_source_summary(database, state_id, state["source_summary"])
 
     counts = _declared_counts(database, contract["expected_table_counts"])
     if counts != contract["expected_table_counts"]:
@@ -506,6 +507,45 @@ def _seed_life_tables(database: Path, tables: dict[str, list[dict[str, Any]]]) -
                     f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
                 )
                 connection.execute(statement, values)
+
+
+def _seed_source_summary(database: Path, state_id: str, summary: dict[str, Any]) -> None:
+    if summary.get("coverage") != "complete":
+        return
+    as_of = date.fromisoformat(str(summary["as_of"]))
+    money_in = str(summary["effective_monthly_take_home"])
+    money_out = str(summary["observed_monthly_outflow"])
+    with _session(database) as session:
+        artifact, accounts = _accounts(session, state_id)
+        session.add_all(
+            [
+                _transaction(accounts[0], artifact, as_of, money_in, "external_inflow", 1),
+                _transaction(accounts[0], artifact, as_of, f"-{money_out}", "external_outflow", 2),
+                BalanceSnapshot(
+                    account_id=accounts[0].id,
+                    artifact_id=artifact.id,
+                    snapshot_date=as_of,
+                    kind="current",
+                    amount=Decimal(str(summary["accessible_cash"])),
+                ),
+                BalanceSnapshot(
+                    account_id=accounts[1].id,
+                    artifact_id=artifact.id,
+                    snapshot_date=as_of,
+                    kind="current",
+                    amount=Decimal(str(summary["accessible_investments"])),
+                ),
+                BalanceSnapshot(
+                    account_id=accounts[2].id,
+                    artifact_id=artifact.id,
+                    snapshot_date=as_of,
+                    kind="current",
+                    amount=Decimal(str(summary["retirement_assets"])),
+                ),
+                _payroll(1, as_of, money_in, money_in),
+            ]
+        )
+        session.commit()
 
 
 def _session(database: Path) -> Session:

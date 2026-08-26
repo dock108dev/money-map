@@ -87,6 +87,22 @@ def test_large_history_respects_its_sealed_date_boundaries(tmp_path: Path) -> No
     assert latest_snapshot == ("2026-08-10",)
 
 
+def test_negative_recurring_state_materializes_its_source_summary(tmp_path: Path) -> None:
+    database = tmp_path / "negative_recurring_cash_flow" / "paycheck-map.sqlite3"
+    materialize_release_state(database, "negative_recurring_cash_flow")
+    with sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True) as connection:
+        transactions = connection.execute(
+            "SELECT role, amount FROM account_transactions ORDER BY id"
+        ).fetchall()
+        balances = connection.execute(
+            "SELECT amount FROM balance_snapshots ORDER BY account_id"
+        ).fetchall()
+        payroll = connection.execute("SELECT net_payment FROM payroll_schedule_entries").fetchall()
+    assert transactions == [("external_inflow", 4200), ("external_outflow", -4700)]
+    assert balances == [(6100,), (1400,), (18000,)]
+    assert payroll == [(4200,)]
+
+
 def test_materializer_has_no_candidate_observation_or_expected_update_mode() -> None:
     source = Path(__file__).with_name("release_state_materializer.py").read_text(encoding="utf-8")
     assert "candidate_output" not in source

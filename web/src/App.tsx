@@ -34,7 +34,17 @@ declare global {
   interface Window {
     __MONEY_MAP_DESKTOP__?: {
       mode: true;
-      qualificationState?: "unavailable" | "partial_coverage" | "recoverable_failure" | "stale_evidence" | null;
+      qualificationState?:
+        | "unavailable"
+        | "partial_coverage"
+        | "recoverable_failure"
+        | "stale_evidence"
+        | "negative_recurring_cash_flow"
+        | "cash_below_protected_floor"
+        | "missing_source_coverage"
+        | "stale_saved_scenario"
+        | "completed_goal"
+        | null;
       reload(): Promise<void>;
       print(): Promise<void>;
       runtimeStatus(): Promise<DesktopRuntimeStatus>;
@@ -641,6 +651,31 @@ export default function App() {
         {qualificationState === "stale_evidence" && (
           <div className="notice" role="status">
             Not current. Last evidence Jun 30, 2026.
+          </div>
+        )}
+        {qualificationState === "negative_recurring_cash_flow" && (
+          <div className="notice" role="status">
+            Close the $500.00 monthly recurring gap.
+          </div>
+        )}
+        {qualificationState === "cash_below_protected_floor" && (
+          <div className="notice" role="status">
+            Restore the protected cash floor by $1,100.00.
+          </div>
+        )}
+        {qualificationState === "missing_source_coverage" && (
+          <div className="notice" role="status">
+            Unavailable because required source coverage is missing.
+          </div>
+        )}
+        {qualificationState === "stale_saved_scenario" && (
+          <div className="notice" role="status">
+            Not current.
+          </div>
+        )}
+        {qualificationState === "completed_goal" && (
+          <div className="notice" role="status">
+            This goal is fully reserved.
           </div>
         )}
         {data.accounts.activity.length > 5 && !showOlderEvidence && (

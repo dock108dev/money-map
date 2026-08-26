@@ -291,6 +291,26 @@ describe("application states", () => {
     expect(screen.getByText("Invented activity 6")).toBeVisible();
   });
 
+  it.each([
+    ["negative_recurring_cash_flow", "Close the $500.00 monthly recurring gap."],
+    ["cash_below_protected_floor", "Restore the protected cash floor by $1,100.00."],
+    ["missing_source_coverage", "Unavailable because required source coverage is missing."],
+    ["stale_saved_scenario", "Not current."],
+    ["completed_goal", "This goal is fully reserved."],
+  ] as const)("renders the %s state-level qualification caution", async (state, copy) => {
+    installReadyDesktop();
+    if (window.__MONEY_MAP_DESKTOP__) {
+      window.__MONEY_MAP_DESKTOP__.qualificationState = state;
+    }
+    vi.stubGlobal("fetch", withReadyDataHome(workingFetch()));
+
+    render(<App />);
+
+    const status = await screen.findByText(copy);
+    expect(status).toBeVisible();
+    expect(status).toHaveAttribute("role", "status");
+  });
+
   it("renders the one-shot installed recovery state without stale financial success", async () => {
     installReadyDesktop();
     if (window.__MONEY_MAP_DESKTOP__) {
