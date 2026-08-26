@@ -290,7 +290,8 @@ def compare_observation(
         or ui.get("unsafe_console_errors") != 0
     ):
         raise MatrixFailure("installed UI sequence or console safety differs")
-    if expected["state_id"] == "loading" and phase == "pending":
+    pending_loading = expected["state_id"] == "loading" and phase == "pending"
+    if pending_loading:
         if ui.get("headings") != ["Loading accounts…"]:
             raise MatrixFailure("installed pending UI lacks the exact loading heading")
         if not ui.get("loading_visible") or not ui.get("loading_busy"):
@@ -299,7 +300,7 @@ def compare_observation(
             raise MatrixFailure("installed pending UI lacks polite live behavior")
         if ui.get("buttons") or ui.get("messages") or ui.get("alerts"):
             raise MatrixFailure("installed pending UI exposed completed or mutable content")
-        role_expected = expected
+        role_expected = None
     else:
         if expected["state_id"] == "loading":
             if settled_expected is None:
@@ -309,14 +310,27 @@ def compare_observation(
                 raise MatrixFailure("installed loading state did not settle after release")
         else:
             role_expected = expected
-    if role_expected["expected_accessible_role"] == "heading" and not ui.get("headings"):
+    if (
+        role_expected
+        and role_expected["expected_accessible_role"] == "heading"
+        and not ui.get("headings")
+    ):
         raise MatrixFailure("installed UI lacks the expected accessible heading")
-    if role_expected["expected_accessible_role"] == "dialog" and ui.get("dialog_count", 0) < 1:
+    if (
+        role_expected
+        and role_expected["expected_accessible_role"] == "dialog"
+        and ui.get("dialog_count", 0) < 1
+    ):
         raise MatrixFailure("installed UI lacks the expected accessible dialog")
-    if role_expected["expected_accessible_role"] == "button" and not ui.get("buttons"):
+    if (
+        role_expected
+        and role_expected["expected_accessible_role"] == "button"
+        and not ui.get("buttons")
+    ):
         raise MatrixFailure("installed UI lacks the expected accessible control")
     combined = observed_text(actual)
-    copy_expected = role_expected
+    copy_expected = expected if pending_loading else role_expected
+    assert copy_expected is not None
     missing_copy = [
         phrase
         for phrase in copy_expected["expected_safe_state_language"]

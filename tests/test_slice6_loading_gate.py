@@ -81,6 +81,48 @@ def test_pending_loading_assertion_is_distinct_from_settled_evidence() -> None:
         campaign.compare_observation(expected, pending, 1, phase="pending")
 
 
+def test_pending_loading_does_not_require_the_future_route_dialog() -> None:
+    campaign = load_campaign()
+    expected = loading_expected()
+    expected.update(
+        {
+            "combination_id": "loading::data-home",
+            "route_id": "data-home",
+            "expected_accessible_role": "dialog",
+            "expected_http_status": ["200"],
+        }
+    )
+    pending = pending_observation()
+    pending["route"] = "data-home"
+    pending["api"] = [{"status": 200}]
+    campaign.compare_observation(expected, pending, 1, phase="pending")
+
+    settled = {
+        **pending,
+        "ui": {
+            **pending["ui"],
+            "phase": "settled",
+            "headings": ["Data safety"],
+            "loading_visible": False,
+            "loading_busy": False,
+            "loading_live": "",
+        },
+    }
+    settled_expected = {
+        **expected,
+        "state_id": "complete_current",
+        "expected_safe_state_language": ["Data safety"],
+    }
+    with pytest.raises(campaign.MatrixFailure, match="expected accessible dialog"):
+        campaign.compare_observation(
+            expected,
+            settled,
+            1,
+            phase="settled",
+            settled_expected=settled_expected,
+        )
+
+
 def test_overview_observation_requires_nonempty_get_only_inventory() -> None:
     campaign = load_campaign()
     expected = loading_expected()
