@@ -825,7 +825,8 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
           const routeObservable = () => {{
             const heading = expectedHeadings[requestedRoute];
             if (heading && !Array.from(document.querySelectorAll("h1"))
-              .some((element) => text(element) === heading)) return false;
+              .some((element) => text(element) === heading
+                || text(element).startsWith(heading + " "))) return false;
             if (requestedRoute === "diagnostics"
               && !document.querySelector('[role="dialog"],[role="alertdialog"]')) return false;
             if (requestedRoute === "reports" && !Array.from(document.querySelectorAll("button"))

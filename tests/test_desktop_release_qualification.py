@@ -309,6 +309,13 @@ def test_matrix_observer_distinguishes_global_and_route_local_loading() -> None:
     assert 'fail("native-observation-rejected")' in observer
 
 
+def test_matrix_observer_accepts_a_route_prefixed_safe_state_heading_for_readiness() -> None:
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    observer = source[source.index("fn qualification_observer_script") :]
+    assert 'text(element).startsWith(heading + " ")' in observer
+    assert '"retirement": "Retirement"' in observer
+
+
 def test_matrix_observer_waits_for_installed_runtime_before_requesting_a_route() -> None:
     source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
     observer = source[source.index("fn qualification_observer_script") :]
