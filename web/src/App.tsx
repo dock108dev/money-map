@@ -478,9 +478,14 @@ export default function App() {
 
   if (desktopMode && qualificationState === "recoverable_failure") {
     return (
-      <main className="fatal-state" role="alert">
+      <main
+        className="fatal-state"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="qualification-recovery-heading"
+      >
         <span>Local connection issue</span>
-        <h1>Money Map could not load.</h1>
+        <h1 id="qualification-recovery-heading">Money Map could not load.</h1>
         <p>The last accepted local data remains unchanged.</p>
         <button className="primary-button" onClick={() => void refresh()}>
           Try again

@@ -874,7 +874,7 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
             || window.location.hash === expectedHashes[requestedRoute];
           const routeObservable = () => {{
             if (requestedState === "recoverable_failure" && {sequence} === 1) {{
-              return Array.from(document.querySelectorAll('[role="alert"] h1'))
+              return Array.from(document.querySelectorAll('[role="alert"] h1,[role="alertdialog"] h1'))
                 .some((element) => text(element) === "Money Map could not load.");
             }}
             const heading = expectedHeadings[requestedRoute];

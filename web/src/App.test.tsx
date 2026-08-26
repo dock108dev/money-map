@@ -258,7 +258,8 @@ describe("application states", () => {
 
     render(<App />);
 
-    const alert = await screen.findByRole("alert");
+    const alert = await screen.findByRole("alertdialog", { name: "Money Map could not load." });
+    expect(alert).toHaveAttribute("aria-modal", "true");
     expect(within(alert).getByRole("heading", { name: "Money Map could not load." })).toBeVisible();
     expect(within(alert).getByRole("button", { name: "Try again" })).toBeEnabled();
     expect(alert).not.toHaveTextContent("$25,600.00");
