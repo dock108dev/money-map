@@ -73,6 +73,20 @@ def test_cash_flow_seed_aggregates_are_independently_exact(
     assert money_out == Decimal(expected_out)
 
 
+def test_large_history_respects_its_sealed_date_boundaries(tmp_path: Path) -> None:
+    database = tmp_path / "large_history" / "paycheck-map.sqlite3"
+    materialize_release_state(database, "large_history")
+    with sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True) as connection:
+        transaction_bounds = connection.execute(
+            "SELECT MIN(posted_date), MAX(posted_date) FROM account_transactions"
+        ).fetchone()
+        latest_snapshot = connection.execute(
+            "SELECT MAX(snapshot_date) FROM balance_snapshots"
+        ).fetchone()
+    assert transaction_bounds == ("2024-01-01", "2026-08-10")
+    assert latest_snapshot == ("2026-08-10",)
+
+
 def test_materializer_has_no_candidate_observation_or_expected_update_mode() -> None:
     source = Path(__file__).with_name("release_state_materializer.py").read_text(encoding="utf-8")
     assert "candidate_output" not in source

@@ -285,9 +285,11 @@ type ActivityFilter = "all" | "in" | "out" | "transfer" | "investment";
 export function ActivityView({
   data,
   period = null,
+  showOlder = false,
 }: {
   data: AccountsDashboard;
   period?: { startDate: string; endDate: string } | null;
+  showOlder?: boolean;
 }) {
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const periodRows = period
@@ -319,7 +321,7 @@ export function ActivityView({
         ))}
       </div>
       <section className="panel compact-panel">
-        <ActivityRows rows={rows} />
+        <ActivityRows rows={showOlder ? rows : rows.slice(0, 5)} />
       </section>
     </div>
   );

@@ -128,6 +128,7 @@ export default function App() {
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [activityPeriod, setActivityPeriod] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [showOlderEvidence, setShowOlderEvidence] = useState(false);
   const autoRefreshStarted = useRef(false);
   const activeNavButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -642,6 +643,20 @@ export default function App() {
             Not current. Last evidence Jun 30, 2026.
           </div>
         )}
+        {data.accounts.activity.length > 5 && !showOlderEvidence && (
+          <div className="notice" role="status">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setShowOlderEvidence(true);
+                navigateTo("activity");
+              }}
+            >
+              Show older evidence
+            </button>
+          </div>
+        )}
         {!hasImportedFinancialEvidence && (
           <div className="notice empty-data-notice" role="status">
             No imported account evidence is available yet. Use Add account to begin.
@@ -683,7 +698,13 @@ export default function App() {
           )}
           {view === "accounts" && <AccountsView data={data.accounts} />}
           {view === "income" && <IncomeView data={data.payroll} />}
-          {view === "activity" && <ActivityView data={data.accounts} period={activityPeriod} />}
+          {view === "activity" && (
+            <ActivityView
+              data={data.accounts}
+              period={activityPeriod}
+              showOlder={showOlderEvidence}
+            />
+          )}
           {view === "wealth" && <WealthView data={data.wealth} />}
           {view === "retirement" && (
             <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Retirement…</p></div>}>

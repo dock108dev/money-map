@@ -263,6 +263,34 @@ describe("application states", () => {
     expect(status).toHaveAttribute("role", "status");
   });
 
+  it("keeps large activity history progressive until older evidence is requested", async () => {
+    installReadyDesktop();
+    const largeAccounts = {
+      ...observedAccounts,
+      activity: Array.from({ length: 6 }, (_, index) => ({
+        id: index + 1,
+        account_id: 1,
+        account: "Invented Checking",
+        institution: "Invented Bank",
+        account_category: "cash",
+        date: `2026-08-0${index + 1}`,
+        description: `Invented activity ${index + 1}`,
+        role: "external_inflow",
+        direction: "in",
+        amount: "1.00",
+        matched_transfer: false,
+        source: "synthetic",
+      })),
+    };
+    vi.stubGlobal("fetch", withReadyDataHome(workingFetch(false, 1, { accountData: largeAccounts })));
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Show older evidence" }));
+    expect(await screen.findByRole("heading", { name: "Activity" })).toBeVisible();
+    expect(screen.getByText("Invented activity 6")).toBeVisible();
+  });
+
   it("renders the one-shot installed recovery state without stale financial success", async () => {
     installReadyDesktop();
     if (window.__MONEY_MAP_DESKTOP__) {

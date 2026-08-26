@@ -161,6 +161,7 @@ def _seed_complete(database: Path, *, stale: bool) -> None:
 
 
 def _seed_large(database: Path) -> None:
+    history_end = date(2026, 8, 10)
     with _session(database) as session:
         bank = Institution(canonical_name="Invented Large History Bank", kind="bank")
         brokerage = Institution(
@@ -226,12 +227,15 @@ def _seed_large(database: Path) -> None:
                 else:
                     amount, role = "-300.00", "external_outflow"
                 day = min(row_index + 1, calendar.monthrange(year, month)[1])
+                posted_date = min(date(year, month, day), history_end)
                 session.add(
                     _transaction(
-                        accounts[0], artifact, date(year, month, day), amount, role, row_index + 1
+                        accounts[0], artifact, posted_date, amount, role, row_index + 1
                     )
                 )
-            snapshot_date = date(year, month, calendar.monthrange(year, month)[1])
+            snapshot_date = min(
+                date(year, month, calendar.monthrange(year, month)[1]), history_end
+            )
             final = month_index == 31
             snapshot_amounts = (
                 ("16000.00", "16000.00", "92000.00")
