@@ -622,6 +622,35 @@ describe("application states", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
   });
 
+  it("settles Overview within the native observer field and read-only request contract", async () => {
+    installReadyDesktop();
+    const fetch = withReadyDataHome(workingFetch(false, 2, { accountData: observedAccounts }));
+    vi.stubGlobal("fetch", fetch);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Overview" }));
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeVisible();
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: "Loading Overview" })).not.toBeInTheDocument();
+    });
+
+    const text = (element: Element) => (element.textContent ?? "").replace(/\s+/g, " ").trim();
+    const observedFields = Array.from(
+      document.querySelectorAll(
+        'h1,h2,[role="status"],[role="alert"],[role="alertdialog"],button,main p,main small,main dt,main dd,main strong,.simple-empty',
+      ),
+    ).map(text).filter(Boolean);
+    expect(window.location.hash).toBe("#view=overview");
+    expect(observedFields.every((value) => value.length <= 240)).toBe(true);
+    expect(observedFields.some((value) => /Traceback|Exception|127\.0\.0\.1|\\/.test(value))).toBe(false);
+    expect(observedFields.some((value) => value.split("/").some((part) => part === "Users" || part === "private"))).toBe(false);
+
+    const overviewRequests = fetch.mock.calls
+      .map(([input, init]) => ({ endpoint: String(input).split("?", 1)[0], method: init?.method ?? "GET" }))
+      .filter(({ endpoint }) => ["/api/overview", "/api/accounts", "/api/timeline"].includes(endpoint));
+    expect(overviewRequests.length).toBeGreaterThan(0);
+    expect(overviewRequests.every(({ method }) => method === "GET")).toBe(true);
+  });
+
   it("keeps Overview periods inclusive, read-only, route-retaining, and independent of Cash Flow", async () => {
     const periodOverview = {
       ...overview,

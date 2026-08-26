@@ -695,7 +695,7 @@ fn desktop_qualification_observe(
         native_invocation_accepted: true,
         timeout_classification: false,
     };
-    if !qualification.valid_matrix_observation(&observation, &[]) {
+    if !qualification.valid_matrix_ui_observation(&observation) {
         let _ = qualification.write_matrix_failure(&native_failure(
             "native-validation-rejected",
             "pending-observed",

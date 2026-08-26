@@ -715,6 +715,30 @@ impl QualificationContract {
         ui: &MatrixUiObservation,
         request_inventory: &[MatrixRequestObservation],
     ) -> bool {
+        if !self.valid_matrix_ui_observation(ui) {
+            return false;
+        }
+        let Some((_, route)) = self.matrix_plan() else {
+            return false;
+        };
+        let inventory_is_bounded = request_inventory.iter().all(|item| {
+            item.count > 0
+                && matches!(
+                    item.method.as_str(),
+                    "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+                )
+                && item.endpoint.starts_with("/api/")
+                && !item.endpoint.contains('?')
+                && item.endpoint.len() <= 256
+                && item.endpoint.is_ascii()
+        });
+        inventory_is_bounded
+            && (route != "overview"
+                || (!request_inventory.is_empty()
+                    && request_inventory.iter().all(|item| item.method == "GET")))
+    }
+
+    pub fn valid_matrix_ui_observation(&self, ui: &MatrixUiObservation) -> bool {
         let Some((state, route)) = self.matrix_plan() else {
             return false;
         };
@@ -754,17 +778,6 @@ impl QualificationContract {
             && hash_matches
             && loading_phase_matches
             && safe_matrix_observation(ui)
-            && request_inventory.iter().all(|item| {
-                item.count > 0
-                    && matches!(
-                        item.method.as_str(),
-                        "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
-                    )
-                    && item.endpoint.starts_with("/api/")
-                    && !item.endpoint.contains('?')
-                    && item.endpoint.len() <= 256
-                    && item.endpoint.is_ascii()
-            })
     }
 
     pub fn write_matrix_failure(&self, failure: &MatrixObserverFailure) -> Result<(), String> {
@@ -1388,6 +1401,125 @@ mod tests {
         let mut unknown = overview;
         unknown.matrix_route = Some("overview-unknown".into());
         assert!(unknown.validate(Some(campaign.path())).is_err());
+    }
+
+    #[test]
+    fn loading_overview_accepts_only_bounded_exact_read_only_observations() {
+        let (campaign, mut contract) = loading_contract();
+        contract.matrix_route = Some("overview".into());
+        contract.validate(Some(campaign.path())).unwrap();
+        let inventory = vec![
+            MatrixRequestObservation {
+                method: "GET".into(),
+                endpoint: "/api/accounts".into(),
+                count: 2,
+            },
+            MatrixRequestObservation {
+                method: "GET".into(),
+                endpoint: "/api/overview".into(),
+                count: 2,
+            },
+            MatrixRequestObservation {
+                method: "GET".into(),
+                endpoint: "/api/timeline".into(),
+                count: 1,
+            },
+        ];
+        let pending = MatrixUiObservation {
+            sequence: 1,
+            phase: "pending".into(),
+            route: "overview".into(),
+            location_hash: "#view=overview".into(),
+            headings: vec!["Loading accounts…".into()],
+            statuses: vec![],
+            alerts: vec![],
+            buttons: vec![],
+            disabled_buttons: vec![],
+            messages: vec![],
+            loading_visible: true,
+            loading_busy: true,
+            loading_live: "polite".into(),
+            dialog_count: 0,
+            progress_count: 0,
+            unsafe_console_errors: 0,
+        };
+        assert!(contract.valid_matrix_ui_observation(&pending));
+        assert!(contract.valid_matrix_observation(&pending, &inventory));
+
+        let settled = MatrixUiObservation {
+            sequence: 1,
+            phase: "settled".into(),
+            route: "overview".into(),
+            location_hash: "#view=overview".into(),
+            headings: vec!["Overview".into()],
+            statuses: vec![],
+            alerts: vec![],
+            buttons: vec!["Print evidence".into()],
+            disabled_buttons: vec![],
+            messages: vec!["Current value and payroll contributions are known.".into()],
+            loading_visible: false,
+            loading_busy: false,
+            loading_live: String::new(),
+            dialog_count: 0,
+            progress_count: 0,
+            unsafe_console_errors: 0,
+        };
+        assert!(contract.valid_matrix_ui_observation(&settled));
+        assert!(contract.valid_matrix_observation(&settled, &inventory));
+        contract
+            .write_matrix_result(&settled, &[], &inventory)
+            .unwrap();
+
+        for rejected in [
+            MatrixUiObservation {
+                sequence: 3,
+                ..settled.clone()
+            },
+            MatrixUiObservation {
+                location_hash: "#view=accounts".into(),
+                ..settled.clone()
+            },
+            MatrixUiObservation {
+                route: "accounts".into(),
+                ..settled.clone()
+            },
+            MatrixUiObservation {
+                messages: vec!["x".repeat(241)],
+                ..settled.clone()
+            },
+            MatrixUiObservation {
+                messages: vec!["/private/tmp/forbidden".into()],
+                ..settled.clone()
+            },
+        ] {
+            assert!(!contract.valid_matrix_ui_observation(&rejected));
+        }
+
+        assert!(!contract.valid_matrix_observation(&settled, &[]));
+        for rejected in [
+            MatrixRequestObservation {
+                method: "POST".into(),
+                endpoint: "/api/overview".into(),
+                count: 1,
+            },
+            MatrixRequestObservation {
+                method: "GET".into(),
+                endpoint: "/api/overview?identifier=unsafe".into(),
+                count: 1,
+            },
+            MatrixRequestObservation {
+                method: "GET".into(),
+                endpoint: format!("/api/{}", "x".repeat(252)),
+                count: 1,
+            },
+            MatrixRequestObservation {
+                method: "GET".into(),
+                endpoint: "/api/overview".into(),
+                count: 0,
+            },
+        ] {
+            assert!(!contract.valid_matrix_observation(&settled, &[rejected]));
+        }
     }
 
     fn loading_contract() -> (tempfile::TempDir, QualificationContract) {

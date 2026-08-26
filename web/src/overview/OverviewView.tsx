@@ -228,8 +228,8 @@ function FidelityPeriodSnapshot({
       <div className="fidelity-period-note">
         <p>
           Current value and payroll contributions are known. Performance stays in tracking until
-          there is a longer, unambiguous opening-to-closing value interval; opening value matters,
-          so current value minus contributions would not be a valid return.
+          there is an unambiguous opening-to-closing value interval; opening value matters, so
+          current value minus contributions would not be a valid return.
         </p>
         <div>
           <span>Other investment deposits <strong>{currencyExact(overview.investments.other_contributions)}</strong></span>
