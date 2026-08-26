@@ -260,6 +260,16 @@ describe("Goal selection and editing", () => {
     expect(fetch.mock.calls.some(([input]) =>
       String(input) === "/api/v2/goals/check-ins/backfill",
     )).toBe(false);
+    expect(screen.queryByText(/Observed source evidence/)).not.toBeInTheDocument();
+  });
+
+  it("labels observed financial evidence without inventing a goal", async () => {
+    const fetch = goalsFetch({ primary: noPrimaryState, candidates: noCandidatesState });
+    vi.stubGlobal("fetch", fetch);
+    render(<GoalsView reloadVersion={0} hasObservedSourceEvidence />);
+    expect(await screen.findByRole("heading", { name: "No goal is ready to select." })).toBeInTheDocument();
+    expect(screen.getByText("Observed source evidence · no accepted goal program.")).toBeInTheDocument();
+    expect(writeCalls(fetch)).toEqual([]);
   });
 
   it("selects a candidate with its edit token and reloads the complete goal surface", async () => {

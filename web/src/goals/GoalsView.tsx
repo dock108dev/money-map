@@ -45,6 +45,7 @@ type DetailErrors = Partial<Record<DetailErrorKey, string>>;
 
 interface GoalsViewProps {
   reloadVersion: number;
+  hasObservedSourceEvidence?: boolean;
 }
 
 interface EditDraft {
@@ -441,7 +442,10 @@ function PositionDetails({ position }: { position: GoalPosition | null }) {
   );
 }
 
-export default function GoalsView({ reloadVersion }: GoalsViewProps) {
+export default function GoalsView({
+  reloadVersion,
+  hasObservedSourceEvidence = false,
+}: GoalsViewProps) {
   const reducedMotion = usePrefersReducedMotion();
   const [primaryState, setPrimaryState] = useState<PrimaryGoalState | null>(null);
   const [positionState, setPositionState] = useState<GoalPositionState | null>(null);
@@ -727,6 +731,9 @@ export default function GoalsView({ reloadVersion }: GoalsViewProps) {
           <section className="goal-empty panel" aria-labelledby="goal-empty-title">
             <span className="empty-icon" aria-hidden="true">◎</span>
             <h2 id="goal-empty-title">No goal is ready to select.</h2>
+            {hasObservedSourceEvidence && (
+              <p className="goal-observation">Observed source evidence · no accepted goal program.</p>
+            )}
             <p>Goals will stay here when an accepted goal program becomes available.</p>
           </section>
         )}

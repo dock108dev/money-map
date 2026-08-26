@@ -716,7 +716,10 @@ export default function App() {
           )}
           {view === "goals" && (
             <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Goals…</p></div>}>
-              <GoalsView reloadVersion={dataReloadVersion} />
+              <GoalsView
+                reloadVersion={dataReloadVersion}
+                hasObservedSourceEvidence={hasImportedFinancialEvidence}
+              />
             </Suspense>
           )}
           {view === "overview" && (
