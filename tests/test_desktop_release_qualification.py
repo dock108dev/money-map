@@ -326,7 +326,7 @@ def test_matrix_observer_prioritizes_active_dialog_copy_within_the_privacy_bound
     assert "[...values(prioritySelector, limit), ...values(selector, limit)]" in observer
     assert "combined.indexOf(value) === index" in observer
     assert "messages: prioritizedValues(" in observer
-    assert "[role=\"dialog\"] p" in observer
+    assert '[role="dialog"] p' in observer
     assert observer.index("messages: prioritizedValues(") < observer.index("64\n              ),")
 
 
