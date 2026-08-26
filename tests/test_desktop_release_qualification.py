@@ -306,6 +306,18 @@ def test_matrix_observer_distinguishes_global_and_route_local_loading() -> None:
     assert 'fail("native-observation-rejected")' in observer
 
 
+def test_matrix_observer_waits_for_installed_runtime_before_requesting_a_route() -> None:
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    observer = source[source.index("fn qualification_observer_script") :]
+    readiness_wait = (
+        "if (!boundedLoading && !routeRequested && (global || routeLocalLoading()))"
+    )
+    assert readiness_wait in observer
+    assert observer.index(readiness_wait) < observer.index("const button = routeButton();")
+    assert 'stage = "awaiting-route";' in observer
+    assert 'fail("route-control-unavailable")' in observer
+
+
 def test_global_loading_marker_is_exclusive_to_the_sealed_app_gate() -> None:
     source = (PROJECT_ROOT / "web/src/App.tsx").read_text()
     marker = 'data-qualification-loading="global-dashboard"'

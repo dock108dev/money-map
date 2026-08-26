@@ -893,6 +893,10 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
               stage = "awaiting-global-release";
               return;
             }}
+            if (!boundedLoading && !routeRequested && (global || routeLocalLoading())) {{
+              stage = "awaiting-route";
+              return;
+            }}
             if (!routeRequested) {{
               const button = routeButton();
               if (button) button.click();
