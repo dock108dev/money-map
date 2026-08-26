@@ -18,7 +18,8 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Final, Literal, cast
 
-from sqlalchemy import Select, and_, or_, select, update
+from sqlalchemy import Select, String, and_, or_, select, update
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -952,11 +953,15 @@ def edit_goal(
     provenance_origin: str = "v2_owner_edit",
     provenance_source_ref: str | None = None,
 ) -> GoalProgramView:
-    program = session.scalar(
-        select(GoalProgram).where(GoalProgram.public_key == goal_program_id).limit(1)
-    )
-    if program is None:
+    stored_updated_column = sql_cast(GoalProgram.updated_at, String).label("stored_updated_at")
+    stored = session.execute(
+        select(GoalProgram, stored_updated_column)
+        .where(GoalProgram.public_key == goal_program_id)
+        .limit(1)
+    ).one_or_none()
+    if stored is None:
         raise UnknownGoalError(f"Unknown goal program: {goal_program_id}")
+    program, stored_updated_at = stored
     if request.expected_edit_token != program_edit_token(program):
         raise StaleGoalWriteError("Goal configuration changed after this edit was loaded")
 
@@ -1027,7 +1032,7 @@ def edit_goal(
         update(GoalProgram)
         .where(
             GoalProgram.id == program.id,
-            GoalProgram.updated_at == program.updated_at,
+            sql_cast(GoalProgram.updated_at, String) == stored_updated_at,
         )
         .values(
             **next_values,

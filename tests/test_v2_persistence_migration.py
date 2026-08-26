@@ -11,8 +11,10 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from alembic import command
+from paycheck_map.goal_service import edit_goal, program_edit_token
 from paycheck_map.logical_manifest import build_logical_manifest, logical_tables
 from paycheck_map.models import GoalProgram
+from paycheck_map.v2_contracts import GoalEditRequest
 
 from .v2_migration_support import (
     V2_TABLES,
@@ -151,6 +153,32 @@ def test_empty_database_upgrade_downgrade_reupgrade(tmp_path: Path) -> None:
     command.upgrade(config, "head")
     assert stable_v2_manifest(database) == first_v2
     assert_sqlite_health(database)
+
+
+def test_goal_cas_accepts_exact_token_for_migrated_sqlite_timestamp(tmp_path: Path) -> None:
+    state = next(state for state in STATES if state["id"] == "one_enabled_goal_with_floor")
+    database = tmp_path / "migrated-goal-edit.sqlite3"
+    _upgrade_to_v1(database, state)
+    command.upgrade(migration_config(database), "head")
+    engine = create_engine(f"sqlite:///{database}")
+    try:
+        with Session(engine, expire_on_commit=False) as session:
+            program = session.scalar(select(GoalProgram).where(GoalProgram.is_primary.is_(True)))
+            assert program is not None
+            updated = edit_goal(
+                session,
+                goal_program_id=program.public_key,
+                request=GoalEditRequest.model_validate(
+                    {
+                        "expected_edit_token": program_edit_token(program),
+                        "target_amount": "15555.00",
+                    }
+                ),
+            )
+            session.commit()
+            assert updated.target_amount.amount == Decimal("15555.00")
+    finally:
+        engine.dispose()
 
 
 def test_profile_with_only_disabled_goal_creates_no_program(tmp_path: Path) -> None:
