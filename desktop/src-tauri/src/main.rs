@@ -686,6 +686,10 @@ fn matrix_response_class(status: u16) -> String {
     .to_string()
 }
 
+fn controlled_unavailable_status_applies(state: &str, route: &str) -> bool {
+    state == "unavailable" && !matches!(route, "add-account" | "data-home" | "diagnostics")
+}
+
 #[tauri::command]
 fn desktop_qualification_observe(
     window: tauri::WebviewWindow,
@@ -721,7 +725,7 @@ fn desktop_qualification_observe(
         ));
         return Err("Synthetic qualification matrix observation was rejected.".to_string());
     }
-    let api = if matrix_state == "unavailable" {
+    let api = if controlled_unavailable_status_applies(matrix_state, route) {
         vec![MatrixApiObservation {
             endpoint_class: "controlled-unavailable-state",
             status: 409,
@@ -1257,9 +1261,24 @@ fn main() {
 #[cfg(test)]
 mod menu_tests {
     use super::{
-        approved_external_link, diagnostic_backup_verification, internal_navigation_allowed,
-        menu_action_script, MENU_ACTION_IDS, OPERATION_MENU_IDS,
+        approved_external_link, controlled_unavailable_status_applies,
+        diagnostic_backup_verification, internal_navigation_allowed, menu_action_script,
+        MENU_ACTION_IDS, OPERATION_MENU_IDS,
     };
+
+    #[test]
+    fn controlled_unavailable_status_preserves_local_recovery_overrides() {
+        for route in ["add-account", "data-home", "diagnostics"] {
+            assert!(!controlled_unavailable_status_applies("unavailable", route));
+        }
+        for route in ["cash-flow", "goals", "reports"] {
+            assert!(controlled_unavailable_status_applies("unavailable", route));
+        }
+        assert!(!controlled_unavailable_status_applies(
+            "complete_current",
+            "cash-flow"
+        ));
+    }
 
     #[test]
     fn native_menu_dispatch_covers_principal_operations_and_navigation() {
