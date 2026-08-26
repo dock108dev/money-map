@@ -802,6 +802,7 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
           let finished = false;
           let inFlight = false;
           let scheduled = false;
+          let routeControlUnavailable = false;
           const text = (element) => (element?.textContent || "").replace(/\s+/g, " ").trim();
           const values = (selector, limit) => Array.from(document.querySelectorAll(selector))
             .map(text).filter(Boolean).slice(0, limit);
@@ -899,9 +900,11 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
             }}
             if (!routeRequested) {{
               const button = routeButton();
-              if (button) button.click();
-              else if (!["reports"].includes(requestedRoute)) {{
-                fail("route-control-unavailable");
+              if (button) {{
+                routeControlUnavailable = false;
+                button.click();
+              }} else if (!["reports"].includes(requestedRoute)) {{
+                routeControlUnavailable = true;
                 return;
               }}
               routeRequested = true;
@@ -927,7 +930,10 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
           }};
           const observer = new MutationObserver(schedule);
           observer.observe(document.documentElement, {{ childList: true, subtree: true, attributes: true }});
-          const deadline = window.setTimeout(() => fail("observer-timeout", true), 15_000);
+          const deadline = window.setTimeout(
+            () => fail(routeControlUnavailable ? "route-control-unavailable" : "observer-timeout", true),
+            15_000
+          );
           schedule();
         }})();"##
     ))

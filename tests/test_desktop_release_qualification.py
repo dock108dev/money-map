@@ -302,7 +302,10 @@ def test_matrix_observer_distinguishes_global_and_route_local_loading() -> None:
     assert "window.location.hash === expectedHashes[requestedRoute]" in observer
     assert 'await observe("pending")' in observer
     assert 'await observe("settled")' in observer
-    assert 'fail("observer-timeout", true)' in observer
+    assert (
+        'fail(routeControlUnavailable ? "route-control-unavailable" : "observer-timeout", true)'
+        in observer
+    )
     assert 'fail("native-observation-rejected")' in observer
 
 
@@ -313,7 +316,15 @@ def test_matrix_observer_waits_for_installed_runtime_before_requesting_a_route()
     assert readiness_wait in observer
     assert observer.index(readiness_wait) < observer.index("const button = routeButton();")
     assert 'stage = "awaiting-route";' in observer
-    assert 'fail("route-control-unavailable")' in observer
+    assert "routeControlUnavailable = true;" in observer
+    assert (
+        'fail(routeControlUnavailable ? "route-control-unavailable" : "observer-timeout", true)'
+        in observer
+    )
+    route_branch = observer[
+        observer.index("const button = routeButton();") : observer.index("routeRequested = true;")
+    ]
+    assert 'fail("route-control-unavailable")' not in route_branch
 
 
 def test_global_loading_marker_is_exclusive_to_the_sealed_app_gate() -> None:
