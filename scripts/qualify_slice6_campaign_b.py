@@ -87,6 +87,19 @@ def validate_setup_driver(expected: dict[str, Any]) -> None:
         "timeout_ms": 5000,
     }:
         raise MatrixFailure("sealed loading setup driver differs")
+    if driver.get("type") == "controlled_unavailable_api_state" and driver != {
+        "type": "controlled_unavailable_api_state",
+        "seed": "fresh-empty-0009-v1",
+        "fault": "qualification-unavailable-v1",
+    }:
+        raise MatrixFailure("sealed unavailable setup driver differs")
+    if driver.get("type") == "one_shot_recoverable_failure" and driver != {
+        "type": "one_shot_recoverable_failure",
+        "seed": "complete-current-v1",
+        "fault": "qualification-dashboard-read-once-v1",
+        "failure_count": 1,
+    }:
+        raise MatrixFailure("sealed recovery setup driver differs")
 
 
 def execute_setup_driver(database: Path, expected: dict[str, Any]) -> dict[str, Any]:
@@ -291,6 +304,7 @@ def compare_observation(
     ):
         raise MatrixFailure("installed UI sequence or console safety differs")
     pending_loading = expected["state_id"] == "loading" and phase == "pending"
+    recovered_retry = expected["state_id"] == "recoverable_failure" and sequence == 2
     if pending_loading:
         if ui.get("headings") != ["Loading accounts…"]:
             raise MatrixFailure("installed pending UI lacks the exact loading heading")
@@ -302,11 +316,13 @@ def compare_observation(
             raise MatrixFailure("installed pending UI exposed completed or mutable content")
         role_expected = None
     else:
-        if expected["state_id"] == "loading":
+        if expected["state_id"] == "loading" or recovered_retry:
             if settled_expected is None:
                 raise MatrixFailure("sealed settled loading authority is unavailable")
             role_expected = settled_expected
-            if ui.get("loading_visible") or ui.get("loading_busy"):
+            if expected["state_id"] == "loading" and (
+                ui.get("loading_visible") or ui.get("loading_busy")
+            ):
                 raise MatrixFailure("installed loading state did not settle after release")
         else:
             role_expected = expected
@@ -338,11 +354,20 @@ def compare_observation(
     ]
     if missing_copy:
         raise MatrixFailure("installed UI safe-state language differs")
+    status_authority = role_expected if recovered_retry else expected
+    assert status_authority is not None
     expected_status = [
-        int(value) for value in expected["expected_http_status"] if str(value).isdigit()
+        int(value) for value in status_authority["expected_http_status"] if str(value).isdigit()
     ]
+    if expected["state_id"] == "recoverable_failure" and sequence == 1:
+        expected_status = expected_status[:1]
     actual_status = [int(row["status"]) for row in actual["api"]]
-    if expected_status != actual_status:
+    status_matches = (
+        bool(actual_status) and all(value == expected_status[0] for value in actual_status)
+        if len(expected_status) == 1
+        else expected_status == actual_status
+    )
+    if not status_matches:
         raise MatrixFailure("installed authenticated API status sequence differs")
     inventory = actual.get("request_inventory")
     if expected["route_id"] == "overview" and (
@@ -460,7 +485,11 @@ def run_combination(
         matrix_state=state,
         matrix_route=route,
         matrix_contract_digest=expected["contract_digest_sha256"],
-        matrix_driver=expected["setup_driver"] if state == "loading" else None,
+        matrix_driver=(
+            expected["setup_driver"]
+            if state in {"loading", "unavailable", "recoverable_failure"}
+            else None
+        ),
     )
     process = subprocess.Popen(
         [str(app / "Contents/MacOS/money-map-desktop")],
@@ -548,7 +577,12 @@ def run_combination(
             loading_phases["reload_settled"] = second["ui"]
         else:
             second = wait_observation(fake_home / "matrix-observation.json", sequence=2)
-            compare_observation(expected, second, 2)
+            compare_observation(
+                expected,
+                second,
+                2,
+                settled_expected=settled_expected,
+            )
         after_reload = database_manifest(database)
         require_database_unchanged(
             before,

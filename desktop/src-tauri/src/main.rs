@@ -71,11 +71,28 @@ fn planned_qualification_hash(contract: Option<&QualificationContract>) -> Optio
 fn initialization_script(contract: Option<&QualificationContract>) -> String {
     let planned_hash = serde_json::to_string(&planned_qualification_hash(contract))
         .unwrap_or_else(|_| "null".to_string());
+    let qualification_state = serde_json::to_string(
+        &contract
+            .and_then(QualificationContract::matrix_plan)
+            .map(|(state, _)| state)
+            .filter(|state| matches!(*state, "unavailable" | "recoverable_failure")),
+    )
+    .unwrap_or_else(|_| "null".to_string());
     let script = r#"(() => {
+          const qualificationState = __QUALIFICATION_STATE__;
+          const recoveryKey = "money-map-qualified-recoverable-v1";
+          const activeQualificationState = qualificationState === "recoverable_failure"
+            && window.sessionStorage.getItem(recoveryKey) === "consumed"
+            ? null
+            : qualificationState;
+          if (activeQualificationState === "recoverable_failure") {
+            window.sessionStorage.setItem(recoveryKey, "consumed");
+          }
           const nativeFetch = window.fetch.bind(window);
           const invoke = window.__TAURI_INTERNALS__.invoke;
           Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", { value: Object.freeze({
             mode: true,
+            qualificationState: activeQualificationState,
             reload: () => invoke("desktop_reload"),
             print: () => invoke("desktop_print"),
             runtimeStatus: () => invoke("desktop_runtime_status"),
@@ -117,7 +134,9 @@ fn initialization_script(contract: Option<&QualificationContract>) -> String {
             return new Response(result.body, { status: result.status, headers });
           };
         })();"#;
-    script.replacen(
+    script
+        .replacen("__QUALIFICATION_STATE__", &qualification_state, 1)
+        .replacen(
         "(() => {",
         &format!(
             "(() => {{ const plannedHash = {planned_hash}; if (plannedHash) window.history.replaceState(null, \"\", plannedHash);"
@@ -679,7 +698,7 @@ fn desktop_qualification_observe(
     let qualification = state
         .qualification()
         .ok_or_else(|| "Synthetic qualification matrix observation was rejected.".to_string())?;
-    let (_, route) = qualification
+    let (matrix_state, route) = qualification
         .matrix_plan()
         .ok_or_else(|| "Synthetic qualification matrix observation was rejected.".to_string())?;
     let native_failure = |classification: &str, stage: &str| MatrixObserverFailure {
@@ -702,37 +721,52 @@ fn desktop_qualification_observe(
         ));
         return Err("Synthetic qualification matrix observation was rejected.".to_string());
     }
-    let (port, session) = state.target().map_err(|_| {
-        let _ = qualification.write_matrix_failure(&native_failure(
-            "native-api-probe-failed",
-            "native-api-probe",
-        ));
-        "Synthetic qualification matrix API probe failed safely.".to_string()
-    })?;
-    let mut api = Vec::new();
-    for (endpoint_class, path) in matrix_api_endpoints(route) {
-        let response = forward(
-            port,
-            &session,
-            DesktopRequest {
-                path: (*path).to_string(),
-                method: "GET".to_string(),
-                body: None,
-            },
-        )
-        .map_err(|_| {
+    let api = if matrix_state == "unavailable" {
+        vec![MatrixApiObservation {
+            endpoint_class: "controlled-unavailable-state",
+            status: 409,
+            response_class: "unavailable".to_string(),
+        }]
+    } else if matrix_state == "recoverable_failure" && observation.sequence == 1 {
+        vec![MatrixApiObservation {
+            endpoint_class: "one-shot-recoverable-state",
+            status: 500,
+            response_class: "recoverable-failure".to_string(),
+        }]
+    } else {
+        let (port, session) = state.target().map_err(|_| {
             let _ = qualification.write_matrix_failure(&native_failure(
                 "native-api-probe-failed",
                 "native-api-probe",
             ));
             "Synthetic qualification matrix API probe failed safely.".to_string()
         })?;
-        api.push(MatrixApiObservation {
-            endpoint_class,
-            status: response.status,
-            response_class: matrix_response_class(response.status),
-        });
-    }
+        let mut observations = Vec::new();
+        for (endpoint_class, path) in matrix_api_endpoints(route) {
+            let response = forward(
+                port,
+                &session,
+                DesktopRequest {
+                    path: (*path).to_string(),
+                    method: "GET".to_string(),
+                    body: None,
+                },
+            )
+            .map_err(|_| {
+                let _ = qualification.write_matrix_failure(&native_failure(
+                    "native-api-probe-failed",
+                    "native-api-probe",
+                ));
+                "Synthetic qualification matrix API probe failed safely.".to_string()
+            })?;
+            observations.push(MatrixApiObservation {
+                endpoint_class,
+                status: response.status,
+                response_class: matrix_response_class(response.status),
+            });
+        }
+        observations
+    };
     let request_inventory = state.qualification_request_inventory();
     if !qualification.valid_matrix_observation(&observation, &request_inventory) {
         let _ = qualification.write_matrix_failure(&native_failure(
@@ -767,10 +801,12 @@ fn desktop_qualification_observer_failure(
 
 fn qualification_observer_script(contract: &QualificationContract, sequence: u8) -> Option<String> {
     let (state, route) = contract.matrix_plan()?;
+    let state_json = serde_json::to_string(state).ok()?;
     let route_json = serde_json::to_string(route).ok()?;
     let loading = state == "loading";
     Some(format!(
         r##"(() => {{
+          const requestedState = {state_json};
           const requestedRoute = {route_json};
           const boundedLoading = {loading};
           let consoleErrors = 0;
@@ -828,6 +864,10 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
           const hashMatched = () => !expectedHashes[requestedRoute]
             || window.location.hash === expectedHashes[requestedRoute];
           const routeObservable = () => {{
+            if (requestedState === "recoverable_failure" && {sequence} === 1) {{
+              return Array.from(document.querySelectorAll('[role="alert"] h1'))
+                .some((element) => text(element) === "Money Map could not load.");
+            }}
             const heading = expectedHeadings[requestedRoute];
             if (heading && !Array.from(document.querySelectorAll("h1"))
               .some((element) => text(element) === heading
@@ -909,6 +949,11 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
             if (!boundedLoading && !routeRequested && (global || routeLocalLoading())) {{
               stage = "awaiting-route";
               return;
+            }}
+            if (requestedState === "recoverable_failure" && {sequence} === 1
+              && !routeRequested && routeObservable()) {{
+              routeRequested = true;
+              stage = "route-requested";
             }}
             if (!routeRequested) {{
               const button = routeButton();

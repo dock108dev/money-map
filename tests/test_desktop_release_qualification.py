@@ -330,6 +330,18 @@ def test_matrix_observer_prioritizes_active_dialog_copy_within_the_privacy_bound
     assert observer.index("messages: prioritizedValues(") < observer.index("64\n              ),")
 
 
+def test_matrix_observer_accepts_the_first_one_shot_recovery_surface_before_route_controls() -> (
+    None
+):
+    source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
+    observer = source[source.index("fn qualification_observer_script") :]
+    assert 'requestedState === "recoverable_failure"' in observer
+    assert 'text(element) === "Money Map could not load."' in observer
+    recovery = observer.index('requestedState === "recoverable_failure"')
+    route_button = observer.index("const button = routeButton();")
+    assert recovery < route_button
+
+
 def test_matrix_observer_waits_for_installed_runtime_before_requesting_a_route() -> None:
     source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
     observer = source[source.index("fn qualification_observer_script") :]

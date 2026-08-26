@@ -123,6 +123,82 @@ def test_pending_loading_does_not_require_the_future_route_dialog() -> None:
         )
 
 
+def test_controlled_unavailable_state_accepts_one_bounded_status_for_the_route() -> None:
+    campaign = load_campaign()
+    expected = {
+        **loading_expected(),
+        "combination_id": "unavailable::cash-flow",
+        "state_id": "unavailable",
+        "expected_safe_state_language": [
+            "unavailable",
+            "No imported evidence supports this result.",
+        ],
+        "expected_http_status": ["409"],
+    }
+    actual = {
+        **pending_observation(),
+        "state": "unavailable",
+        "ui": {
+            **pending_observation()["ui"],
+            "phase": "settled",
+            "headings": ["Cash Flow"],
+            "statuses": ["Unavailable. No imported evidence supports this result."],
+            "loading_visible": False,
+            "loading_busy": False,
+            "loading_live": "",
+        },
+        "api": [{"status": 409}],
+    }
+    campaign.compare_observation(expected, actual, 1)
+
+
+def test_one_shot_recovery_uses_failure_then_complete_current_authority() -> None:
+    campaign = load_campaign()
+    expected = {
+        **loading_expected(),
+        "combination_id": "recoverable_failure::cash-flow",
+        "state_id": "recoverable_failure",
+        "expected_accessible_role": "alert",
+        "expected_safe_state_language": ["Money Map could not load.", "Try again"],
+        "expected_http_status": ["500", "200"],
+    }
+    first = {
+        **pending_observation(),
+        "state": "recoverable_failure",
+        "ui": {
+            **pending_observation()["ui"],
+            "phase": "settled",
+            "headings": ["Money Map could not load."],
+            "alerts": ["Money Map could not load. Try again"],
+            "loading_visible": False,
+            "loading_busy": False,
+            "loading_live": "",
+        },
+        "api": [{"status": 500}],
+    }
+    campaign.compare_observation(expected, first, 1)
+
+    settled_expected = {
+        **expected,
+        "state_id": "complete_current",
+        "expected_accessible_role": "heading",
+        "expected_safe_state_language": ["Cash Flow", "Evidence"],
+        "expected_http_status": ["200", "200"],
+    }
+    second = {
+        **first,
+        "ui": {
+            **first["ui"],
+            "sequence": 2,
+            "headings": ["Cash Flow"],
+            "alerts": [],
+            "messages": ["Evidence"],
+        },
+        "api": [{"status": 200}, {"status": 200}],
+    }
+    campaign.compare_observation(expected, second, 2, settled_expected=settled_expected)
+
+
 def test_overview_observation_requires_nonempty_get_only_inventory() -> None:
     campaign = load_campaign()
     expected = loading_expected()
@@ -149,6 +225,33 @@ def test_loading_driver_rejects_unsealed_or_non_loading_gate_plans() -> None:
     expected["setup_driver"] = {**expected["setup_driver"], "timeout_ms": 5001}
     with pytest.raises(campaign.MatrixFailure, match="driver differs"):
         campaign.validate_setup_driver(expected)
+
+
+def test_transient_failure_drivers_are_exact_and_not_candidate_selected() -> None:
+    campaign = load_campaign()
+    unavailable = {
+        "setup_driver": {
+            "type": "controlled_unavailable_api_state",
+            "seed": "fresh-empty-0009-v1",
+            "fault": "qualification-unavailable-v1",
+        }
+    }
+    recovery = {
+        "setup_driver": {
+            "type": "one_shot_recoverable_failure",
+            "seed": "complete-current-v1",
+            "fault": "qualification-dashboard-read-once-v1",
+            "failure_count": 1,
+        }
+    }
+    campaign.validate_setup_driver(unavailable)
+    campaign.validate_setup_driver(recovery)
+    unavailable["setup_driver"]["fault"] = "candidate-selected"
+    recovery["setup_driver"]["failure_count"] = 2
+    with pytest.raises(campaign.MatrixFailure, match="unavailable setup driver"):
+        campaign.validate_setup_driver(unavailable)
+    with pytest.raises(campaign.MatrixFailure, match="recovery setup driver"):
+        campaign.validate_setup_driver(recovery)
 
 
 def test_harness_release_is_private_bounded_and_contains_no_runtime_secret() -> None:

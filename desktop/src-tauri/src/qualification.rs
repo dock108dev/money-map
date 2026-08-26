@@ -29,9 +29,16 @@ pub struct MatrixDriverPlan {
     #[serde(rename = "type")]
     pub driver_type: String,
     pub seed: String,
-    pub gate: String,
-    pub release: String,
-    pub timeout_ms: u64,
+    #[serde(default)]
+    pub gate: Option<String>,
+    #[serde(default)]
+    pub release: Option<String>,
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub fault: Option<String>,
+    #[serde(default)]
+    pub failure_count: Option<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -251,11 +258,16 @@ impl QualificationResponseGate {
             .contract
             .matrix_driver
             .as_ref()
-            .map_or(5_000, |driver| driver.timeout_ms);
+            .and_then(|driver| driver.timeout_ms)
+            .unwrap_or(5_000);
         let deadline = Instant::now() + Duration::from_millis(timeout);
         let release_path = self.contract.gate_release_path();
         while Instant::now() < deadline {
             if release_path.exists() {
+                if release_path.with_extension("json.tmp").exists() {
+                    thread::sleep(Duration::from_millis(1));
+                    continue;
+                }
                 let accepted = self.consume_release(&release_path);
                 let mut state = self
                     .state
@@ -358,6 +370,7 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> Result<(), String>
         .and_then(|()| file.sync_all())
         .map_err(|_| "Synthetic qualification response gate failed safely.".to_string())?;
     drop(file);
+    verify_private_gate_file(&temporary)?;
     if fs::hard_link(&temporary, path).is_err() {
         let _ = fs::remove_file(&temporary);
         return Err("Synthetic qualification response gate replay was rejected.".to_string());
@@ -367,7 +380,7 @@ fn write_private_json(path: &Path, value: &impl Serialize) -> Result<(), String>
         let _ = fs::remove_file(&temporary);
         return Err("Synthetic qualification response gate failed safely.".to_string());
     }
-    verify_private_gate_file(path)
+    Ok(())
 }
 
 fn verify_private_gate_file(path: &Path) -> Result<(), String> {
@@ -621,11 +634,45 @@ impl QualificationContract {
                 if digest != SEALED_ORACLE_DIGEST
                     || driver.driver_type != "transient_bounded_loading_injection"
                     || driver.seed != "complete-current-v1"
-                    || driver.gate != RESPONSE_GATE_CONTRACT
-                    || driver.release != "explicit_harness_release"
-                    || driver.timeout_ms != 5_000
+                    || driver.gate.as_deref() != Some(RESPONSE_GATE_CONTRACT)
+                    || driver.release.as_deref() != Some("explicit_harness_release")
+                    || driver.timeout_ms != Some(5_000)
+                    || driver.fault.is_some()
+                    || driver.failure_count.is_some()
                 {
                     return Err("Synthetic qualification response gate was rejected.".to_string());
+                }
+            } else if state == "unavailable" {
+                let driver = self.matrix_driver.as_ref().ok_or_else(|| {
+                    "Synthetic qualification unavailable driver was rejected.".to_string()
+                })?;
+                if digest != SEALED_ORACLE_DIGEST
+                    || driver.driver_type != "controlled_unavailable_api_state"
+                    || driver.seed != "fresh-empty-0009-v1"
+                    || driver.fault.as_deref() != Some("qualification-unavailable-v1")
+                    || driver.gate.is_some()
+                    || driver.release.is_some()
+                    || driver.timeout_ms.is_some()
+                    || driver.failure_count.is_some()
+                {
+                    return Err(
+                        "Synthetic qualification unavailable driver was rejected.".to_string()
+                    );
+                }
+            } else if state == "recoverable_failure" {
+                let driver = self.matrix_driver.as_ref().ok_or_else(|| {
+                    "Synthetic qualification recovery driver was rejected.".to_string()
+                })?;
+                if digest != SEALED_ORACLE_DIGEST
+                    || driver.driver_type != "one_shot_recoverable_failure"
+                    || driver.seed != "complete-current-v1"
+                    || driver.fault.as_deref() != Some("qualification-dashboard-read-once-v1")
+                    || driver.failure_count != Some(1)
+                    || driver.gate.is_some()
+                    || driver.release.is_some()
+                    || driver.timeout_ms.is_some()
+                {
+                    return Err("Synthetic qualification recovery driver was rejected.".to_string());
                 }
             } else if self.matrix_driver.is_some() {
                 return Err("Synthetic qualification response gate was rejected.".to_string());
@@ -1532,14 +1579,56 @@ mod tests {
             matrix_driver: Some(MatrixDriverPlan {
                 driver_type: "transient_bounded_loading_injection".into(),
                 seed: "complete-current-v1".into(),
-                gate: RESPONSE_GATE_CONTRACT.into(),
-                release: "explicit_harness_release".into(),
-                timeout_ms: 5_000,
+                gate: Some(RESPONSE_GATE_CONTRACT.into()),
+                release: Some("explicit_harness_release".into()),
+                timeout_ms: Some(5_000),
+                fault: None,
+                failure_count: None,
             }),
             ..contract
         };
         contract.validate(Some(campaign.path())).unwrap();
         (campaign, contract)
+    }
+
+    #[test]
+    fn transient_matrix_drivers_are_exact_and_oracle_bound() {
+        let (campaign, contract, _attestation) = fixture();
+        let unavailable = QualificationContract {
+            matrix_state: Some("unavailable".into()),
+            matrix_route: Some("cash-flow".into()),
+            matrix_contract_digest: Some(SEALED_ORACLE_DIGEST.into()),
+            matrix_result_path: Some(campaign.path().join("matrix-observation.json")),
+            matrix_driver: Some(MatrixDriverPlan {
+                driver_type: "controlled_unavailable_api_state".into(),
+                seed: "fresh-empty-0009-v1".into(),
+                gate: None,
+                release: None,
+                timeout_ms: None,
+                fault: Some("qualification-unavailable-v1".into()),
+                failure_count: None,
+            }),
+            ..contract.clone()
+        };
+        unavailable.validate(Some(campaign.path())).unwrap();
+        let mut wrong_unavailable = unavailable.clone();
+        wrong_unavailable.matrix_driver.as_mut().unwrap().fault = Some("candidate-selected".into());
+        assert!(wrong_unavailable.validate(Some(campaign.path())).is_err());
+
+        let recovery = QualificationContract {
+            matrix_state: Some("recoverable_failure".into()),
+            matrix_driver: Some(MatrixDriverPlan {
+                driver_type: "one_shot_recoverable_failure".into(),
+                seed: "complete-current-v1".into(),
+                gate: None,
+                release: None,
+                timeout_ms: None,
+                fault: Some("qualification-dashboard-read-once-v1".into()),
+                failure_count: Some(1),
+            }),
+            ..unavailable
+        };
+        recovery.validate(Some(campaign.path())).unwrap();
     }
 
     fn gate_release(contract: &QualificationContract) -> GateRelease {
@@ -1690,9 +1779,11 @@ mod tests {
             matrix_driver: Some(MatrixDriverPlan {
                 driver_type: "transient_bounded_loading_injection".into(),
                 seed: "complete-current-v1".into(),
-                gate: RESPONSE_GATE_CONTRACT.into(),
-                release: "explicit_harness_release".into(),
-                timeout_ms: 5_000,
+                gate: Some(RESPONSE_GATE_CONTRACT.into()),
+                release: Some("explicit_harness_release".into()),
+                timeout_ms: Some(5_000),
+                fault: None,
+                failure_count: None,
             }),
             ..contract
         };

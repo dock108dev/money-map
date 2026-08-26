@@ -34,6 +34,7 @@ declare global {
   interface Window {
     __MONEY_MAP_DESKTOP__?: {
       mode: true;
+      qualificationState?: "unavailable" | "recoverable_failure" | null;
       reload(): Promise<void>;
       print(): Promise<void>;
       runtimeStatus(): Promise<DesktopRuntimeStatus>;
@@ -108,6 +109,7 @@ const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; lab
 
 export default function App() {
   const desktopMode = window.__MONEY_MAP_DESKTOP__?.mode === true;
+  const qualificationState = window.__MONEY_MAP_DESKTOP__?.qualificationState ?? null;
   const [data, setData] = useState<ApplicationData | null>(null);
   const [desktopRuntime, setDesktopRuntime] = useState<DesktopRuntimeStatus | null>(() =>
     desktopMode ? { state: "starting", generation: 0 } : null,
@@ -474,6 +476,19 @@ export default function App() {
     );
   }
 
+  if (desktopMode && qualificationState === "recoverable_failure") {
+    return (
+      <main className="fatal-state" role="alert">
+        <span>Local connection issue</span>
+        <h1>Money Map could not load.</h1>
+        <p>The last accepted local data remains unchanged.</p>
+        <button className="primary-button" onClick={() => void refresh()}>
+          Try again
+        </button>
+      </main>
+    );
+  }
+
   if (error && !data) {
     return (
       <main className="fatal-state">
@@ -607,6 +622,11 @@ export default function App() {
             )}
           </div>
         </header>
+        {qualificationState === "unavailable" && (
+          <div className="notice" role="status">
+            Unavailable. No imported evidence supports this result.
+          </div>
+        )}
         {!hasImportedFinancialEvidence && (
           <div className="notice empty-data-notice" role="status">
             No imported account evidence is available yet. Use Add account to begin.

@@ -217,6 +217,37 @@ afterEach(() => {
 });
 
 describe("application states", () => {
+  it("renders the controlled installed unavailable state as visible safe language", async () => {
+    installReadyDesktop();
+    if (window.__MONEY_MAP_DESKTOP__) {
+      window.__MONEY_MAP_DESKTOP__.qualificationState = "unavailable";
+    }
+    vi.stubGlobal("fetch", withReadyDataHome(workingFetch()));
+
+    render(<App />);
+
+    const status = await screen.findByText(
+      "Unavailable. No imported evidence supports this result.",
+    );
+    expect(status).toBeVisible();
+    expect(status).toHaveAttribute("role", "status");
+  });
+
+  it("renders the one-shot installed recovery state without stale financial success", async () => {
+    installReadyDesktop();
+    if (window.__MONEY_MAP_DESKTOP__) {
+      window.__MONEY_MAP_DESKTOP__.qualificationState = "recoverable_failure";
+    }
+    vi.stubGlobal("fetch", withReadyDataHome(workingFetch()));
+
+    render(<App />);
+
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("heading", { name: "Money Map could not load." })).toBeVisible();
+    expect(within(alert).getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(alert).not.toHaveTextContent("$25,600.00");
+  });
+
   it("restores the durable fresh-setup state before requesting financial APIs", async () => {
     Object.defineProperty(window, "__MONEY_MAP_DESKTOP__", {
       configurable: true,
