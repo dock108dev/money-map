@@ -817,7 +817,7 @@ fn qualification_observer_script(contract: &QualificationContract, sequence: u8)
           }};
           const globalLoading = () => document.querySelector(globalSelector);
           const routeLocalLoading = () => Array.from(document.querySelectorAll(
-            ".loading-state,.goals-loading,.retirement-loading,.cash-flow-busy"
+            ".loading-state,.goals-loading,.goals-view[aria-busy=\"true\"],.retirement-loading,.cash-flow-busy"
           ))
             .some((element) => !element.matches(globalSelector));
           const hashMatched = () => !expectedHashes[requestedRoute]

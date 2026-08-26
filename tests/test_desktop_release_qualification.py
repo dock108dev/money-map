@@ -294,7 +294,10 @@ def test_matrix_observer_distinguishes_global_and_route_local_loading() -> None:
     source = (PROJECT_ROOT / "desktop/src-tauri/src/main.rs").read_text()
     observer = source[source.index("fn qualification_observer_script") :]
     assert 'data-qualification-loading="global-dashboard"' in observer
-    assert '".loading-state,.goals-loading,.retirement-loading,.cash-flow-busy"' in observer
+    assert (
+        '".loading-state,.goals-loading,.goals-view[aria-busy=\\"true\\"],'
+        '.retirement-loading,.cash-flow-busy"' in observer
+    )
     assert "!element.matches(globalSelector)" in observer
     assert "new MutationObserver(schedule)" in observer
     assert "setInterval" not in observer
