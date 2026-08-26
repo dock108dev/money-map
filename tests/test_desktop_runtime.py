@@ -443,21 +443,31 @@ def test_desktop_python_boundary_rejects_method_path_size_and_redacts(
         "PAYCHECK_MAP_LOCAL_DIR",
         str(tmp_path / "money-map-runtime-auth" / "money-map-synthetic-data"),
     )
+    from paycheck_map.config import settings as runtime_settings
     from paycheck_map.desktop_bootstrap import clear_bootstrap, install_bootstrap
 
     clear_bootstrap()
     install_bootstrap("a" * 64, 43123)
+    monkeypatch.setattr(runtime_settings, "desktop_mode", True)
     import paycheck_map.desktop_app as module
 
     module = importlib.reload(module)
     transport = httpx.ASGITransport(app=module.desktop_app)
 
     async def exercise() -> None:
-        headers = {"X-Money-Map-Session": "a" * 64}
+        headers = {
+            "Host": "127.0.0.1:43123",
+            "X-Money-Map-Session": "a" * 64,
+        }
         async with httpx.AsyncClient(
             transport=transport, base_url="http://127.0.0.1:43123"
         ) as client:
-            method = await client.patch("/api/desktop/health", headers=headers)
+            accepted_patch = await client.patch("/api/unknown", headers=headers, json={})
+            assert accepted_patch.status_code == 405
+            assert accepted_patch.json() == {"detail": "Method Not Allowed"}
+            missing_content_type = await client.patch("/api/unknown", headers=headers)
+            assert missing_content_type.status_code == 415
+            method = await client.request("TRACE", "/api/desktop/health", headers=headers)
             assert method.status_code == 405
             traversal = await client.get("/api/../private", headers=headers)
             assert traversal.status_code == 400
@@ -467,7 +477,7 @@ def test_desktop_python_boundary_rejects_method_path_size_and_redacts(
                 content=b"x" * 1_048_577,
             )
             assert oversized.status_code == 413
-            for response in (method, traversal, oversized):
+            for response in (accepted_patch, missing_content_type, method, traversal, oversized):
                 assert "a" * 64 not in response.text
                 assert str(tmp_path) not in response.text
 

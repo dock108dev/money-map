@@ -65,7 +65,7 @@ pub fn validate_request(request: &DesktopRequest) -> Result<Method, String> {
         .map_err(|_| "The desktop request method was rejected.".to_string())?;
     if !matches!(
         method,
-        Method::GET | Method::POST | Method::PUT | Method::DELETE
+        Method::GET | Method::POST | Method::PUT | Method::PATCH | Method::DELETE
     ) {
         return Err("The desktop request method was rejected.".to_string());
     }
@@ -261,7 +261,13 @@ mod tests {
                 "{path}"
             );
         }
-        for method in ["PATCH", "OPTIONS", "TRACE", "CONNECT"] {
+        assert!(validate_request(&request(
+            "/api/v2/goals/goal_synthetic",
+            "PATCH",
+            Some("{}".to_string())
+        ))
+        .is_ok());
+        for method in ["OPTIONS", "TRACE", "CONNECT"] {
             assert!(validate_request(&request("/api/health", method, None)).is_err());
         }
         assert!(validate_request(&request("/api/health?period=all", "GET", None)).is_ok());

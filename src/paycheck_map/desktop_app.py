@@ -12,7 +12,7 @@ from .app import app
 from .desktop_bootstrap import active_bootstrap, matches_session
 
 _ALLOWED_ORIGINS = frozenset({"http://tauri.localhost", "tauri://localhost"})
-_ALLOWED_METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "OPTIONS"})
+_ALLOWED_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 _MAX_REQUEST_BODY = 1_048_576
 _MAX_SECURITY_HEADER = 512
 _MAX_ACTIVE_REQUESTS = 32
@@ -101,7 +101,7 @@ class DesktopSecurityMiddleware:
             .strip()
             .lower()
         )
-        if method in {"POST", "PUT", "DELETE"} and content_type != b"application/json":
+        if method in {"POST", "PUT", "PATCH", "DELETE"} and content_type != b"application/json":
             await self._reject(send, 415, "The desktop request content type was rejected.")
             return
         async with self._request_lock:
@@ -212,7 +212,7 @@ class DesktopSecurityMiddleware:
     def _cors(origin: str) -> list[tuple[bytes, bytes]]:
         return [
             (b"access-control-allow-origin", origin.encode("ascii")),
-            (b"access-control-allow-methods", b"GET,POST,PUT,DELETE,OPTIONS"),
+            (b"access-control-allow-methods", b"GET,POST,PUT,PATCH,DELETE,OPTIONS"),
             (b"access-control-allow-headers", b"Content-Type,X-Money-Map-Session"),
             (b"vary", b"Origin"),
         ]
