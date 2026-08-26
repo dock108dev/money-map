@@ -266,8 +266,8 @@ impl QualificationResponseGate {
                 } else {
                     GateStatus::Failed
                 };
-                drop(state);
                 self.remove_gate_files();
+                drop(state);
                 self.changed.notify_all();
                 return;
             }
@@ -313,8 +313,8 @@ impl QualificationResponseGate {
         state.status = GateStatus::Failed;
         state.session.clear();
         state.challenge.clear();
-        drop(state);
         self.remove_gate_files();
+        drop(state);
         self.changed.notify_all();
     }
 
@@ -1625,6 +1625,8 @@ mod tests {
             if mutation == "stale" {
                 write_private_json(&contract.gate_release_path(), &first).unwrap();
                 gate.wait_for_release().unwrap();
+                assert!(!contract.gate_challenge_path().exists());
+                assert!(!contract.gate_release_path().exists());
                 gate.arm(1, 2, &"e".repeat(64)).unwrap();
             }
             write_private_json(&contract.gate_release_path(), &first).unwrap();
