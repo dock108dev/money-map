@@ -229,13 +229,9 @@ def _seed_large(database: Path) -> None:
                 day = min(row_index + 1, calendar.monthrange(year, month)[1])
                 posted_date = min(date(year, month, day), history_end)
                 session.add(
-                    _transaction(
-                        accounts[0], artifact, posted_date, amount, role, row_index + 1
-                    )
+                    _transaction(accounts[0], artifact, posted_date, amount, role, row_index + 1)
                 )
-            snapshot_date = min(
-                date(year, month, calendar.monthrange(year, month)[1]), history_end
-            )
+            snapshot_date = min(date(year, month, calendar.monthrange(year, month)[1]), history_end)
             final = month_index == 31
             snapshot_amounts = (
                 ("16000.00", "16000.00", "92000.00")
