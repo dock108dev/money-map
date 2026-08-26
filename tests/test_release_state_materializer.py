@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from paycheck_map.cash_flow_service import build_cash_flow_period_result
+from paycheck_map.v21_contracts import CoverageCompleteness, PeriodKind
 
 from .release_state_materializer import materialize_release_state
 
@@ -101,6 +107,37 @@ def test_negative_recurring_state_materializes_its_source_summary(tmp_path: Path
     assert transactions == [("external_inflow", 4200), ("external_outflow", -4700)]
     assert balances == [(6100,), (1400,), (18000,)]
     assert payroll == [(4200,)]
+
+
+def test_missing_source_state_materializes_only_incomplete_bank_marker_and_retirement(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "missing_source_coverage" / "paycheck-map.sqlite3"
+    materialize_release_state(database, "missing_source_coverage")
+    with sqlite3.connect(f"file:{database.resolve()}?mode=ro", uri=True) as connection:
+        transactions = connection.execute(
+            "SELECT role, amount FROM account_transactions ORDER BY id"
+        ).fetchall()
+        balances = connection.execute(
+            "SELECT amount FROM balance_snapshots ORDER BY account_id"
+        ).fetchall()
+        payroll_count = connection.execute(
+            "SELECT COUNT(*) FROM payroll_schedule_entries"
+        ).fetchone()
+    assert transactions == [("interest", 0)]
+    assert balances == [(18000,)]
+    assert payroll_count == (0,)
+    with Session(create_engine(f"sqlite:///{database}")) as session:
+        result = build_cash_flow_period_result(
+            session,
+            period_kind=PeriodKind.ALL_IMPORTED_HISTORY,
+            as_of_date=datetime(2026, 8, 26, tzinfo=UTC).date(),
+            now=datetime(2026, 8, 26, tzinfo=UTC),
+        )
+    assert result.coverage.completeness is CoverageCompleteness.INCOMPLETE
+    assert result.coverage.incomplete_reasons == ("unexpected_interest_sign",)
+    assert result.totals.money_in.amount == Decimal("0.00")
+    assert result.totals.money_out.amount == Decimal("0.00")
 
 
 def test_materializer_has_no_candidate_observation_or_expected_update_mode() -> None:

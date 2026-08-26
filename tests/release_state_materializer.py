@@ -510,6 +510,24 @@ def _seed_life_tables(database: Path, tables: dict[str, list[dict[str, Any]]]) -
 
 
 def _seed_source_summary(database: Path, state_id: str, summary: dict[str, Any]) -> None:
+    if state_id == "missing_source_coverage":
+        as_of = date.fromisoformat(str(summary["as_of"]))
+        with _session(database) as session:
+            artifact, accounts = _accounts(session, state_id)
+            session.add_all(
+                [
+                    _transaction(accounts[0], artifact, as_of, "0.00", "interest", 1),
+                    BalanceSnapshot(
+                        account_id=accounts[2].id,
+                        artifact_id=artifact.id,
+                        snapshot_date=as_of,
+                        kind="current",
+                        amount=Decimal(str(summary["retirement_assets"])),
+                    ),
+                ]
+            )
+            session.commit()
+        return
     if summary.get("coverage") != "complete":
         return
     as_of = date.fromisoformat(str(summary["as_of"]))
