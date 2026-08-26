@@ -188,7 +188,7 @@ function PromotionWorkflowDialog({
   );
 }
 
-export default function LifeLabView() {
+export default function LifeLabView({ requiresProfile = false }: { requiresProfile?: boolean }) {
   const [seed, setSeed] = useState<LifeLabExperimentSeed | null>(null);
   const [result, setResult] = useState<LifeLabExperimentResult | null>(null);
   const [snapshots, setSnapshots] = useState<PlanningSnapshot[]>([]);
@@ -352,11 +352,16 @@ export default function LifeLabView() {
         <section className="panel lab-seed-chooser" aria-labelledby="lab-seed-heading">
           <span className="eyebrow">Choose a source</span>
           <h2 id="lab-seed-heading" data-prose>Start an experiment</h2>
+          {requiresProfile && (
+            <p className="life-message" role="status">
+              Create your Life Lab profile before running an experiment.
+            </p>
+          )}
           <p data-prose>Each seed is copied once into an isolated experiment.</p>
           <div className="lab-seed-options">
-            <button disabled={busy} onClick={() => void begin("blank")}><strong>Start blank</strong><span>Begin with explicit defaults.</span></button>
-            <button disabled={busy || !currentGoal} onClick={() => void begin("current_goal")}><strong>Start from current goal</strong><span>{currentGoal ? `Copy ${currentGoal.name} once.` : "No primary Goal is available."}</span></button>
-            <div className="lab-retirement-seed"><label>Retirement result<select aria-label="Retirement result seed" value={retirementSnapshotId} onChange={(event) => setRetirementSnapshotId(event.target.value)}><option value="">Choose a saved run</option>{retirementSnapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name} · age {snapshot.target_age}</option>)}</select></label><button disabled={busy || !retirementSnapshotId} onClick={() => void begin("retirement_result")}><strong>Start from retirement result</strong><span>Copy one saved result.</span></button></div>
+            <button disabled={busy || requiresProfile} onClick={() => void begin("blank")}><strong>Start blank</strong><span>Begin with explicit defaults.</span></button>
+            <button disabled={busy || requiresProfile || !currentGoal} onClick={() => void begin("current_goal")}><strong>Start from current goal</strong><span>{currentGoal ? `Copy ${currentGoal.name} once.` : "No primary Goal is available."}</span></button>
+            <div className="lab-retirement-seed"><label>Retirement result<select aria-label="Retirement result seed" disabled={requiresProfile} value={retirementSnapshotId} onChange={(event) => setRetirementSnapshotId(event.target.value)}><option value="">Choose a saved run</option>{retirementSnapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name} · age {snapshot.target_age}</option>)}</select></label><button disabled={busy || requiresProfile || !retirementSnapshotId} onClick={() => void begin("retirement_result")}><strong>Start from retirement result</strong><span>Copy one saved result.</span></button></div>
           </div>
         </section>
         <LabSnapshotEvidence snapshots={snapshots} openedSnapshot={openedSnapshot} onOpen={setOpenedSnapshot} />

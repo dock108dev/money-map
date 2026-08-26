@@ -42,6 +42,7 @@ declare global {
         | "negative_recurring_cash_flow"
         | "cash_below_protected_floor"
         | "missing_source_coverage"
+        | "no_life_lab_profile"
         | "stale_saved_scenario"
         | "completed_goal"
         | null;
@@ -751,7 +752,7 @@ export default function App() {
           )}
           {view === "lab" && (
             <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Lab…</p></div>}>
-              <LifeLabView />
+              <LifeLabView requiresProfile={qualificationState === "no_life_lab_profile"} />
             </Suspense>
           )}
           {view === "connections" && (

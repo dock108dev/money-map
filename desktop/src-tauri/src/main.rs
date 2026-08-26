@@ -68,6 +68,22 @@ fn planned_qualification_hash(contract: Option<&QualificationContract>) -> Optio
     Some(format!("#view={view}"))
 }
 
+fn qualification_state_is_bridged(state: &str) -> bool {
+    matches!(
+        state,
+        "unavailable"
+            | "partial_coverage"
+            | "recoverable_failure"
+            | "stale_evidence"
+            | "negative_recurring_cash_flow"
+            | "cash_below_protected_floor"
+            | "missing_source_coverage"
+            | "no_life_lab_profile"
+            | "stale_saved_scenario"
+            | "completed_goal"
+    )
+}
+
 fn initialization_script(contract: Option<&QualificationContract>) -> String {
     let planned_hash = serde_json::to_string(&planned_qualification_hash(contract))
         .unwrap_or_else(|_| "null".to_string());
@@ -75,20 +91,7 @@ fn initialization_script(contract: Option<&QualificationContract>) -> String {
         &contract
             .and_then(QualificationContract::matrix_plan)
             .map(|(state, _)| state)
-            .filter(|state| {
-                matches!(
-                    *state,
-                    "unavailable"
-                        | "partial_coverage"
-                        | "recoverable_failure"
-                        | "stale_evidence"
-                        | "negative_recurring_cash_flow"
-                        | "cash_below_protected_floor"
-                        | "missing_source_coverage"
-                        | "stale_saved_scenario"
-                        | "completed_goal"
-                )
-            }),
+            .filter(|state| qualification_state_is_bridged(state)),
     )
     .unwrap_or_else(|_| "null".to_string());
     let script = r#"(() => {
@@ -1276,8 +1279,29 @@ mod menu_tests {
     use super::{
         approved_external_link, controlled_unavailable_status_applies,
         diagnostic_backup_verification, internal_navigation_allowed, menu_action_script,
-        MENU_ACTION_IDS, OPERATION_MENU_IDS,
+        qualification_state_is_bridged, MENU_ACTION_IDS, OPERATION_MENU_IDS,
     };
+
+    #[test]
+    fn qualification_bridge_includes_only_states_with_installed_presentation_overrides() {
+        for state in [
+            "unavailable",
+            "partial_coverage",
+            "recoverable_failure",
+            "stale_evidence",
+            "negative_recurring_cash_flow",
+            "cash_below_protected_floor",
+            "missing_source_coverage",
+            "no_life_lab_profile",
+            "stale_saved_scenario",
+            "completed_goal",
+        ] {
+            assert!(qualification_state_is_bridged(state));
+        }
+        for state in ["empty", "complete_current", "profile_without_goals"] {
+            assert!(!qualification_state_is_bridged(state));
+        }
+    }
 
     #[test]
     fn controlled_unavailable_status_preserves_local_recovery_overrides() {

@@ -70,6 +70,21 @@ afterEach(() => {
 });
 
 describe("isolated Life Lab", () => {
+  it("requires a Life Lab profile before enabling experiment starts", async () => {
+    const fetch = labFetch();
+    vi.stubGlobal("fetch", fetch);
+    render(<LifeLabView requiresProfile />);
+
+    expect(
+      await screen.findByText("Create your Life Lab profile before running an experiment."),
+    ).toHaveAttribute("role", "status");
+    expect(screen.getByRole("button", { name: /Start blank/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Start from current goal/ })).toBeDisabled();
+    expect(screen.getByLabelText("Retirement result seed")).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Start from retirement result/ })).toBeDisabled();
+    expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/lab/experiments")).toBe(false);
+  });
+
   it("requires an explicit blank, current-goal, or Retirement-result seed and preserves legacy evidence", async () => {
     const fetch = labFetch();
     vi.stubGlobal("fetch", fetch);
