@@ -233,6 +233,22 @@ describe("application states", () => {
     expect(status).toHaveAttribute("role", "status");
   });
 
+  it("renders partial installed coverage as visible safe language", async () => {
+    installReadyDesktop();
+    if (window.__MONEY_MAP_DESKTOP__) {
+      window.__MONEY_MAP_DESKTOP__.qualificationState = "partial_coverage";
+    }
+    vi.stubGlobal("fetch", withReadyDataHome(workingFetch()));
+
+    render(<App />);
+
+    const status = await screen.findByText(
+      "Partial coverage. Unavailable results are withheld until missing source coverage is added.",
+    );
+    expect(status).toBeVisible();
+    expect(status).toHaveAttribute("role", "status");
+  });
+
   it("renders the one-shot installed recovery state without stale financial success", async () => {
     installReadyDesktop();
     if (window.__MONEY_MAP_DESKTOP__) {

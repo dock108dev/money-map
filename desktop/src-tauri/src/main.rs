@@ -75,7 +75,12 @@ fn initialization_script(contract: Option<&QualificationContract>) -> String {
         &contract
             .and_then(QualificationContract::matrix_plan)
             .map(|(state, _)| state)
-            .filter(|state| matches!(*state, "unavailable" | "recoverable_failure")),
+            .filter(|state| {
+                matches!(
+                    *state,
+                    "unavailable" | "partial_coverage" | "recoverable_failure"
+                )
+            }),
     )
     .unwrap_or_else(|_| "null".to_string());
     let script = r#"(() => {
