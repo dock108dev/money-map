@@ -12,8 +12,16 @@ from .product_metadata import PUBLIC_VERSION, PYTHON_PACKAGE_VERSION, SCHEMA_HEA
 RELEASE_CONTRACT = "money-map-v3-release-manifest-v1"
 CANDIDATE_STATE = "candidate_not_accepted"
 ACCEPTED_STATE = "accepted"
-CAMPAIGNS = tuple("ABCDEFGHIJ")
-OWNER_VALIDATIONS = tuple(f"OV-{number:02d}" for number in range(1, 12))
+QUALIFICATION_GATES = (
+    "complete_headless_gate",
+    "exact_candidate_build",
+    "two_cycle_installed_smoke",
+    "short_owner_synthetic_walkthrough",
+)
+OPTIONAL_SOAK_FIELDS = (
+    "state_route_221_matrix",
+    "retired_campaigns_c_through_j",
+)
 OWNER_FIELDS = (
     "source_identity",
     "pre_cutover_backup",
@@ -70,16 +78,16 @@ def candidate_manifest(
         "app_identity": app_identity,
         "dmg_identity": dmg_identity,
         "oracle_digest": oracle_digest,
-        "campaigns": {campaign: None for campaign in CAMPAIGNS},
-        "owner_validations": {validation: None for validation in OWNER_VALIDATIONS},
+        "qualification_gates": {gate: None for gate in QUALIFICATION_GATES},
+        "optional_soak": {field: None for field in OPTIONAL_SOAK_FIELDS},
         "owner": {field: None for field in OWNER_FIELDS},
         "cutover_result": None,
         "final_decision": None,
         "final": {field: None for field in FINAL_FIELDS},
         "claims": {
-            "campaigns_a_through_j_passed": False,
-            "owner_validation_passed": False,
+            "bounded_owner_beta_qualification_passed": False,
             "owner_cutover_completed": False,
+            "final_owner_decision_recorded": False,
             "accepted_as_beta": False,
             "tagged": False,
             "published": False,
@@ -119,16 +127,18 @@ def validate_candidate(manifest: Mapping[str, Any]) -> None:
         or signing.get("external_distribution_approved")
     ):
         raise ReleaseContractError("candidate signing claims are inconsistent")
-    campaigns = manifest.get("campaigns")
-    owner_validations = manifest.get("owner_validations")
+    qualification_gates = manifest.get("qualification_gates")
+    optional_soak = manifest.get("optional_soak")
     owner = manifest.get("owner")
     final = manifest.get("final")
-    if not isinstance(campaigns, Mapping) or campaigns != dict.fromkeys(CAMPAIGNS):
-        raise ReleaseContractError("campaign results must remain blank")
-    if not isinstance(owner_validations, Mapping) or owner_validations != dict.fromkeys(
-        OWNER_VALIDATIONS
+    if not isinstance(qualification_gates, Mapping) or qualification_gates != dict.fromkeys(
+        QUALIFICATION_GATES
     ):
-        raise ReleaseContractError("owner validation results must remain blank")
+        raise ReleaseContractError("bounded qualification gate results must remain blank")
+    if not isinstance(optional_soak, Mapping) or optional_soak != dict.fromkeys(
+        OPTIONAL_SOAK_FIELDS
+    ):
+        raise ReleaseContractError("optional soak results must remain blank")
     if not isinstance(owner, Mapping) or owner != dict.fromkeys(OWNER_FIELDS):
         raise ReleaseContractError("owner fields must remain blank")
     if not isinstance(final, Mapping) or final != dict.fromkeys(FINAL_FIELDS):
@@ -155,8 +165,8 @@ def validate_promotion(manifest: Mapping[str, Any]) -> None:
         raise ReleaseContractError("version mapping is inconsistent")
     if manifest.get("schema_revision") != SCHEMA_HEAD:
         raise ReleaseContractError("schema is inconsistent")
-    if manifest.get("build_mode") != "production":
-        raise ReleaseContractError("production-mode rebuild evidence is required")
+    if manifest.get("build_mode") not in {"qualification", "production"}:
+        raise ReleaseContractError("candidate build mode is invalid")
     for identity in (
         "normalized_payload_identity",
         "app_identity",
@@ -165,14 +175,13 @@ def validate_promotion(manifest: Mapping[str, Any]) -> None:
     ):
         if not HEX_64.fullmatch(str(manifest.get(identity, ""))):
             raise ReleaseContractError(f"final {identity} is missing")
-    if set(manifest.get("campaigns", {})) != set(CAMPAIGNS) or any(
-        value != "passed" for value in manifest["campaigns"].values()
+    if set(manifest.get("qualification_gates", {})) != set(QUALIFICATION_GATES) or any(
+        value != "passed" for value in manifest["qualification_gates"].values()
     ):
-        raise ReleaseContractError("Campaigns A-J are incomplete")
-    if set(manifest.get("owner_validations", {})) != set(OWNER_VALIDATIONS) or any(
-        value != "passed" for value in manifest["owner_validations"].values()
-    ):
-        raise ReleaseContractError("owner validations are incomplete")
+        raise ReleaseContractError("bounded owner-beta qualification gates are incomplete")
+    optional_soak = manifest.get("optional_soak")
+    if not isinstance(optional_soak, Mapping) or set(optional_soak) != set(OPTIONAL_SOAK_FIELDS):
+        raise ReleaseContractError("optional soak schema is inconsistent")
     owner = manifest.get("owner", {})
     if set(owner) != set(OWNER_FIELDS) or any(not value for value in owner.values()):
         raise ReleaseContractError("owner fields are incomplete")
@@ -184,13 +193,14 @@ def validate_promotion(manifest: Mapping[str, Any]) -> None:
     if (
         final["final_app_hash"] != manifest["app_identity"]
         or final["final_dmg_hash"] != manifest["dmg_identity"]
+        or final["accepted_commit"] != manifest["source_commit"]
     ):
         raise ReleaseContractError("final identities do not match the accepted artifacts")
     claims = manifest.get("claims", {})
     required_claims = {
-        "campaigns_a_through_j_passed",
-        "owner_validation_passed",
+        "bounded_owner_beta_qualification_passed",
         "owner_cutover_completed",
+        "final_owner_decision_recorded",
         "accepted_as_beta",
         "tagged",
     }

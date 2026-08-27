@@ -30,6 +30,7 @@ def test_contract_is_frozen_to_v3_candidate_identity() -> None:
     assert loaded.TEAM == "E3G5D247ZN"
     assert loaded.BUNDLE_ID == "com.moneymap.desktop"
     assert loaded.DMG_NAME == "Money Map-3.0.0-beta.1-arm64.dmg"
+    assert loaded.CONTRACT == "money-map-v3-bounded-installed-smoke-v1"
     assert not any(
         path.name.startswith("0010") for path in (PROJECT_ROOT / "alembic/versions").iterdir()
     )
@@ -129,9 +130,106 @@ def test_hash_mismatch_stops_before_mount_or_evidence_creation(
         expected_source_commit="a" * 40,
         campaign_id="must-not-exist",
         launch_cycles=1,
+        max_wall_seconds=loaded.MAX_WALL_SECONDS,
     )
     with pytest.raises(loaded.QualificationFailure, match="before mount"):
         loaded.qualification(args)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "1201", "1.5", "not-a-number"])
+def test_wall_clock_argument_rejects_invalid_values(value: str) -> None:
+    loaded = module()
+    with pytest.raises(SystemExit):
+        loaded.parser().parse_args(
+            [
+                loaded.DMG_NAME,
+                "--expected-sha256",
+                "a" * 64,
+                "--expected-source-commit",
+                "b" * 40,
+                "--campaign-id",
+                "bounded-attempt",
+                "--max-wall-seconds",
+                value,
+            ]
+        )
+
+
+def test_wall_clock_default_and_explicit_limit_never_exceed_1200_seconds() -> None:
+    loaded = module()
+    base = [
+        loaded.DMG_NAME,
+        "--expected-sha256",
+        "a" * 64,
+        "--expected-source-commit",
+        "b" * 40,
+        "--campaign-id",
+        "bounded-attempt",
+    ]
+    assert loaded.parser().parse_args(base).max_wall_seconds == 1_200
+    explicit = loaded.parser().parse_args([*base, "--max-wall-seconds", "1200"])
+    assert explicit.max_wall_seconds == 1_200
+
+
+def test_deadline_expiry_fails_sanitized_invokes_cleanup_and_never_retries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loaded = module()
+    monkeypatch.setattr(loaded, "ROOT", tmp_path)
+    dmg = tmp_path / loaded.DMG_NAME
+    dmg.write_bytes(b"synthetic candidate")
+    expected_hash = "a" * 64
+    (tmp_path / "manifest.json").write_text(json.dumps({"dmg": {"sha256": expected_hash}}))
+    (tmp_path / "release-manifest.json").write_text("{}")
+    monkeypatch.setattr(loaded, "validate_artifact_path", lambda _path: None)
+    monkeypatch.setattr(loaded, "sha256", lambda _path: expected_hash)
+    monkeypatch.setattr(loaded, "require_no_existing_runtime", lambda: None)
+    monkeypatch.setattr(loaded, "validate_candidate", lambda _manifest: None)
+
+    clock = [100.0]
+    monkeypatch.setattr(loaded.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        loaded.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds)
+    )
+    attempts = 0
+
+    def expire_once(_path: Path, *, deep: bool) -> None:
+        nonlocal attempts
+        attempts += 1
+        assert deep is False
+        loaded.bounded_sleep(1.0)
+
+    monkeypatch.setattr(loaded, "verify_signature", expire_once)
+    cleanup_calls: list[tuple[Path, Path, bool]] = []
+    original_cleanup = loaded.cleanup_attempt
+
+    def record_cleanup(campaign: Path, mount: Path, *, mounted: bool) -> None:
+        cleanup_calls.append((campaign, mount, mounted))
+        original_cleanup(campaign, mount, mounted=mounted)
+
+    monkeypatch.setattr(loaded, "cleanup_attempt", record_cleanup)
+    args = SimpleNamespace(
+        dmg=str(dmg),
+        expected_sha256=expected_hash,
+        expected_source_commit="b" * 40,
+        campaign_id="deadline-expiry",
+        launch_cycles=2,
+        max_wall_seconds=1,
+    )
+
+    with pytest.raises(loaded.QualificationFailure, match="wall-clock deadline"):
+        loaded.qualification(args)
+
+    assert attempts == 1
+    assert len(cleanup_calls) == 1
+    assert cleanup_calls[0][2] is False
+    assert not cleanup_calls[0][0].exists()
+    failure = json.loads((tmp_path / ".slice8-evidence/deadline-expiry/failure.json").read_text())
+    assert failure["release_state"] == "candidate_not_accepted"
+    assert failure["result"] == "failed"
+    assert failure["accepted_as_beta"] is False
+    assert failure["failure"] == "qualification wall-clock deadline expired"
+    assert str(tmp_path) not in json.dumps(failure)
 
 
 def test_sanitized_report_allows_boolean_cleanup_facts_but_rejects_raw_details() -> None:
@@ -380,7 +478,7 @@ def test_cleanup_failure_labels_are_sanitized_and_specific() -> None:
         assert f'("{label}",' in source
 
 
-def test_required_campaign_matrix_is_checked_in_and_complete() -> None:
+def test_optional_diagnostic_matrix_is_checked_in_and_complete() -> None:
     matrix = json.loads(
         (PROJECT_ROOT / "tests/fixtures/synthetic/v1_2_1/release-qualification.json").read_text()
     )
@@ -391,7 +489,7 @@ def test_required_campaign_matrix_is_checked_in_and_complete() -> None:
     assert len(matrix["migration_and_recovery"]) >= 35
     assert len(matrix["runtime_failures"]) >= 25
     assert len(matrix["accessibility_and_zoom"]) >= 12
-    assert matrix["owner_validations_performed"] == []
+    assert matrix["owner_walkthrough_performed"] is False
 
 
 def test_slice6_evidence_is_ignored() -> None:

@@ -112,8 +112,8 @@ def owner_worksheet() -> dict[str, Any]:
         "owner_responses": {field: None for field in OWNER_FIELDS},
         "engineering": {
             "schema": SCHEMA_HEAD,
-            "campaigns_a_through_j": None,
-            "owner_validation": None,
+            "bounded_owner_beta_qualification": None,
+            "short_owner_synthetic_walkthrough": None,
             "cutover_result": None,
         },
     }

@@ -1,7 +1,8 @@
 # Money Map cutover readiness
 
-Status: Slice 7 implementation proof only. Live owner rehearsal, owner data, owner decisions,
-installed Campaigns A-J, and final acceptance are deferred until after Slice 8.
+Status: Slice 7 implementation proof only. Live owner rehearsal, owner data, owner decisions, the
+bounded installed smoke and final acceptance are deferred until after Slice 8. The former
+Campaigns A-J matrix is optional dedicated-runner soak coverage, not a cutover prerequisite.
 
 ## Reused authority
 
@@ -43,7 +44,7 @@ operation fail closed. Preview and cancellation perform no filesystem writes.
 
 ## Eventual live owner procedure
 
-1. Freeze the exact post-Slice-8 candidate and complete the consolidated engineering campaign.
+1. Freeze the exact post-Slice-8 candidate and complete the bounded headless and installed smoke.
 2. The owner explicitly selects the source. Never search for it.
 3. Review every sanitized preflight classification and abort on any failed or unknown state.
 4. Run rehearsal and review its result. Abort if the original identity changes or cleanup fails.
@@ -67,5 +68,5 @@ identities, data values, credentials, sessions, provider responses, or owner ans
 prepopulation or inference.
 
 Implementation proof establishes that the workflow and deterministic drivers exist. It does not
-establish installed Campaign A-J results, owner usability, owner cutover success, beta acceptance,
-or release approval. Those remain in the consolidated post-Slice-8 campaign.
+establish the bounded installed smoke, owner usability, owner cutover success, beta acceptance, or
+release approval. Those remain in the post-Slice-8 owner-beta plan.

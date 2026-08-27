@@ -13,8 +13,8 @@
   },
   "engineering": {
     "schema": "0009_goal_persistence",
-    "campaigns_a_through_j": null,
-    "owner_validation": null,
+    "bounded_owner_beta_qualification": null,
+    "short_owner_synthetic_walkthrough": null,
     "cutover_result": null
   }
 }

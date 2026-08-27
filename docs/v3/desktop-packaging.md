@@ -70,8 +70,8 @@ dependency-inventory digest, scan result, and reproducibility status. It never r
 temporary root, PID, port, environment dump, certificate private material, or credential.
 
 `release-manifest.json` uses `money-map-v3-release-manifest-v1`, records
-`candidate_not_accepted`, keeps Campaign A-J, owner-validation, cutover, final-decision, final-hash,
-tag, and release-date fields blank, and makes every acceptance/publication claim false.
+`candidate_not_accepted`, keeps bounded qualification, owner walkthrough, cutover, final-decision,
+final-hash, tag, and release-date fields blank, and makes every acceptance/publication claim false.
 
 Prepare Build A and Build B with different build IDs. Compare them with:
 

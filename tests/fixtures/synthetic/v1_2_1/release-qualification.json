@@ -183,5 +183,5 @@
     "no_unexpected_network",
     "sanitized_ui_logs_diagnostics"
   ],
-  "owner_validations_performed": []
+  "owner_walkthrough_performed": false
 }

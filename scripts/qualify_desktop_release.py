@@ -32,7 +32,7 @@ TEAM = "E3G5D247ZN"
 BUNDLE_ID = "com.moneymap.desktop"
 MINIMUM_MACOS = "13.0"
 DMG_NAME = desktop_artifact_name()
-CONTRACT = "money-map-slice6-installed-qualification-v1"
+CONTRACT = "money-map-v3-bounded-installed-smoke-v1"
 LAUNCH_CONTRACT = "money-map-installed-attestation-launch-v1"
 NATIVE_RESULT_CONTRACT = "money-map-native-attestation-result-v1"
 SECRET_ENV = re.compile(
@@ -41,10 +41,47 @@ SECRET_ENV = re.compile(
 )
 HEX_64 = re.compile(r"[0-9a-f]{64}")
 HEX_40 = re.compile(r"[0-9a-f]{40}")
+MAX_WALL_SECONDS = 1_200
+DEFAULT_MAX_WALL_SECONDS = MAX_WALL_SECONDS
+_CLEANUP_RESERVE_SECONDS = 10.0
 
 
 class QualificationFailure(RuntimeError):
     """A safe, user-actionable qualification failure."""
+
+
+class WallClockDeadline:
+    """One monotonic command deadline with time reserved for owned-resource cleanup."""
+
+    def __init__(self, max_wall_seconds: float) -> None:
+        self.expires_at = time.monotonic() + max_wall_seconds
+        reserve = min(_CLEANUP_RESERVE_SECONDS, max_wall_seconds / 10)
+        self.work_expires_at = self.expires_at - reserve
+
+    def remaining(self, requested: float, *, cleanup: bool = False) -> float:
+        if requested <= 0:
+            raise QualificationFailure("qualification wall-clock deadline expired")
+        end = self.expires_at if cleanup else self.work_expires_at
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            raise QualificationFailure("qualification wall-clock deadline expired")
+        return min(requested, remaining)
+
+
+_ACTIVE_DEADLINE: WallClockDeadline | None = None
+
+
+def remaining_wait(requested: float, *, cleanup: bool = False) -> float:
+    if _ACTIVE_DEADLINE is None:
+        return requested
+    return _ACTIVE_DEADLINE.remaining(requested, cleanup=cleanup)
+
+
+def bounded_sleep(seconds: float, *, cleanup: bool = False) -> None:
+    allowed = remaining_wait(seconds, cleanup=cleanup)
+    time.sleep(allowed)
+    if allowed < seconds:
+        raise QualificationFailure("qualification wall-clock deadline expired")
 
 
 @dataclass(frozen=True)
@@ -81,6 +118,7 @@ def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            remaining_wait(1)
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -88,6 +126,7 @@ def sha256(path: Path) -> str:
 def signed_tree_digest(root: Path) -> str:
     digest = hashlib.sha256()
     for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        remaining_wait(1)
         digest.update(path.relative_to(root).as_posix().encode() + b"\0")
         digest.update(sha256(path).encode() + b"\n")
     return digest.hexdigest()
@@ -99,16 +138,20 @@ def run(
     capture: bool = False,
     env: dict[str, str] | None = None,
     timeout: float = 120,
+    cleanup: bool = False,
 ) -> str:
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=remaining_wait(timeout, cleanup=cleanup),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise QualificationFailure("qualification subprocess wait timed out") from error
     if result.returncode:
         label = Path(command[0]).name
         raise QualificationFailure(f"{label} failed during installed-artifact qualification")
@@ -197,7 +240,15 @@ def validate_artifact_path(dmg: Path) -> None:
 
 def require_no_existing_runtime() -> None:
     for pattern in ("money-map-desktop", "money-map-sidecar"):
-        result = subprocess.run(["/usr/bin/pgrep", "-x", pattern], capture_output=True, check=False)
+        try:
+            result = subprocess.run(
+                ["/usr/bin/pgrep", "-x", pattern],
+                capture_output=True,
+                timeout=remaining_wait(10),
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise QualificationFailure("qualification subprocess wait timed out") from error
         if result.returncode == 0:
             raise QualificationFailure(
                 "an existing Money Map runtime would contaminate the campaign"
@@ -205,12 +256,16 @@ def require_no_existing_runtime() -> None:
 
 
 def codesign_details(path: Path) -> str:
-    result = subprocess.run(
-        ["/usr/bin/codesign", "-dv", "--verbose=4", str(path)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["/usr/bin/codesign", "-dv", "--verbose=4", str(path)],
+            text=True,
+            capture_output=True,
+            timeout=remaining_wait(30),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise QualificationFailure("qualification subprocess wait timed out") from error
     if result.returncode:
         raise QualificationFailure("code-signing identity could not be inspected")
     return result.stderr
@@ -233,12 +288,16 @@ def verify_signature(path: Path, *, deep: bool) -> None:
 
 
 def verify_zero_entitlements(app: Path) -> None:
-    result = subprocess.run(
-        ["/usr/bin/codesign", "-d", "--entitlements", ":-", str(app)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["/usr/bin/codesign", "-d", "--entitlements", ":-", str(app)],
+            text=True,
+            capture_output=True,
+            timeout=remaining_wait(30),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise QualificationFailure("qualification subprocess wait timed out") from error
     output = f"{result.stdout}\n{result.stderr}"
     if "<key>" in output:
         raise QualificationFailure("candidate contains an unexpected entitlement")
@@ -285,6 +344,7 @@ def verify_bundle(app: Path, manifest: dict[str, Any], expected_commit: str) -> 
 def verify_architecture(app: Path, manifest_root: Path) -> int:
     native_count = 0
     for path in sorted(app.rglob("*")):
+        remaining_wait(1)
         if not path.is_file() or path.is_symlink():
             continue
         description = run(["/usr/bin/file", "-b", str(path)], capture=True)
@@ -335,7 +395,8 @@ def descendants(parent: int, rows: list[tuple[int, int, str]]) -> list[int]:
 
 def wait_for_runtime(app_pid: int, lock: Path, timeout: float = 45) -> tuple[list[int], int]:
     started = time.monotonic()
-    while time.monotonic() - started < timeout:
+    end = started + remaining_wait(timeout)
+    while time.monotonic() < end:
         rows = process_rows()
         children = descendants(app_pid, rows)
         sidecars = [
@@ -345,18 +406,22 @@ def wait_for_runtime(app_pid: int, lock: Path, timeout: float = 45) -> tuple[lis
         ]
         if len(sidecars) == 2 and lock.is_file():
             return sidecars, round((time.monotonic() - started) * 1000)
-        time.sleep(0.1)
+        bounded_sleep(min(0.1, end - time.monotonic()))
     raise QualificationFailure("installed app did not reach the one-sidecar ready topology")
 
 
 def socket_observation(pids: list[int]) -> tuple[int, int]:
     pid_list = ",".join(str(pid) for pid in pids)
-    result = subprocess.run(
-        ["/usr/sbin/lsof", "-nP", "-a", "-p", pid_list, "-iTCP"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["/usr/sbin/lsof", "-nP", "-a", "-p", pid_list, "-iTCP"],
+            text=True,
+            capture_output=True,
+            timeout=remaining_wait(30),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise QualificationFailure("qualification subprocess wait timed out") from error
     lines = result.stdout.splitlines()[1:]
     listeners = [line for line in lines if "(LISTEN)" in line and "127.0.0.1:" in line]
     if any(":8765 " in line or ":8765 (" in line for line in lines):
@@ -369,12 +434,13 @@ def wait_native_result(
     path: Path, *, expected: str, context: str = "attestation", timeout: float = 45
 ) -> dict[str, Any]:
     started = time.monotonic()
-    while time.monotonic() - started < timeout:
+    end = started + remaining_wait(timeout)
+    while time.monotonic() < end:
         if path.is_file() and not path.is_symlink() and path.stat().st_size <= 8192:
             try:
                 result = json.loads(path.read_text())
             except (OSError, json.JSONDecodeError):
-                time.sleep(0.05)
+                bounded_sleep(min(0.05, end - time.monotonic()))
                 continue
             if not isinstance(result, dict) or any(not isinstance(key, str) for key in result):
                 raise QualificationFailure(f"native launcher {context} result was rejected")
@@ -382,7 +448,7 @@ def wait_native_result(
             if result.get("contract") != NATIVE_RESULT_CONTRACT or result.get("result") != expected:
                 raise QualificationFailure(f"native launcher {context} result was rejected")
             return result
-        time.sleep(0.05)
+        bounded_sleep(min(0.05, end - time.monotonic()))
     raise QualificationFailure(f"native launcher {context} result was not produced")
 
 
@@ -433,12 +499,20 @@ def stop_probe(process: subprocess.Popen[bytes]) -> None:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGTERM)
     try:
-        process.wait(timeout=10)
+        timeout = remaining_wait(10, cleanup=True)
+    except QualificationFailure:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        return
+    try:
+        process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
-        process.wait(timeout=5)
-    time.sleep(1.0)
+        with contextlib.suppress(subprocess.TimeoutExpired, QualificationFailure):
+            process.wait(timeout=remaining_wait(5, cleanup=True))
+    with contextlib.suppress(QualificationFailure):
+        bounded_sleep(1.0, cleanup=True)
 
 
 def prove_production_refusal(
@@ -492,7 +566,7 @@ def prove_missing_contract_refusal(app: Path, campaign: Path) -> bool:
     )
     try:
         try:
-            process.wait(timeout=10)
+            process.wait(timeout=remaining_wait(10))
         except subprocess.TimeoutExpired:
             return False
         return process.returncode != 0 and not any(fake_home.iterdir())
@@ -540,17 +614,17 @@ def prove_attestation_failure_cleanup(
             expected="failed",
             context="failure-cleanup",
         )
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + remaining_wait(10)
         while time.monotonic() < deadline and descendants(process.pid, process_rows()):
-            time.sleep(0.1)
+            bounded_sleep(min(0.1, deadline - time.monotonic()))
         rows = process_rows()
         descendants_alive = descendants(process.pid, rows)
         lock = fake_home / "Library/Application Support/Money Map/.money-map-writer.lock"
-        session_files = [
-            path
-            for path in fake_home.rglob("*")
-            if path.is_file() and ("session" in path.name.lower() or path.suffix == ".sock")
-        ]
+        session_files = []
+        for path in fake_home.rglob("*"):
+            remaining_wait(1)
+            if path.is_file() and ("session" in path.name.lower() or path.suffix == ".sock"):
+                session_files.append(path)
         return (
             process.poll() is None
             and not descendants_alive
@@ -578,7 +652,8 @@ def wait_gone(
     process: subprocess.Popen[bytes], sidecar_pids: list[int], timeout: float = 15
 ) -> int:
     started = time.monotonic()
-    while time.monotonic() - started < timeout:
+    end = started + remaining_wait(timeout)
+    while time.monotonic() < end:
         app_alive = process.poll() is None
         rows = process_rows()
         sidecars_alive = any(
@@ -587,7 +662,7 @@ def wait_gone(
         )
         if not app_alive and not sidecars_alive:
             return round((time.monotonic() - started) * 1000)
-        time.sleep(0.1)
+        bounded_sleep(min(0.1, end - time.monotonic()))
     raise QualificationFailure("normal quit left an installed-app process alive")
 
 
@@ -644,15 +719,23 @@ def run_cycle(
                 stderr=subprocess.DEVNULL,
             )
             try:
-                second.wait(timeout=10)
-            except subprocess.TimeoutExpired as error:
-                raise QualificationFailure(
-                    "second launch did not activate the existing app"
-                ) from error
+                try:
+                    second.wait(timeout=remaining_wait(10))
+                except subprocess.TimeoutExpired as error:
+                    raise QualificationFailure(
+                        "second launch did not activate the existing app"
+                    ) from error
+            finally:
+                if second.poll() is None:
+                    second.terminate()
+                    with contextlib.suppress(subprocess.TimeoutExpired, QualificationFailure):
+                        second.wait(timeout=remaining_wait(2, cleanup=True))
+                    if second.poll() is None:
+                        second.kill()
             # Launch Services can return from the activation request before the
             # Apple event has been fully delivered.  Do not race that event with
             # the normal-quit event below.
-            time.sleep(0.5)
+            bounded_sleep(0.5)
             rows = process_rows()
             app_count = sum(Path(command).name == "money-map-desktop" for _, _, command in rows)
             current_sidecars = descendants(process.pid, rows)
@@ -668,12 +751,12 @@ def run_cycle(
         for _ in range(50):
             if not lock.exists():
                 break
-            time.sleep(0.1)
-        session_files = [
-            path
-            for path in fake_home.rglob("*")
-            if path.is_file() and ("session" in path.name.lower() or path.suffix == ".sock")
-        ]
+            bounded_sleep(0.1)
+        session_files = []
+        for path in fake_home.rglob("*"):
+            remaining_wait(1)
+            if path.is_file() and ("session" in path.name.lower() or path.suffix == ".sock"):
+                session_files.append(path)
         log = fake_home / "Library/Logs/Money Map/desktop-events.jsonl"
         graceful = log.is_file() and '"code":"MM-DESKTOP-STOP"' in log.read_text()
         result = CycleResult(
@@ -719,12 +802,10 @@ def run_cycle(
         # A successful process/lock cleanup is necessary but not sufficient for
         # the macOS application service to have retired the prior instance.
         # Give that bounded service transition time to settle before relaunch.
-        time.sleep(1.0)
+        bounded_sleep(1.0)
         return result
     finally:
-        if process.poll() is None:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGTERM)
+        stop_probe(process)
 
 
 def sanitize_report(report: dict[str, Any]) -> None:
@@ -741,7 +822,7 @@ def sanitize_report(report: dict[str, Any]) -> None:
         raise QualificationFailure("qualification report contains a forbidden private detail")
 
 
-def qualification(args: argparse.Namespace) -> Path:
+def _qualification(args: argparse.Namespace) -> Path:
     validate_cli_identity(args.expected_sha256, args.expected_source_commit)
     dmg = Path(args.dmg).expanduser()
     validate_artifact_path(dmg)
@@ -782,12 +863,13 @@ def qualification(args: argparse.Namespace) -> Path:
         "source_commit": args.expected_source_commit,
         "runtime_version": VERSION,
         "schema_revision": SCHEMA,
+        "max_wall_seconds": args.max_wall_seconds,
         "dmg": {"name": DMG_NAME, "sha256": args.expected_sha256, "size": dmg.stat().st_size},
         "production_keychain_accessed": False,
         "provider_contacted": False,
         "port_8765_touched": False,
         "applications_touched": False,
-        "owner_validations_performed": [],
+        "owner_walkthrough_performed": False,
         "accepted_as_beta": False,
         "tagged": False,
         "published": False,
@@ -818,7 +900,11 @@ def qualification(args: argparse.Namespace) -> Path:
         verify_signature(app, deep=True)
         if signed_tree_digest(app) != manifest.get("app", {}).get("sha256"):
             raise QualificationFailure("copied signed-app tree differs from the build manifest")
-        app_size = sum(path.stat().st_size for path in app.rglob("*") if path.is_file())
+        app_size = 0
+        for path in app.rglob("*"):
+            remaining_wait(1)
+            if path.is_file():
+                app_size += path.stat().st_size
         if app_size != manifest.get("app", {}).get("size"):
             raise QualificationFailure("copied signed-app size differs from the build manifest")
         verify_zero_entitlements(app)
@@ -888,7 +974,8 @@ def qualification(args: argparse.Namespace) -> Path:
             }
         )
         sanitize_report(report)
-        (evidence / "foundation-and-endurance.json").write_text(
+        remaining_wait(5)
+        (evidence / "bounded-installed-smoke.json").write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n"
         )
         return evidence
@@ -897,17 +984,54 @@ def qualification(args: argparse.Namespace) -> Path:
             str(error) if isinstance(error, QualificationFailure) else "unexpected campaign failure"
         )
         sanitize_report(report)
+        remaining_wait(5, cleanup=True)
         (evidence / "failure.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         raise
     finally:
-        if mounted:
-            subprocess.run(
+        cleanup_attempt(campaign, mount, mounted=mounted)
+
+
+def cleanup_attempt(campaign: Path, mount: Path, *, mounted: bool) -> None:
+    """Bounded cleanup for the mount and disposable root created by this attempt."""
+
+    if mounted:
+        with contextlib.suppress(QualificationFailure):
+            run(
                 ["/usr/bin/hdiutil", "detach", str(mount)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
+                timeout=5,
+                cleanup=True,
             )
-        shutil.rmtree(campaign, ignore_errors=True)
+    shutil.rmtree(campaign, ignore_errors=True)
+
+
+def qualification(args: argparse.Namespace) -> Path:
+    global _ACTIVE_DEADLINE
+    if _ACTIVE_DEADLINE is not None:
+        raise QualificationFailure("qualification deadline is already active")
+    args.max_wall_seconds = getattr(args, "max_wall_seconds", DEFAULT_MAX_WALL_SECONDS)
+    if (
+        isinstance(args.max_wall_seconds, bool)
+        or not isinstance(args.max_wall_seconds, int)
+        or not 1 <= args.max_wall_seconds <= MAX_WALL_SECONDS
+    ):
+        raise QualificationFailure(
+            f"maximum wall-clock limit must be between 1 and {MAX_WALL_SECONDS} seconds"
+        )
+    _ACTIVE_DEADLINE = WallClockDeadline(args.max_wall_seconds)
+    try:
+        return _qualification(args)
+    finally:
+        _ACTIVE_DEADLINE = None
+
+
+def max_wall_seconds(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be an integer") from error
+    if not 1 <= parsed <= MAX_WALL_SECONDS:
+        raise argparse.ArgumentTypeError(f"must be between 1 and {MAX_WALL_SECONDS}")
+    return parsed
 
 
 def parser() -> argparse.ArgumentParser:
@@ -916,7 +1040,13 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--expected-sha256", required=True)
     value.add_argument("--expected-source-commit", required=True)
     value.add_argument("--campaign-id", required=True)
-    value.add_argument("--launch-cycles", type=int, default=10, choices=range(1, 11))
+    value.add_argument("--launch-cycles", type=int, default=2, choices=(2,))
+    value.add_argument(
+        "--max-wall-seconds",
+        type=max_wall_seconds,
+        default=DEFAULT_MAX_WALL_SECONDS,
+        metavar="SECONDS",
+    )
     return value
 
 
@@ -925,8 +1055,8 @@ def main() -> None:
     try:
         evidence = qualification(args)
     except QualificationFailure as error:
-        raise SystemExit(f"Slice 6 qualification failed closed: {error}") from None
-    print(f"Slice 6 installed foundation passed: {evidence.relative_to(ROOT)}")
+        raise SystemExit(f"Bounded installed smoke failed closed: {error}") from None
+    print(f"Bounded installed smoke passed: {evidence.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

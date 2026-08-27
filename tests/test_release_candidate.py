@@ -8,11 +8,11 @@ import pytest
 from paycheck_map.product_metadata import PUBLIC_VERSION, PYTHON_PACKAGE_VERSION
 from paycheck_map.release_candidate import (
     ACCEPTED_STATE,
-    CAMPAIGNS,
     CANDIDATE_STATE,
     FINAL_FIELDS,
+    OPTIONAL_SOAK_FIELDS,
     OWNER_FIELDS,
-    OWNER_VALIDATIONS,
+    QUALIFICATION_GATES,
     ReleaseContractError,
     candidate_manifest,
     promotion_copy,
@@ -46,8 +46,8 @@ def test_candidate_is_explicitly_not_accepted_and_every_result_is_blank() -> Non
         "python": PYTHON_PACKAGE_VERSION,
     }
     assert value["schema_revision"] == "0009_goal_persistence"
-    assert value["campaigns"] == dict.fromkeys(CAMPAIGNS)
-    assert value["owner_validations"] == dict.fromkeys(OWNER_VALIDATIONS)
+    assert value["qualification_gates"] == dict.fromkeys(QUALIFICATION_GATES)
+    assert value["optional_soak"] == dict.fromkeys(OPTIONAL_SOAK_FIELDS)
     assert value["owner"] == dict.fromkeys(OWNER_FIELDS)
     assert value["final"] == dict.fromkeys(FINAL_FIELDS)
     assert value["cutover_result"] is None
@@ -70,7 +70,13 @@ def test_candidate_is_explicitly_not_accepted_and_every_result_is_blank() -> Non
         (("release_state", ACCEPTED_STATE), "cannot claim acceptance"),
         (("schema_revision", "0010_forbidden"), "schema"),
         (("version_mapping", {"public": "3.0.0", "python": "3.0.0"}), "version"),
-        (("campaigns", {**dict.fromkeys(CAMPAIGNS), "A": "passed"}), "blank"),
+        (
+            (
+                "qualification_gates",
+                {**dict.fromkeys(QUALIFICATION_GATES), "complete_headless_gate": "passed"},
+            ),
+            "blank",
+        ),
         (("owner", {**dict.fromkeys(OWNER_FIELDS), "acceptance": "accepted"}), "blank"),
         (("cutover_result", "passed"), "decisions"),
         (("historical_evidence_promotion", True), "historical"),
@@ -85,27 +91,56 @@ def test_candidate_rejects_inconsistent_acceptance_schema_version_and_owner_comb
         validate_candidate(value)
 
 
-def test_missing_campaign_owner_and_final_results_block_promotion() -> None:
+def test_missing_bounded_gate_owner_cutover_decision_and_final_results_block_promotion() -> None:
     value = manifest()
     value["release_state"] = ACCEPTED_STATE
-    with pytest.raises(ReleaseContractError, match="production-mode"):
+    with pytest.raises(ReleaseContractError, match="bounded owner-beta"):
         validate_promotion(value)
-    value["build_mode"] = "production"
-    with pytest.raises(ReleaseContractError, match="Campaigns"):
-        validate_promotion(value)
-    value["campaigns"] = dict.fromkeys(CAMPAIGNS, "passed")
-    with pytest.raises(ReleaseContractError, match="owner validations"):
-        validate_promotion(value)
-    value["owner_validations"] = dict.fromkeys(OWNER_VALIDATIONS, "passed")
+    for gate in QUALIFICATION_GATES:
+        incomplete = copy.deepcopy(value)
+        incomplete["qualification_gates"] = dict.fromkeys(QUALIFICATION_GATES, "passed")
+        incomplete["qualification_gates"][gate] = None  # type: ignore[index]
+        with pytest.raises(ReleaseContractError, match="bounded owner-beta"):
+            validate_promotion(incomplete)
+    value["qualification_gates"] = dict.fromkeys(QUALIFICATION_GATES, "passed")
     with pytest.raises(ReleaseContractError, match="owner fields"):
         validate_promotion(value)
+    value["owner"] = dict.fromkeys(OWNER_FIELDS, "owner-supplied")
+    with pytest.raises(ReleaseContractError, match="cutover and final decision"):
+        validate_promotion(value)
+    value["cutover_result"] = "passed"
+    with pytest.raises(ReleaseContractError, match="cutover and final decision"):
+        validate_promotion(value)
+    value["final_decision"] = "accepted"
+    with pytest.raises(ReleaseContractError, match="final identities"):
+        validate_promotion(value)
+    for field in FINAL_FIELDS:
+        incomplete = accepted_manifest()
+        incomplete["final"][field] = None  # type: ignore[index]
+        with pytest.raises(ReleaseContractError, match="final identities"):
+            validate_promotion(incomplete)
+
+
+def test_optional_matrix_and_retired_campaign_soak_never_promote_or_block() -> None:
+    optional_only = manifest()
+    optional_only["release_state"] = ACCEPTED_STATE
+    optional_only["optional_soak"] = dict.fromkeys(OPTIONAL_SOAK_FIELDS, "passed")
+    with pytest.raises(ReleaseContractError, match="bounded owner-beta"):
+        validate_promotion(optional_only)
+
+    value = accepted_manifest()
+    value["optional_soak"] = {
+        "state_route_221_matrix": "not_run_optional",
+        "retired_campaigns_c_through_j": "failed_optional",
+    }
+    validate_promotion(value)
 
 
 def test_owner_responses_are_never_generated_and_promotion_copy_fails_closed() -> None:
     value = manifest()
     original = copy.deepcopy(value)
     with pytest.raises(ReleaseContractError):
-        promotion_copy(value, build_mode="production")
+        promotion_copy(value)
     assert value == original
     assert value["owner"] == dict.fromkeys(OWNER_FIELDS)
 
@@ -113,17 +148,15 @@ def test_owner_responses_are_never_generated_and_promotion_copy_fails_closed() -
 def test_final_hashes_cannot_be_copied_from_diagnostics_or_historical_evidence() -> None:
     value = manifest()
     value["release_state"] = ACCEPTED_STATE
-    value["build_mode"] = "production"
-    value["campaigns"] = dict.fromkeys(CAMPAIGNS, "passed")
-    value["owner_validations"] = dict.fromkeys(OWNER_VALIDATIONS, "passed")
+    value["qualification_gates"] = dict.fromkeys(QUALIFICATION_GATES, "passed")
     value["owner"] = dict.fromkeys(OWNER_FIELDS, "owner-supplied")
     value["cutover_result"] = "passed"
     value["final_decision"] = "accepted"
     value["claims"] = {
         **value["claims"],  # type: ignore[dict-item]
-        "campaigns_a_through_j_passed": True,
-        "owner_validation_passed": True,
+        "bounded_owner_beta_qualification_passed": True,
         "owner_cutover_completed": True,
+        "final_owner_decision_recorded": True,
         "accepted_as_beta": True,
         "tagged": True,
     }
@@ -139,6 +172,31 @@ def test_final_hashes_cannot_be_copied_from_diagnostics_or_historical_evidence()
     value["historical_evidence_promotion"] = True
     with pytest.raises(ReleaseContractError):
         validate_promotion(value)
+
+
+def accepted_manifest() -> dict[str, object]:
+    value = manifest()
+    value["release_state"] = ACCEPTED_STATE
+    value["qualification_gates"] = dict.fromkeys(QUALIFICATION_GATES, "passed")
+    value["owner"] = dict.fromkeys(OWNER_FIELDS, "owner-supplied")
+    value["cutover_result"] = "passed"
+    value["final_decision"] = "accepted"
+    value["claims"] = {
+        **value["claims"],  # type: ignore[dict-item]
+        "bounded_owner_beta_qualification_passed": True,
+        "owner_cutover_completed": True,
+        "final_owner_decision_recorded": True,
+        "accepted_as_beta": True,
+        "tagged": True,
+    }
+    value["final"] = {
+        "accepted_commit": "a" * 40,
+        "final_app_hash": "d" * 64,
+        "final_dmg_hash": "e" * 64,
+        "final_tag": "v3.0.0-beta.1",
+        "release_date": "2026-08-26",
+    }
+    return value
 
 
 def test_release_notes_and_campaign_manifest_keep_final_and_owner_fields_pending() -> None:
@@ -158,6 +216,7 @@ def test_release_notes_and_campaign_manifest_keep_final_and_owner_fields_pending
     ):
         assert field in notes
     assert campaign["release_state"] == CANDIDATE_STATE
+    assert campaign["promotion_gates"] == dict.fromkeys(QUALIFICATION_GATES)
     assert campaign["results"] == dict.fromkeys(campaign["steps"])
     assert campaign["owner_responses"] == dict.fromkeys(campaign["owner_responses"])
 

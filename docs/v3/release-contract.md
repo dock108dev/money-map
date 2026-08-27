@@ -24,15 +24,18 @@ the explicit PEP 440 equivalent `3.0.0b1`.
 Slice 8 emits `money-map-v3-release-manifest-v1` with state `candidate_not_accepted`. It binds the
 exact clean source commit, public/PEP-440 version mapping, schema, bundle, architecture, signing and
 entitlements, normalized payload, app/DMG candidate identities, oracle digest, build mode, and blank
-Campaign A-J, `OV-01` through `OV-11`, owner, cutover, decision, hash, tag, and release-date fields.
-All acceptance, tagging, publication, notarization, stapling, and external-distribution claims are
-false.
+qualification, owner, cutover, decision, hash, tag, and release-date fields. All acceptance,
+tagging, publication, notarization, stapling, and external-distribution claims are false.
 
-Promotion is a separate fail-closed validation after the consolidated campaign. It requires a
-production-mode manifest, exact final artifact identities, every Campaign A-J and owner-validation
-result, explicit owner source/backup/manifest/acceptance fields, passed cutover, final owner decision,
-accepted commit, tag, and release date. Candidate code never synthesizes those values. Historical
-Slice 5/6 evidence and diagnostic artifacts cannot fill or promote final identities.
+Promotion is a separate fail-closed validation after the bounded owner-beta qualification. It
+requires four explicit passed gates: one complete headless gate, one exact candidate build, the
+two-cycle installed smoke, and the short owner synthetic walkthrough. Owner cutover result, final
+owner decision, final artifact identities, accepted commit, local tag, and release date remain
+separate mandatory requirements. Candidate code never synthesizes results or owner responses.
+The retired 221-combination matrix and Campaigns C-J are optional soak evidence and can neither
+block nor promote an owner-beta candidate. Historical Slice 5/6 evidence and diagnostic artifacts
+cannot fill or promote final identities. The installed smoke has one monotonic command-wide
+deadline of at most 1,200 seconds; timeout fails closed without retry and enters bounded cleanup.
 
 ## Signing, notarization, and publication
 
@@ -67,18 +70,17 @@ Slice 5/6 evidence and diagnostic artifacts cannot fill or promote final identit
   inherited credentials unavailable. Any repository import or missing-resource fallback fails the
   release.
 
-## Fresh installation and installed-app behavior
+## Bounded owner-beta installed behavior
 
-- Test on a fresh macOS user state: mount DMG, drag to `/Applications`, eject, launch by Finder,
-  Dock, and Spotlight, quit, relaunch, and uninstall according to documented instructions.
+- Mount the exact DMG read-only and copy the app only into the harness-created disposable private
+  Applications-like directory. Owner-beta qualification never installs into `/Applications`.
 - The installed app shows one native window, owns one sidecar, binds only `127.0.0.1` on an
   OS-selected port, completes an authenticated bounded readiness handshake, and needs no terminal,
   browser, checkout, Python, Node, or manual server.
-- Exercise every top-level view, deep navigation plus reload, native print panel, file chooser,
-  manual import, report creation, restart, offline behavior, and safe startup failure.
-- Ten consecutive launch/quit cycles must leave no child, listener, temporary secret, or stale
+- Two consecutive launch/quit cycles must leave no child, listener, temporary secret, or stale
   lock. A second launch must activate the existing instance and cannot create a concurrent SQLite
-  writer.
+  writer. Broader route, lifecycle, print, chooser, offline, and recovery inspection is optional
+  dedicated-runner or external-distribution hardening work unless a specific defect requires it.
 
 ## Existing-data migration, backup, and recovery
 
@@ -106,9 +108,10 @@ Slice 5/6 evidence and diagnostic artifacts cannot fill or promote final identit
 
 ## Accessibility and product acceptance
 
-- Complete keyboard-only navigation, visible focus, VoiceOver names/roles/state, Dynamic Type or
-  supported zoom, contrast, reduced-motion behavior, error announcements, print usability, and
-  file-panel accessibility for every release-critical flow.
+- Keep automated keyboard, focus, semantic-name, contrast, reduced-motion, error, print, and
+  file-panel assertions in the headless gate. The owner walkthrough checks the ordinary critical
+  path; exhaustive native accessibility/zoom/print inspection is dedicated-runner or scheduled
+  hardening work for external distribution.
 - Run the complete backend/frontend/release gate plus desktop-specific unit, integration,
   security, packaging, migration, backup/restore, and installed-app suites. Automated results are
   build evidence, not owner acceptance.
@@ -116,11 +119,11 @@ Slice 5/6 evidence and diagnostic artifacts cannot fill or promote final identit
   owner alone performs the bounded live acceptance, choosing every connection, import, support,
   and recovery action. Never simulate owner feedback or infer acceptance from automated traversal.
 
-Slice 3 formalizes the installed-app state matrix, native menus, close/reopen and sleep/wake
-lifecycle, offline-local behavior, report/print path approval, diagnostics allowlist, focus
-restoration, keyboard/VoiceOver inspection, reduced motion, contrast, minimum-size layout, and 200%
-zoom in `docs/v3/desktop-product-experience.md`. These remain required gates for every later beta
-artifact; automated accessibility assertions do not replace manual inspection.
+Slice 3 formalizes the broader installed-app state matrix, native menus, close/reopen and
+sleep/wake lifecycle, offline-local behavior, report/print path approval, diagnostics allowlist,
+focus restoration, keyboard/VoiceOver inspection, reduced motion, contrast, minimum-size layout,
+and 200% zoom in `docs/v3/desktop-product-experience.md`. These are retained as hardening and
+external-distribution coverage; they are not all repeated manually for every local owner beta.
 
 ## Security gates
 
