@@ -6,7 +6,7 @@
     "rollback_decision": null,
     "provider_choice": null,
     "keychain_response": null,
-    "usability_result": null,
+    "usability_result": "pass",
     "coaching_required": null,
     "cutover_acceptance": null,
     "final_beta_decision": null
@@ -14,7 +14,24 @@
   "engineering": {
     "schema": "0009_goal_persistence",
     "bounded_owner_beta_qualification": null,
-    "short_owner_synthetic_walkthrough": null,
+    "short_owner_synthetic_walkthrough": {
+      "result": "pass",
+      "owner_result": "pass",
+      "source_commit": "a6b2384b735d392d63a4f215a646f0f8a36092e4",
+      "candidate": "owner-beta-a6b2384-20260905a",
+      "dmg_sha256": "2b4be03a7c20c454b9df3a3710cdccb390a6ac10382fa4a02af79c5987d7de3b",
+      "synthetic_fixture": "complete_current",
+      "goal_update_owner_confirmed": true,
+      "reload_persistence_owner_confirmed": true,
+      "data_safety_next_action_owner_response": "backup and diag reports",
+      "normal_quit": true,
+      "cleanup": "pass",
+      "coaching_provided": [
+        "window_close_versus_application_quit"
+      ],
+      "owner_coaching_assessment": null,
+      "date": "2026-09-05"
+    },
     "cutover_result": null
   }
 }
