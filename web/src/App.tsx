@@ -614,28 +614,31 @@ export default function App() {
               {updating ? "Updating…" : "Update data"}
             </button>
             {desktopMode && (
-              <>
-                <button
-                  className="refresh-button"
-                  type="button"
-                  onClick={() => void window.__MONEY_MAP_DESKTOP__?.reload()}
-                >
-                  Reload
-                </button>
-                <button
-                  className="refresh-button"
-                  type="button"
-                  onClick={() => setShowDataHome(true)}
-                >
-                  Data safety
-                </button>
-                <button className="refresh-button" type="button" disabled={busy} onClick={() => void runReport()}>
-                  Generate report
-                </button>
-                <button className="refresh-button" type="button" disabled={busy} onClick={() => void previewDiagnostics()}>
-                  Diagnostics
-                </button>
-              </>
+              <details className="desktop-admin print-hidden">
+                <summary className="refresh-button">Admin</summary>
+                <div className="desktop-admin-actions">
+                  <button
+                    className="refresh-button"
+                    type="button"
+                    onClick={() => void window.__MONEY_MAP_DESKTOP__?.reload()}
+                  >
+                    Reload
+                  </button>
+                  <button
+                    className="refresh-button"
+                    type="button"
+                    onClick={() => setShowDataHome(true)}
+                  >
+                    Data safety
+                  </button>
+                  <button className="refresh-button" type="button" disabled={busy} onClick={() => void runReport()}>
+                    Generate report
+                  </button>
+                  <button className="refresh-button" type="button" disabled={busy} onClick={() => void previewDiagnostics()}>
+                    Diagnostics
+                  </button>
+                </div>
+              </details>
             )}
           </div>
         </header>

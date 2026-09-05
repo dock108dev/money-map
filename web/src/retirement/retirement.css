@@ -40,17 +40,12 @@
 .retirement-projection-table th:first-child, .retirement-projection-table td:first-child, .retirement-projection-table th:last-child, .retirement-projection-table td:last-child { text-align: left; }
 .retirement-evidence-actions { display: flex; gap: 8px; }
 .retirement-evidence-actions .secondary-button { min-height: 44px; }
-.evidence-disclosure { padding: 0; overflow: clip; }
-.evidence-disclosure > summary { cursor: pointer; padding: 18px 22px; font-weight: 800; }
-.evidence-disclosure[open] > summary { border-bottom: 1px solid #e5e9e6; }
 .retirement-assumption-grid { padding: 18px 22px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .retirement-assumption-grid p { margin: 0; display: grid; gap: 4px; }
 .critical-warning { margin: 18px 22px 22px; padding: 14px; border: 1px solid #e8c4c8; border-radius: 10px; color: #7b3540; background: #fff0f1; }
 .critical-warning ul { margin-bottom: 0; }
 .retirement-snapshots { padding-bottom: 20px; }
-.snapshot-tools { padding: 18px 22px 10px; display: grid; grid-template-columns: minmax(200px, auto) minmax(220px, 1fr); gap: 12px; align-items: center; }
-.snapshot-tools label { font-size: 11px; font-weight: 700; }
-.snapshot-tools input, .snapshot-dialog input { width: 100%; min-height: 44px; border: 1px solid #cbd3ce; border-radius: 10px; padding: 0 12px; background: white; }
+.snapshot-dialog input { width: 100%; min-height: 44px; border: 1px solid #cbd3ce; border-radius: 10px; padding: 0 12px; background: white; }
 .retirement-snapshot-list { padding: 0 22px; display: grid; gap: 8px; }
 .retirement-snapshot-list > button { min-height: 54px; border: 1px solid #dce2de; border-radius: 12px; background: #fafcfb; padding: 10px 12px; display: flex; justify-content: space-between; gap: 14px; text-align: left; color: inherit; }
 .retirement-snapshot-list span { display: grid; gap: 3px; }
@@ -85,7 +80,7 @@
 @media (max-width: 620px) {
   .retirement-heading { display: grid; }
   .surface-actions { flex-wrap: wrap; }
-  .retirement-controls, .retirement-profile-form, .retirement-assumption-grid, .snapshot-tools { grid-template-columns: 1fr; }
+  .retirement-controls, .retirement-profile-form, .retirement-assumption-grid { grid-template-columns: 1fr; }
   .retirement-controls button, .retirement-heading button { min-height: 44px; }
   .retirement-verdict dl { grid-template-columns: 1fr; }
   .retirement-chart-wrap { overflow-x: auto; }

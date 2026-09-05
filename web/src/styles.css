@@ -413,7 +413,7 @@ button {
 
 .notice {
   display: grid;
-  grid-template-columns: 30px 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 15px 18px;
   background: #fcf6e7;
@@ -422,6 +422,12 @@ button {
   color: #574c32;
   font-size: 12px;
 }
+
+.notice:has(> .notice-mark) {
+  grid-template-columns: 30px minmax(0, 1fr);
+}
+
+.notice > * { min-width: 0; }
 
 .notice-mark {
   width: 25px;
@@ -3904,3 +3910,22 @@ tbody tr[tabindex]:hover {
   .diagnostics-preview,
   .dialog-actions { display: none !important; }
 }
+
+/* Shared disclosures must be available before any lazy route has loaded. */
+.evidence-disclosure { padding: 0; overflow: clip; }
+.evidence-disclosure > summary { cursor: pointer; padding: 18px 22px; font-weight: 800; }
+.evidence-disclosure[open] > summary { border-bottom: 1px solid #e5e9e6; }
+.snapshot-tools { padding: 18px 22px 10px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: center; }
+.snapshot-tools label { font-size: 11px; font-weight: 700; }
+.snapshot-tools input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #cbd3ce; border-radius: 10px; padding: 0 12px; color: var(--ink); background: white; font: inherit; }
+.evidence-disclosure .scenario-list > p { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.desktop-admin { position: relative; }
+.desktop-admin > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.desktop-admin > summary::-webkit-details-marker { display: none; }
+.desktop-admin > summary::after { content: "⌄"; }
+.desktop-admin[open] > summary::after { content: "⌃"; }
+.desktop-admin-actions { position: absolute; top: calc(100% + 8px); right: 0; width: min(240px, calc(100vw - 32px)); padding: 10px; display: grid; gap: 6px; background: var(--paper, #fbfaf5); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px #18382c24; }
+.desktop-admin-actions .refresh-button { text-align: left; color: var(--ink); background: transparent; border-color: transparent; }
+.desktop-admin-actions .refresh-button:hover { background: #e5efe7; }
+.desktop-admin > summary:focus-visible { outline: 3px solid #c5a749; outline-offset: 3px; }
+@media (max-width: 760px) { .snapshot-tools { grid-template-columns: minmax(0, 1fr); } }
