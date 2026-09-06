@@ -160,6 +160,8 @@ fn forward_with_limits(
 ) -> Result<DesktopResponse, String> {
     let method = validate_request(&request)?;
     let client = Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(limits.connect)
         .timeout(limits.total.min(limits.read))
         .build()
@@ -356,5 +358,60 @@ mod tests {
         .unwrap_err();
         assert!(!error.contains("private-session-value"));
         assert!(!error.contains(&port.to_string()));
+    }
+    #[test]
+    fn redirects_cannot_forward_the_desktop_session_to_another_authority() {
+        let destination = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        destination.set_nonblocking(true).unwrap();
+        let target_port = destination.local_addr().unwrap().port();
+        let source = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let source_port = source.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = source.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(1)))
+                .unwrap();
+            let mut incoming = [0_u8; 4096];
+            let count = stream.read(&mut incoming).unwrap();
+            assert!(String::from_utf8_lossy(&incoming[..count]).contains("synthetic-session"));
+            write!(stream, "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{target_port}/collect\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        let observer = thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_millis(500);
+            while std::time::Instant::now() < deadline {
+                match destination.accept() {
+                    Ok((mut stream, _)) => {
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(1)))
+                            .unwrap();
+                        let mut incoming = [0_u8; 4096];
+                        let _ = stream.read(&mut incoming);
+                        stream
+                            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                            .unwrap();
+                        return true;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5))
+                    }
+                    Err(error) => panic!("{error}"),
+                }
+            }
+            false
+        });
+        let response = forward_with_limits(
+            source_port,
+            "synthetic-session",
+            request("/api/test", "GET", None),
+            ProxyLimits::default(),
+        )
+        .unwrap();
+        server.join().unwrap();
+        let contacted = observer.join().unwrap();
+        assert_eq!(response.status, 302);
+        assert!(
+            !contacted,
+            "redirect destination must never receive a request"
+        );
     }
 }

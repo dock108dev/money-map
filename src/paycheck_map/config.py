@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .desktop_policy import uses_managed_data_home
@@ -15,8 +17,8 @@ class Settings(BaseSettings):
 
     project_root: Path = Path(__file__).resolve().parents[2]
     local_dir: Path | None = None
-    host: str = "127.0.0.1"
-    port: int = 8765
+    host: Literal["127.0.0.1"] = "127.0.0.1"
+    port: int = Field(default=8765, ge=1, le=65_535)
     desktop_mode: bool = False
     desktop_data_mode: str | None = None
     desktop_app_root: Path | None = None
@@ -97,12 +99,16 @@ class Settings(BaseSettings):
 
     def ensure_private_dirs(self) -> None:
         for path in (
+            self.private_dir,
             self.inbox_dir,
             self.database_path.parent,
             self.reports_dir,
             self.backups_dir,
         ):
-            path.mkdir(parents=True, exist_ok=True)
+            if path.is_symlink():
+                raise RuntimeError("A private runtime directory was rejected")
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+            path.chmod(0o700)
 
 
 settings = Settings()

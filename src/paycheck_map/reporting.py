@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import tempfile
 from html import escape
 from pathlib import Path
 
@@ -140,14 +142,32 @@ th:first-child,td:first-child{{text-align:left}}
 {forecast_table(alternative)}
 <p class="source">Statement values remain immutable. Calculated payroll allocations and reconstructed balances use versioned deterministic arithmetic. Investment result appears only for a sufficiently long period with unambiguous boundary activity. Assumed forecast returns are separate from contributions.</p>
 </body></html>"""
-    runtime_settings.reports_dir.mkdir(parents=True, exist_ok=True)
+    return _write_report(html, runtime_settings)
+
+
+def _write_report(html: str, runtime_settings: Settings) -> Path:
+    runtime_settings.ensure_private_dirs()
     output = runtime_settings.reports_dir / REPORT_FILENAME
-    temporary = runtime_settings.reports_dir / f".{REPORT_FILENAME}.tmp"
-    temporary.write_text(html, encoding="utf-8")
-    temporary.chmod(0o600)
-    temporary.replace(output)
-    output.chmod(0o600)
-    return output
+    temporary: Path | None = None
+    try:
+        # An exclusive, unpredictable file avoids shared-temp races and preplaced links.
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=runtime_settings.reports_dir,
+            prefix=".money-map-report-",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(html)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(output)
+        return output
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def approved_report(report_id: str, runtime_settings: Settings = settings) -> Path:

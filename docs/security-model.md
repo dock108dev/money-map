@@ -4,7 +4,8 @@
 
 The normative desktop threat/control matrix is `docs/v3/desktop-threat-model.md`; the executed
 gates are `docs/v3/security-acceptance.md`. The signed shell activates two exact Tauri capability
-sets: 13 reviewed application commands for bundled `main`, and only status/restart/About for the
+sets: 13 application commands plus two qualification-observation commands for bundled `main`,
+and only status/restart/About for the
 nonfinancial `safe-error` window. Remote content, Plaid frames, and arbitrary windows receive no
 native authority. Shell, generic filesystem, generic HTTP, arbitrary opener, and window creation
 permissions are absent.
@@ -13,21 +14,23 @@ Every sidecar generation receives a new 256-bit session through a private inheri
 not arguments or environment values. The authenticated server binds only ephemeral
 `127.0.0.1`, requires the exact Host/session/origin contract, rejects duplicate or ambiguous
 framing, and bounds bodies, concurrency and responses. Rust supplies the destination and secret;
-React cannot read either. Startup verifies the strict Apple-team-signed bundle/arm64 sidecar before
+React cannot read either. The Rust loopback HTTP client disables redirects and environment proxy
+discovery so the session cannot be forwarded to a redirect target or configured proxy. Startup verifies the strict Apple-team-signed bundle/arm64 sidecar before
 spawn, and database/recovery/import artifacts pass closed-schema, identity and resource gates.
 
 Plaid credentials are collected by fixed sidecar-owned native macOS prompts; React sends only the
 environment and never receives client credentials or access tokens. Keychain services and account
-patterns are versioned exact allowlists. Safe event logs contain only fixed code/classification/time
-fields and rotate at bounded size. These controls do not protect a fully compromised logged-in
+patterns are versioned exact allowlists. Safe event logs contain fixed code/classification/time fields; separate bounded failure records
+may include sanitized Money Map source filenames and line numbers. Neither includes raw exception
+text, locals, financial values or private paths. These controls do not protect a fully compromised logged-in
 macOS account that can inspect memory or rewrite both a file and its unkeyed digest.
 
 ## Desktop reports and sanitized diagnostics
 
 React receives opaque report identities, never filesystem authority. The backend approves the one
 supported report filename under the report root; Rust independently rejects traversal, symlinks,
-non-files, and parent mismatches before Quick Look or Finder access. Report writes are atomic,
-private, and local.
+non-files, and parent mismatches before Quick Look or Finder access. Report and diagnostics writes use exclusive private temporary files and atomic replacement;
+native diagnostics reject linked or nonregular existing destinations.
 
 Diagnostics cross the native/backend boundary only as allowlisted health classifications. They
 exclude financial data, account or institution identifiers, credentials, sessions, ports, paths,
@@ -41,7 +44,8 @@ and performs no write when canceled.
 It binds only the configured `127.0.0.1:8765` authority. The standalone middleware requires that
 exact Host, rejects cross-origin and cross-site browser requests, requires JSON for mutations,
 rejects ambiguous framing and duplicate security headers, and bounds bodies and active requests.
-Responses are `no-store`, non-indexable, non-frameable, MIME-sniff protected, referrer-free, and
+Bodies have a two-second total read deadline, a 1 MiB size limit, and a 1,024-chunk limit.
+Validation errors never echo rejected values or field names. Responses are `no-store`, non-indexable, non-frameable, MIME-sniff protected, referrer-free, and
 covered by a restrictive CSP and Permissions Policy. Framework API documentation and the OpenAPI
 schema are disabled. HSTS and cookie flags do not apply because this mode uses plain loopback HTTP
 and has no cookies; it must not be reverse-proxied or exposed on a network.
@@ -63,6 +67,8 @@ and has no cookies; it must not be reverse-proxied or exposed on a network.
 
 - The desktop server binds only ephemeral IPv4 `127.0.0.1`; exact Host, origin, one-time session,
   framing, size, method, content-type, path and concurrency rules fail closed.
+- Standalone private root/inbox/data/report/backup directories are created or tightened to `0700`;
+  symlink directory targets are rejected. Settings restricts Host to `127.0.0.1`.
 - `.local/` contains inbox files, SQLite data, reports, temporary renders, and backups,
   and is excluded from Git.
 - The privacy check rejects financial file types outside approved synthetic paths and
@@ -82,6 +88,8 @@ and has no cookies; it must not be reverse-proxied or exposed on a network.
   single-use.
 - The connector requests only Transactions for SoFi and Investments for Fidelity.
   Auth, Identity, Transfer, payment, and trading capabilities are absent.
+- Credential configuration, token issuance/exchange and revocation share the refresh operation
+  guard; overlapping operations fail with 409 before reaching providers or prompts.
 - Link sessions are local, expiring, and single-use. Sync mutations are idempotent,
   response-hashed, and transaction-scoped so a failure cannot leave partial normalized
   data.
@@ -97,7 +105,7 @@ and has no cookies; it must not be reverse-proxied or exposed on a network.
 - Drive Calculator arithmetic runs entirely in the browser. Its IRS reference is an
   ordinary external link opened only when the user chooses it; the app does not transmit
   plan values, balances, or calculator inputs to the IRS or another service.
-- No telemetry, screen scraping, trading, or money movement exists.
+- No remote telemetry, screen scraping, trading, or money movement exists.
 - Packaged macOS paths are supplied only by the Tauri path authority after its inherited child
   environment is cleared. Data, cache, and logs are separate; private directories use `0700` and
   accepted database/backup files use `0600`.
@@ -116,3 +124,6 @@ Disk encryption, macOS account security, and local backups remain outside the
 application. Generated `.local/` data is private and should be handled like the
 original statements. Plaid availability, institution coverage, consent renewal,
 third-party retention, plan eligibility, and billing remain external dependencies.
+
+The current review, remaining third-party parent-script trust, parser isolation limits, and
+dependency warnings are documented in [security hardening](v3/security-hardening.md).

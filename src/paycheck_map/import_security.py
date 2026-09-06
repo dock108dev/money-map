@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import stat
 import unicodedata
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Any
+from xml.etree import ElementTree
 
 import pdfplumber
 
@@ -113,6 +116,20 @@ def _validate_pdf(path: Path, limits: ImportLimits) -> None:
         raise ImportSecurityError("The PDF container could not be verified.") from error
 
 
+class _NoDTDTreeBuilder(ElementTree.TreeBuilder):
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise ImportSecurityError("Workbook document type declarations are not supported.")
+
+
+def _workbook_xml(content: bytes) -> ElementTree.Element:
+    try:
+        return ElementTree.fromstring(
+            content, parser=ElementTree.XMLParser(target=_NoDTDTreeBuilder())
+        )
+    except ElementTree.ParseError as error:
+        raise ImportSecurityError("The workbook XML structure was rejected.") from error
+
+
 def _validate_xlsx(path: Path, limits: ImportLimits) -> None:
     if path.read_bytes()[:4] != b"PK\x03\x04":
         raise ImportSecurityError("The workbook signature was rejected.")
@@ -122,8 +139,14 @@ def _validate_xlsx(path: Path, limits: ImportLimits) -> None:
             if not 0 < len(entries) <= limits.max_xlsx_entries:
                 raise ImportSecurityError("The workbook entry count was rejected.")
             expanded = 0
+            seen_names: set[str] = set()
             for entry in entries:
                 name = entry.filename
+                if name in seen_names or entry.flag_bits & 1:
+                    raise ImportSecurityError(
+                        "Duplicate or encrypted workbook entries are not supported."
+                    )
+                seen_names.add(name)
                 pure = PurePosixPath(name)
                 if (
                     pure.is_absolute()
@@ -145,18 +168,21 @@ def _validate_xlsx(path: Path, limits: ImportLimits) -> None:
                     and entry.file_size > entry.compress_size * limits.max_xlsx_expansion_ratio
                 ):
                     raise ImportSecurityError("The workbook compression ratio was rejected.")
-                if lowered.endswith(".rels"):
-                    content = archive.read(entry)
-                    if b'TargetMode="External"' in content or b"TargetMode='External'" in content:
-                        raise ImportSecurityError(
-                            "External workbook relationships are not supported."
-                        )
-                if (
-                    lowered.startswith("xl/worksheets/")
-                    and lowered.endswith(".xml")
-                    and b"<f" in archive.read(entry)
-                ):
-                    raise ImportSecurityError("Workbook formulas are not supported.")
+                if lowered.endswith((".xml", ".rels")):
+                    root = _workbook_xml(archive.read(entry))
+                    for element in root.iter():
+                        if lowered.endswith(".rels") and any(
+                            key.rsplit("}", 1)[-1] == "TargetMode" and value.lower() == "external"
+                            for key, value in element.attrib.items()
+                        ):
+                            raise ImportSecurityError(
+                                "External workbook relationships are not supported."
+                            )
+                        if (
+                            lowered.startswith("xl/worksheets/")
+                            and element.tag.rsplit("}", 1)[-1] == "f"
+                        ):
+                            raise ImportSecurityError("Workbook formulas are not supported.")
             if archive.testzip() is not None:
                 raise ImportSecurityError("The workbook archive failed verification.")
     except ImportSecurityError:
@@ -187,10 +213,27 @@ def _validate_csv(path: Path, limits: ImportLimits) -> None:
         raise ImportSecurityError("The CSV encoding or structure was rejected.") from error
 
 
+def _unique_json_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ImportSecurityError("Duplicate JSON fields are not supported.")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ImportSecurityError("Non-finite JSON values are not supported.")
+
+
 def _validate_json(path: Path, limits: ImportLimits) -> None:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        value = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_unique_json_fields,
+            parse_constant=_reject_json_constant,
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError) as error:
         raise ImportSecurityError("The JSON encoding or structure was rejected.") from error
     stack: list[tuple[object, int]] = [(value, 1)]
     items = 0
@@ -198,6 +241,8 @@ def _validate_json(path: Path, limits: ImportLimits) -> None:
         current, depth = stack.pop()
         if depth > limits.max_json_depth:
             raise ImportSecurityError("The JSON nesting limit was exceeded.")
+        if isinstance(current, float) and not math.isfinite(current):
+            raise ImportSecurityError("Non-finite JSON values are not supported.")
         if isinstance(current, dict):
             items += len(current)
             stack.extend((item, depth + 1) for item in current.values())

@@ -4,8 +4,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __product_version__
@@ -40,6 +41,22 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_request: Request, _error: RequestValidationError) -> JSONResponse:
+    # Validation input/ctx/loc can contain rejected secrets or attacker-controlled field names.
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": (
+                "The request contains invalid or unsupported values. Review the entered fields."
+            )
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 app.add_middleware(RequestFailureMiddleware)
 app.add_middleware(LocalSecurityMiddleware)
 app.include_router(router)

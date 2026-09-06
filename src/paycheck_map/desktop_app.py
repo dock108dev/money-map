@@ -17,8 +17,16 @@ _MAX_REQUEST_BODY = 1_048_576
 _MAX_SECURITY_HEADER = 512
 _MAX_ACTIVE_REQUESTS = 32
 _BODY_READ_TIMEOUT_SECONDS = 2.0
+_MAX_BODY_CHUNKS = 1_024
 _SECURITY_HEADERS = frozenset(
-    {b"host", b"origin", b"x-money-map-session", b"content-length", b"transfer-encoding"}
+    {
+        b"host",
+        b"origin",
+        b"x-money-map-session",
+        b"content-length",
+        b"transfer-encoding",
+        b"content-type",
+    }
 )
 
 
@@ -165,6 +173,8 @@ class DesktopSecurityMiddleware:
         if grouped.get(b"content-length") and grouped.get(b"transfer-encoding"):
             return False
         for key in _SECURITY_HEADERS:
+            if len(grouped.get(key, [])) > 1:
+                return False
             for value in grouped.get(key, []):
                 if (
                     len(value) > _MAX_SECURITY_HEADER
@@ -189,9 +199,14 @@ class DesktopSecurityMiddleware:
     async def _read_body(receive: Receive) -> list[Message] | None:
         messages: list[Message] = []
         size = 0
+        # One deadline covers the entire body; sending tiny chunks cannot renew admission forever.
+        deadline = asyncio.get_running_loop().time() + _BODY_READ_TIMEOUT_SECONDS
         while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0 or len(messages) >= _MAX_BODY_CHUNKS:
+                return None
             try:
-                message = await asyncio.wait_for(receive(), timeout=_BODY_READ_TIMEOUT_SECONDS)
+                message = await asyncio.wait_for(receive(), timeout=remaining)
             except TimeoutError:
                 return None
             messages.append(message)

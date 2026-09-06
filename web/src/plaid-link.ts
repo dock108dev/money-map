@@ -68,13 +68,8 @@ export async function openPlaidLink(
       onExit: (error) => {
         handler.destroy();
         if (error) {
-          reject(
-            new Error(
-              error.display_message ??
-                error.error_message ??
-                `Plaid Link exited (${error.error_code ?? "unknown error"}).`,
-            ),
-          );
+          // Third-party error text may echo identifiers; retain a fixed local failure surface.
+          reject(new Error("Plaid Link could not complete the connection. Try again or use manual import."));
         } else {
           resolve();
         }

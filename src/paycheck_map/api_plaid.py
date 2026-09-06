@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -51,6 +52,17 @@ def get_secret_store() -> SecretStore:
     return keychain
 
 
+def credential_mutation_guard() -> Iterator[None]:
+    """Serialize credential/consent changes with account refresh and token exchange."""
+    try:
+        with refresh_guard():
+            yield
+    except RefreshAlreadyRunningError as error:
+        raise HTTPException(
+            status_code=409, detail="An account operation is already running."
+        ) from error
+
+
 @router.get("/plaid/status")
 def get_plaid_status(
     session: Session = Depends(get_session),
@@ -85,7 +97,7 @@ def update_refresh_preference(
     return refresh_status(session)
 
 
-@router.post("/plaid/configuration")
+@router.post("/plaid/configuration", dependencies=[Depends(credential_mutation_guard)])
 def set_plaid_configuration(
     payload: PlaidConfigurationInput,
     store: SecretStore = Depends(get_secret_store),
@@ -105,7 +117,9 @@ def set_plaid_configuration(
         raise HTTPException(status_code=422, detail="Plaid setup did not complete.") from exc
 
 
-@router.delete("/plaid/configuration/{environment}")
+@router.delete(
+    "/plaid/configuration/{environment}", dependencies=[Depends(credential_mutation_guard)]
+)
 def delete_plaid_configuration(
     environment: Literal["sandbox", "production"],
     store: SecretStore = Depends(get_secret_store),
@@ -117,7 +131,7 @@ def delete_plaid_configuration(
     return {"cleared": True}
 
 
-@router.post("/plaid/link-token")
+@router.post("/plaid/link-token", dependencies=[Depends(credential_mutation_guard)])
 def create_link_token(
     payload: PlaidLinkInput,
     session: Session = Depends(get_session),
@@ -141,7 +155,7 @@ def create_link_token(
         ) from exc
 
 
-@router.post("/plaid/exchange")
+@router.post("/plaid/exchange", dependencies=[Depends(credential_mutation_guard)])
 def exchange_link_token(
     payload: PlaidExchangeInput,
     session: Session = Depends(get_session),
@@ -205,7 +219,10 @@ def sync_connection(
         ) from exc
 
 
-@router.post("/plaid/connections/{connection_id}/update-token")
+@router.post(
+    "/plaid/connections/{connection_id}/update-token",
+    dependencies=[Depends(credential_mutation_guard)],
+)
 def create_update_token(
     connection_id: int,
     session: Session = Depends(get_session),
@@ -226,7 +243,9 @@ def create_update_token(
         raise HTTPException(status_code=502, detail=detail) from exc
 
 
-@router.delete("/plaid/connections/{connection_id}")
+@router.delete(
+    "/plaid/connections/{connection_id}", dependencies=[Depends(credential_mutation_guard)]
+)
 def disconnect_plaid(
     connection_id: int,
     delete_local_data: bool = True,

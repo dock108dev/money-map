@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
-use std::{fs, os::unix::fs::PermissionsExt};
+use std::{fs, os::unix::fs::MetadataExt};
 
 use data_home::DataHomePaths;
 use metadata::{about_info_for_mode, native_about_metadata, AboutInfo, BUILD_COMMIT};
@@ -585,22 +585,41 @@ async fn desktop_export_diagnostics(
         let Some(selected) = selected else {
             return Ok(false);
         };
-        if fs::symlink_metadata(&selected)
-            .map(|metadata| metadata.file_type().is_symlink())
-            .unwrap_or(false)
-        {
-            return Err("The diagnostics destination was rejected.".to_string());
-        }
-        let bytes = serde_json::to_vec_pretty(&payload)
-            .map_err(|_| "Sanitized diagnostics could not be prepared.".to_string())?;
-        fs::write(&selected, bytes)
-            .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
-        fs::set_permissions(&selected, fs::Permissions::from_mode(0o600))
-            .map_err(|_| "Sanitized diagnostics permissions could not be secured.".to_string())?;
+        write_diagnostics_file(&selected, &payload)?;
         Ok(true)
     })
     .await
     .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?
+}
+
+fn write_diagnostics_file(
+    selected: &std::path::Path,
+    payload: &serde_json::Value,
+) -> Result<(), String> {
+    match fs::symlink_metadata(selected) {
+        Ok(metadata) if !metadata.is_file() || metadata.nlink() != 1 => {
+            return Err("The diagnostics destination was rejected.".to_string());
+        }
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            return Err("The diagnostics destination was rejected.".to_string());
+        }
+        _ => {}
+    }
+    let parent = selected
+        .parent()
+        .ok_or_else(|| "The diagnostics destination was rejected.".to_string())?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
+    serde_json::to_writer_pretty(temporary.as_file_mut(), payload)
+        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
+    temporary
+        .persist(selected)
+        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1404,5 +1423,36 @@ mod menu_tests {
             ),
             observed
         );
+    }
+    #[test]
+    fn diagnostic_export_is_private_atomic_and_rejects_link_targets() {
+        use std::os::unix::fs::{symlink, MetadataExt};
+        let root = tempfile::tempdir().unwrap();
+        let destination = root.path().join("diagnostics.json");
+        let payload = serde_json::json!({"status": "synthetic"});
+        super::write_diagnostics_file(&destination, &payload).unwrap();
+        assert_eq!(
+            std::fs::metadata(&destination).unwrap().mode() & 0o777,
+            0o600
+        );
+        let replaced = serde_json::json!({"status": "updated"});
+        super::write_diagnostics_file(&destination, &replaced).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&destination).unwrap())
+                .unwrap(),
+            replaced
+        );
+        let linked = root.path().join("linked.json");
+        std::fs::hard_link(&destination, &linked).unwrap();
+        assert!(super::write_diagnostics_file(&linked, &payload).is_err());
+        std::fs::remove_file(&linked).unwrap();
+        symlink(&destination, &linked).unwrap();
+        assert!(super::write_diagnostics_file(&linked, &payload).is_err());
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&destination).unwrap())
+                .unwrap(),
+            replaced
+        );
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
     }
 }

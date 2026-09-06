@@ -11,7 +11,7 @@ supported developer-facing overrides:
 | Variable | Default | Use |
 | --- | --- | --- |
 | `PAYCHECK_MAP_LOCAL_DIR` | `<repository>/.local` | Put the inbox, database, reports, and backups under another private root. CI and tests use this for isolation. |
-| `PAYCHECK_MAP_PORT` | `8765` | Select another local port for `paycheck-map serve`. The service still binds only IPv4 loopback. |
+| `PAYCHECK_MAP_PORT` | `8765` | Select a port from 1 through 65535 for `paycheck-map serve`. The service still binds only IPv4 loopback. |
 | `PAYCHECK_MAP_HOST` | `127.0.0.1` | Safety guard only. Any other value makes startup fail; network exposure is unsupported. |
 
 Set overrides in the process environment, for example:
@@ -19,6 +19,10 @@ Set overrides in the process environment, for example:
 ```bash
 PAYCHECK_MAP_LOCAL_DIR=/absolute/private/path uv run paycheck-map serve
 ```
+
+Settings validates loopback Host before application construction. Runtime private directories
+are created or tightened to mode `0700`; existing symlink directory targets are rejected. The
+internal desktop HTTP proxy ignores environment proxies and does not follow redirects.
 
 The selected directory may contain financial data. Keep it outside Git, restrict access to the
 local user, and do not use a shared or synchronized repository path. `PAYCHECK_MAP_PROJECT_ROOT` and
