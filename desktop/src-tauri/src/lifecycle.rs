@@ -72,7 +72,7 @@ impl LifecycleMachine {
                 | (Ready, Failed | Restarting | Stopping)
                 | (Failed, Restarting | Stopping)
                 | (Restarting, Ready | Failed | Stopping)
-                | (Stopping, Stopped)
+                | (Stopping, Stopped | Failed)
         );
         if !valid {
             return Err("invalid lifecycle transition");
@@ -119,7 +119,7 @@ mod tests {
         machine.ready().unwrap();
         assert!(machine.ready().is_err());
         machine.begin_stop().unwrap();
-        assert!(machine.fail().is_err());
+        assert!(machine.ready().is_err());
     }
 
     #[test]

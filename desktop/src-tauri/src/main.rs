@@ -1244,15 +1244,20 @@ fn main() {
         RunEvent::ExitRequested { api, .. } => {
             if !EXIT_CLEANUP_STARTED.swap(true, Ordering::SeqCst) {
                 api.prevent_exit();
-                if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
-                    controller.shutdown();
+                let cleanup_failed = handle
+                    .try_state::<Arc<RuntimeController>>()
+                    .is_some_and(|controller| controller.shutdown().is_err());
+                if cleanup_failed {
+                    eprintln!("MM-NATIVE-CLEANUP-FAIL");
                 }
-                handle.exit(0);
+                handle.exit(if cleanup_failed { 1 } else { 0 });
             }
         }
         RunEvent::Exit => {
             if let Some(controller) = handle.try_state::<Arc<RuntimeController>>() {
-                controller.shutdown();
+                if controller.shutdown().is_err() {
+                    eprintln!("MM-NATIVE-CLEANUP-FAIL");
+                }
             }
         }
         RunEvent::Reopen { .. } => {

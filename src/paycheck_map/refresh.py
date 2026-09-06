@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from threading import Lock
 from typing import Any
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from .business_time import as_utc as _as_utc
 from .business_time import local_business_date as local_business_date
-from .forecasting import ensure_baseline
+from .forecasting import ForecastUnavailableError, ensure_baseline
 from .goal_observation import (
     CompletedOperationState,
     SourceCurrentnessUpdate,
@@ -24,6 +24,7 @@ from .keychain import SecretStore, SecretStoreError, keychain
 from .models import ApplicationSetting, PlaidConnection, PlaidSyncRun
 from .plaid_client import PlaidAPIError, PlaidClient
 from .plaid_service import sync_plaid_connection
+from .safe_events import record_failure
 
 AUTO_REFRESH_KEY = "plaid.auto_refresh_enabled"
 AUTO_ATTEMPT_KEY = "plaid.last_auto_refresh_attempt_date"
@@ -129,7 +130,7 @@ def _safe_failure(exc: Exception) -> tuple[str, str]:
     if isinstance(exc, SecretStoreError):
         return "SECRET_STORE_ERROR", "The local credential store could not be read."
     if isinstance(exc, ValueError):
-        return "CONNECTION_ERROR", str(exc)[:300]
+        return "CONNECTION_ERROR", "The connection data could not be validated."
     return "LOCAL_SYNC_ERROR", "Local synchronization failed; existing data was preserved."
 
 
@@ -260,7 +261,9 @@ def sync_all_connections(
                     )
                 )
                 succeeded += 1
-            except Exception as exc:  # connection failures are isolated and safely summarized
+            except Exception as exc:  # Preserve per-connection isolation with explicit failure.
+                session.rollback()
+                record_failure("MM-SYNC-FAIL", "data_integrity", exc)
                 code, message = _safe_failure(exc)
                 session.expire_all()
                 latest_run = session.scalar(
@@ -321,8 +324,11 @@ def sync_all_connections(
                 )
 
         if succeeded:
-            with suppress(ValueError):
+            try:
                 ensure_baseline(session)
+            except ForecastUnavailableError as error:
+                # Accounts remain useful before the first payroll import.
+                record_failure("MM-FORECAST-UNAVAILABLE", "data_integrity", error)
         finished = _clock_timestamp(operation_clock, not_before=last_event)
         failed = len(connection_ids) - succeeded
         operation_state = (

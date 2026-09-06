@@ -26,6 +26,7 @@ from .models import (
     SourceEvidence,
 )
 from .reconciliation import reconcile_all
+from .safe_events import record_failure
 
 
 @dataclass(frozen=True)
@@ -324,7 +325,8 @@ def import_private_inbox(session: Session, runtime_settings: Settings = settings
                     raise UnsupportedLayoutError("No adapter supports this file")
                 session.flush()
             imported += 1
-        except (ImportSecurityError, ValueError, OSError):
+        except (ImportSecurityError, ValueError, OSError) as error:
+            record_failure("MM-IMPORT-REJECTED", "import", error)
             errors.append(
                 {
                     "filename": "rejected import",

@@ -821,6 +821,9 @@ class DataHomeManager:
         return self._public_journal(journal)
 
     def _record_failure(self, journal: dict[str, Any], error: Exception) -> dict[str, Any]:
+        from .safe_events import record_failure
+
+        record_failure("MM-DATA-OPERATION-FAIL", "data_integrity", error)
         code = error.code if isinstance(error, DataHomeError) else "operation_interrupted"
         journal["phase"] = Phase.RECOVERABLE_FAILURE
         journal["failure_code"] = code

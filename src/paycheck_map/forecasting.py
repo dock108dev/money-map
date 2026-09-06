@@ -352,6 +352,10 @@ def _contribution_limits(runtime_settings: Settings) -> dict[str, dict[str, str]
     return cast(dict[str, dict[str, str]], json.loads(path.read_text(encoding="utf-8")))
 
 
+class ForecastUnavailableError(ValueError):
+    """No payroll evidence exists yet; account synchronization may still succeed."""
+
+
 def build_forecast(
     session: Session,
     scenario_input: ScenarioInput,
@@ -364,7 +368,7 @@ def build_forecast(
         select(PayrollStatement).order_by(PayrollStatement.payment_date.desc()).limit(1)
     )
     if latest is None:
-        raise ValueError("Import at least one payroll statement before forecasting")
+        raise ForecastUnavailableError("Import at least one payroll statement before forecasting")
 
     # The latest statement remains the baseline even when its payment month is partial;
     # this captures a newly effective salary or deduction change.

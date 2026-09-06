@@ -15,7 +15,7 @@ from .api_plaid import get_secret_store
 from .balances import add_manual_value_observation
 from .config import settings
 from .db import get_session
-from .forecasting import ScenarioInput, build_forecast, ensure_baseline
+from .forecasting import ForecastUnavailableError, ScenarioInput, build_forecast, ensure_baseline
 from .goal_operations import (
     import_inbox_with_goal_observation,
     regenerate_payroll_with_goal_observation,
@@ -253,7 +253,7 @@ def rollback_batch(batch_id: int, session: Session = Depends(get_session)) -> di
 def get_scenarios(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
     try:
         ensure_baseline(session)
-    except ValueError:
+    except ForecastUnavailableError:
         return []
     return scenarios(session)
 

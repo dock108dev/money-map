@@ -6,7 +6,7 @@ import hashlib
 import json
 import uuid
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, cast
 
 from sqlalchemy import select, update
@@ -45,6 +45,7 @@ from .models import (
 )
 from .money import ZERO, money
 from .refresh import local_business_date
+from .safe_events import record_failure
 from .v2_contracts import (
     EvidenceClass,
     EvidencedMoney,
@@ -134,28 +135,49 @@ def _retirement_default_refs(profile: LifePlanProfile) -> dict[str, tuple[str, .
     }
 
 
+def _read_retirement_provenance(value: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(value)
+        if not isinstance(payload, dict) or payload.get("version") != "retirement-provenance-v1":
+            raise ValueError("Invalid provenance version")
+        fields = payload.get("fields")
+        allowed = {
+            "current_monthly_outflow",
+            "retirement_essential_monthly_spend",
+            "retirement_flexible_monthly_spend",
+            "protected_cash_floor",
+        }
+        if not isinstance(fields, dict) or not set(fields) <= allowed:
+            raise ValueError("Invalid provenance fields")
+        for entry in fields.values():
+            if not isinstance(entry, dict):
+                raise ValueError("Invalid provenance entry")
+            refs = entry.get("source_refs")
+            if (
+                not isinstance(refs, list)
+                or not refs
+                or any(not isinstance(ref, str) or not ref.strip() for ref in refs)
+            ):
+                raise ValueError("Invalid provenance references")
+        return cast(dict[str, Any], payload)
+    except (ValueError, TypeError) as error:
+        record_failure("MM-PROVENANCE-INVALID", "data_integrity", error)
+        raise PlanningValidationError(
+            "Saved Retirement evidence could not be verified. No replacement evidence was created."
+        ) from error
+
+
 def _retirement_provenance(
     session: Session, profile: LifePlanProfile
 ) -> dict[str, tuple[str, ...]]:
     result = _retirement_default_refs(profile)
     row = session.get(ApplicationSetting, RETIREMENT_PROVENANCE_KEY)
     if row is None:
+        # Profiles predating explicit provenance use their original profile columns as evidence.
         return result
-    try:
-        payload = json.loads(row.value)
-    except json.JSONDecodeError:
-        return result
-    if not isinstance(payload, dict) or payload.get("version") != "retirement-provenance-v1":
-        return result
-    fields = payload.get("fields", {})
-    if not isinstance(fields, dict):
-        return result
-    for field, raw in fields.items():
-        if field not in result or not isinstance(raw, dict):
-            continue
-        refs = raw.get("source_refs", [])
-        if isinstance(refs, list) and refs:
-            result[field] = tuple(sorted({str(ref) for ref in refs if str(ref)}))
+    payload = _read_retirement_provenance(row.value)
+    for field, raw in payload["fields"].items():
+        result[field] = tuple(sorted(set(raw["source_refs"])))
     return result
 
 
@@ -172,14 +194,8 @@ def _persist_retirement_provenance(
         row = ApplicationSetting(key=RETIREMENT_PROVENANCE_KEY, value="")
         session.add(row)
     else:
-        try:
-            payload = cast(dict[str, Any], json.loads(row.value))
-        except json.JSONDecodeError:
-            payload = {"version": "retirement-provenance-v1", "fields": {}}
-    fields = payload.setdefault("fields", {})
-    if not isinstance(fields, dict):
-        fields = {}
-        payload["fields"] = fields
+        payload = _read_retirement_provenance(row.value)
+    fields = payload["fields"]
     for field in changed_fields:
         fields[field] = {
             "evidence": "user_entered",
@@ -1127,7 +1143,7 @@ def _draft_promotable_value(draft: dict[str, object], field: PromotionField) -> 
         raise PlanningValidationError(f"{field.value} is not supported by this Lab draft")
     try:
         return money(Decimal(str(values[field.value])))
-    except Exception as exc:
+    except (InvalidOperation, ValueError, TypeError) as exc:
         raise PlanningValidationError("The Lab promotion value is invalid") from exc
 
 

@@ -6,6 +6,42 @@ from typing import Any
 import httpx
 
 JsonObject = dict[str, Any]
+MAX_HISTORY_PAGES = 100
+SAFE_PROVIDER_CODES = frozenset(
+    {
+        "INSTITUTION_DOWN",
+        "INSTITUTION_NOT_RESPONDING",
+        "INTERNAL_SERVER_ERROR",
+        "PRODUCT_NOT_READY",
+        "RATE_LIMIT_EXCEEDED",
+        "ITEM_LOGIN_REQUIRED",
+        "ITEM_NOT_FOUND",
+        "INVALID_ACCESS_TOKEN",
+        "INVALID_CREDENTIALS",
+        "INVALID_API_KEYS",
+        "INVALID_PUBLIC_TOKEN",
+        "INVALID_LINK_TOKEN",
+        "USER_PERMISSION_REVOKED",
+        "NO_ACCOUNTS",
+        "ADDITIONAL_CONSENT_REQUIRED",
+        "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION",
+    }
+)
+
+
+def _invalid_history() -> PlaidAPIError:
+    return PlaidAPIError(
+        code="INVALID_RESPONSE",
+        message="Plaid history was incomplete or invalid. Existing data was preserved.",
+    )
+
+
+def _history_count(response: JsonObject, rows_key: str, total_key: str) -> tuple[int, int]:
+    rows = response.get(rows_key)
+    total = response.get(total_key)
+    if not isinstance(rows, list) or type(total) is not int or total < 0:
+        raise _invalid_history()
+    return len(rows), total
 
 
 class PlaidAPIError(RuntimeError):
@@ -76,10 +112,17 @@ class PlaidClient:
                 status_code=response.status_code,
             )
         if response.is_error:
-            code = str(body.get("error_code") or "PLAID_ERROR")
-            display = body.get("display_message")
-            generic = body.get("error_message")
-            message = str(display or generic or "Plaid rejected the request.")
+            raw_code = body.get("error_code")
+            code = (
+                raw_code
+                if isinstance(raw_code, str) and raw_code in SAFE_PROVIDER_CODES
+                else "PLAID_ERROR"
+            )
+            # Provider display/error text can contain private values and is not a safe UI surface.
+            message = (
+                "Plaid could not complete the request. "
+                "Review the connection status before retrying."
+            )
             raise PlaidAPIError(
                 code=code,
                 message=message[:500],
@@ -138,7 +181,8 @@ class PlaidClient:
     def transactions_sync(self, access_token: str, cursor: str | None) -> list[JsonObject]:
         pages: list[JsonObject] = []
         next_cursor = cursor
-        while True:
+        seen_cursors = {cursor} if cursor is not None else set()
+        for _ in range(MAX_HISTORY_PAGES):
             payload: JsonObject = {
                 "access_token": access_token,
                 "count": 500,
@@ -147,10 +191,21 @@ class PlaidClient:
             if next_cursor:
                 payload["cursor"] = next_cursor
             response = self._post("/transactions/sync", payload)
+            has_more = response.get("has_more")
+            next_cursor = response.get("next_cursor")
+            if type(has_more) is not bool or not isinstance(next_cursor, str) or not next_cursor:
+                raise _invalid_history()
+            if any(
+                not isinstance(response.get(key), list) for key in ("added", "modified", "removed")
+            ):
+                raise _invalid_history()
             pages.append(response)
-            next_cursor = _optional_text(response.get("next_cursor"))
-            if not bool(response.get("has_more")):
+            if not has_more:
                 return pages
+            if next_cursor in seen_cursors:
+                raise _invalid_history()
+            seen_cursors.add(next_cursor)
+        raise _invalid_history()
 
     def transactions_get(
         self,
@@ -165,7 +220,7 @@ class PlaidClient:
         start = start_date or end - timedelta(days=730)
         pages: list[JsonObject] = []
         offset = 0
-        while True:
+        for _ in range(MAX_HISTORY_PAGES):
             response = self._post(
                 "/transactions/get",
                 {
@@ -180,12 +235,13 @@ class PlaidClient:
                 },
             )
             pages.append(response)
-            rows = response.get("transactions")
-            row_count = len(rows) if isinstance(rows, list) else 0
-            total = int(response.get("total_transactions") or row_count)
+            row_count, total = _history_count(response, "transactions", "total_transactions")
             offset += row_count
-            if row_count == 0 or offset >= total:
+            if offset > total or (row_count == 0 and offset < total):
+                raise _invalid_history()
+            if offset == total:
                 return pages
+        raise _invalid_history()
 
     def investments_holdings_get(self, access_token: str) -> JsonObject:
         return self._post("/investments/holdings/get", {"access_token": access_token})
@@ -201,7 +257,7 @@ class PlaidClient:
         start = start_date or end - timedelta(days=730)
         pages: list[JsonObject] = []
         offset = 0
-        while True:
+        for _ in range(MAX_HISTORY_PAGES):
             response = self._post(
                 "/investments/transactions/get",
                 {
@@ -212,12 +268,15 @@ class PlaidClient:
                 },
             )
             pages.append(response)
-            rows = response.get("investment_transactions")
-            row_count = len(rows) if isinstance(rows, list) else 0
-            total = int(response.get("total_investment_transactions") or row_count)
+            row_count, total = _history_count(
+                response, "investment_transactions", "total_investment_transactions"
+            )
             offset += row_count
-            if row_count == 0 or offset >= total:
+            if offset > total or (row_count == 0 and offset < total):
+                raise _invalid_history()
+            if offset == total:
                 return pages
+        raise _invalid_history()
 
     def remove_item(self, access_token: str) -> JsonObject:
         return self._post("/item/remove", {"access_token": access_token})

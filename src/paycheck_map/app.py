@@ -16,7 +16,7 @@ from .api_v2 import router as v2_router
 from .config import settings
 from .db import initialize_database
 from .desktop_policy import uses_managed_data_home
-from .local_security import LocalSecurityMiddleware
+from .local_security import LocalSecurityMiddleware, RequestFailureMiddleware
 
 
 @asynccontextmanager
@@ -40,6 +40,7 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+app.add_middleware(RequestFailureMiddleware)
 app.add_middleware(LocalSecurityMiddleware)
 app.include_router(router)
 app.include_router(v2_router)

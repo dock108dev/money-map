@@ -747,7 +747,7 @@ def _store_current_balances(
         if raw_amount is None:
             raw_amount = balances.get("available")
         if raw_amount is None:
-            continue
+            raise ValueError("Plaid returned an account without an available balance")
         value = _money(raw_amount)
         snapshot = session.scalar(
             select(BalanceSnapshot).where(
@@ -795,7 +795,7 @@ def _store_sofi_transactions(
             continue
         account = accounts.get(_required_text(row, "account_id"))
         if account is None:
-            continue
+            raise ValueError("Plaid returned a record without a matching account")
         provider_id = _provider_key(
             connection.item_id,
             "transaction",
@@ -854,7 +854,7 @@ def _store_fidelity_holdings(
     for row in _objects(response.get("holdings")):
         account = accounts.get(_required_text(row, "account_id"))
         if account is None:
-            continue
+            raise ValueError("Plaid returned a record without a matching account")
         security_id = _required_text(row, "security_id")
         security = securities.get(security_id, {})
         raw_as_of = security.get("close_price_as_of")
@@ -892,7 +892,7 @@ def _store_fidelity_transactions(
     for source_row, row in enumerate(_objects(response.get("investment_transactions")), start=1):
         account = accounts.get(_required_text(row, "account_id"))
         if account is None:
-            continue
+            raise ValueError("Plaid returned a record without a matching account")
         provider_id = _provider_key(
             connection.item_id,
             "investment",
@@ -1100,9 +1100,9 @@ def _account_display_name(row: JsonObject) -> str:
 
 
 def _objects(value: object) -> list[JsonObject]:
-    if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, dict)]
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError("Plaid returned invalid record collections")
+    return value
 
 
 def _object(value: object) -> JsonObject:
@@ -1130,9 +1130,12 @@ def _optional_text(value: object) -> str | None:
 
 def _decimal(value: object) -> Decimal:
     if value is None:
-        return ZERO
+        raise ValueError("Plaid returned a missing required amount")
     try:
-        return Decimal(str(value))
+        amount = Decimal(str(value))
+        if not amount.is_finite():
+            raise ValueError("Plaid returned a non-finite amount")
+        return amount
     except InvalidOperation as exc:
         raise ValueError("Plaid returned a non-numeric amount") from exc
 
@@ -1146,11 +1149,17 @@ def _optional_money(value: object) -> Decimal | None:
 
 
 def _parse_date(value: str) -> date:
-    return date.fromisoformat(value)
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("Plaid returned an invalid date") from error
 
 
 def _parse_datetime(value: str) -> datetime:
-    return _as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+    try:
+        return _as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+    except ValueError as error:
+        raise ValueError("Plaid returned an invalid timestamp") from error
 
 
 def _optional_datetime(value: object) -> datetime | None:

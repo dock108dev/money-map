@@ -559,3 +559,38 @@ def test_retirement_and_lab_api_reads_and_pure_commands_perform_no_writes(
         migrated_session.scalar(select(func.count()).select_from(GoalCheckIn)) == before_check_ins
     )
     assert not migrated_session.new and not migrated_session.dirty and not migrated_session.deleted
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "broken json",
+        "[]",
+        '{"version":"unknown","fields":{}}',
+        '{"version":"retirement-provenance-v1","fields":{"protected_cash_floor":{"source_refs":[42]}}}',
+    ],
+)
+def test_corrupt_retirement_provenance_is_not_defaulted_or_overwritten(
+    migrated_session: Session,
+    value: str,
+) -> None:
+    from paycheck_map.retirement_lab import (
+        RETIREMENT_PROVENANCE_KEY,
+        _persist_retirement_provenance,
+        retirement_profile_view,
+    )
+
+    _seed(migrated_session)
+    row = ApplicationSetting(key=RETIREMENT_PROVENANCE_KEY, value=value)
+    migrated_session.add(row)
+    migrated_session.commit()
+    with pytest.raises(PlanningValidationError, match="could not be verified"):
+        retirement_profile_view(migrated_session, _profile(migrated_session))
+    with pytest.raises(PlanningValidationError, match="could not be verified"):
+        _persist_retirement_provenance(
+            migrated_session,
+            changed_fields={"protected_cash_floor"},
+            source_ref="synthetic:1",
+            origin="test",
+        )
+    assert row.value == value

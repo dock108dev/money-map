@@ -281,30 +281,43 @@ impl RuntimeController {
             (generation, inner.process.take())
         };
         if let Some(process) = old {
-            self.stop_process(&process, None)?;
+            if let Err(error) = self.stop_process(&process, None) {
+                self.retain_cleanup_failure(generation, process);
+                return Err(error);
+            }
         }
         self.start_generation(generation)
     }
 
-    pub fn shutdown(&self) {
+    pub fn shutdown(&self) -> Result<(), String> {
+        self.shutdown_with(|process, port| self.stop_process(process, port))
+    }
+
+    fn shutdown_with(
+        &self,
+        stop: impl FnOnce(&RunningProcess, Option<u16>) -> Result<(), String>,
+    ) -> Result<(), String> {
         if let Some(gate) = &self.qualification_gate {
             gate.cleanup();
         }
-        let process = {
+        let (generation, process, port) = {
             let mut inner = self
                 .inner
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             if inner.lifecycle.state() == LifecycleState::Stopped {
-                return;
+                return Ok(());
             }
             let _ = inner.lifecycle.begin_stop();
-            inner.port = None;
+            let port = inner.port.take();
             inner.session = None;
-            inner.process.take()
+            (inner.lifecycle.generation(), inner.process.take(), port)
         };
         if let Some(process) = process {
-            let _ = self.stop_process(&process, None);
+            if let Err(error) = stop(&process, port) {
+                self.retain_cleanup_failure(generation, process);
+                return Err(error);
+            }
         }
         let mut inner = self
             .inner
@@ -313,6 +326,7 @@ impl RuntimeController {
         let _ = inner.lifecycle.stopped();
         inner.message = None;
         drop(inner);
+        Ok(())
     }
 
     fn start_generation(self: &Arc<Self>, generation: u64) -> Result<RuntimeStatus, String> {
@@ -657,7 +671,23 @@ impl RuntimeController {
                 inner.session = None;
             }
         }
-        let _ = self.stop_process(process, port);
+        if self.stop_process(process, port).is_err() {
+            self.retain_cleanup_failure(generation, process.clone());
+        }
+    }
+
+    fn retain_cleanup_failure(&self, generation: u64, process: RunningProcess) {
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if inner.lifecycle.generation() == generation {
+            inner.process = Some(process);
+            inner.port = None;
+            inner.session = None;
+            let _ = inner.lifecycle.fail();
+            inner.message = Some("The local service cleanup did not finish safely. Quit and review Diagnostics before restarting.");
+        }
     }
 
     fn fail_generation(&self, generation: u64) -> Result<RuntimeStatus, String> {
@@ -999,8 +1029,59 @@ mod tests {
             super::RuntimeController::new("/missing/synthetic-sidecar".into(), paths.clone(), None)
                 .unwrap();
         assert!(controller.start_initial().is_err());
-        controller.shutdown();
+        controller.shutdown().unwrap();
         assert!(parent.path().exists());
         assert_eq!(controller.paths.application, paths.application);
+    }
+    #[test]
+    fn failed_cleanup_is_not_stopped_and_retains_process_for_retry() {
+        use crate::lifecycle::LifecycleState;
+        use std::os::unix::net::UnixStream;
+        use std::sync::atomic::AtomicBool;
+        use std::sync::{Arc, Mutex};
+
+        let parent = tempfile::Builder::new()
+            .prefix("money-map-runtime-test-")
+            .tempdir_in("/private/tmp")
+            .unwrap();
+        let paths =
+            crate::data_home::DataHomePaths::from_home(parent.path(), "acceptance-synthetic-v1")
+                .unwrap();
+        let controller =
+            super::RuntimeController::new("/missing/synthetic-sidecar".into(), paths, None)
+                .unwrap();
+        let mut child = std::process::Command::new("/usr/bin/true").spawn().unwrap();
+        child.wait().unwrap();
+        let (control, _peer) = UnixStream::pair().unwrap();
+        let process = super::RunningProcess {
+            generation: 1,
+            pid: child.id(),
+            child: Arc::new(Mutex::new(child)),
+            control: Arc::new(Mutex::new(control)),
+            protocol_valid: Arc::new(AtomicBool::new(true)),
+        };
+        {
+            let mut inner = controller.inner.lock().unwrap();
+            inner.lifecycle.start().unwrap();
+            inner.lifecycle.ready().unwrap();
+            inner.process = Some(process);
+            inner.port = Some(43123);
+            inner.session = Some("synthetic".into());
+        }
+        let result = controller.shutdown_with(|_, port| {
+            assert_eq!(port, Some(43123));
+            Err("synthetic cleanup failure".into())
+        });
+        assert!(result.is_err());
+        assert_eq!(controller.status().state, LifecycleState::Failed);
+        {
+            let inner = controller.inner.lock().unwrap();
+            assert!(inner.process.is_some());
+            assert!(inner.session.is_none());
+            assert!(inner.port.is_none());
+            assert!(inner.message.unwrap().contains("cleanup"));
+        }
+        controller.shutdown_with(|_, _| Ok(())).unwrap();
+        assert_eq!(controller.status().state, LifecycleState::Stopped);
     }
 }

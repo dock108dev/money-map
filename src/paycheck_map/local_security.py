@@ -141,29 +141,28 @@ class LocalSecurityMiddleware:
                 await self._reject(send, 429, "The local service is busy.")
                 return
             self._active_requests += 1
-        bounded = await self._read_body(receive)
-        if bounded is None:
-            await self._release_request()
-            await self._reject(send, 413, "The local request was too large or incomplete.")
-            return
-        messages = iter(bounded)
-
-        async def secured_receive() -> Message:
-            return next(messages, {"type": "http.disconnect"})
-
-        async def secured_send(message: Message) -> None:
-            if message.get("type") == "http.response.start":
-                replaced = {name for name, _value in _RESPONSE_SECURITY_HEADERS}
-                headers = [
-                    (bytes(key).lower(), bytes(value))
-                    for key, value in message.get("headers", [])
-                    if bytes(key).lower() not in replaced
-                ]
-                headers.extend(_RESPONSE_SECURITY_HEADERS)
-                message["headers"] = headers
-            await send(message)
-
         try:
+            bounded = await self._read_body(receive)
+            if bounded is None:
+                await self._reject(send, 413, "The local request was too large or incomplete.")
+                return
+            messages = iter(bounded)
+
+            async def secured_receive() -> Message:
+                return next(messages, {"type": "http.disconnect"})
+
+            async def secured_send(message: Message) -> None:
+                if message.get("type") == "http.response.start":
+                    replaced = {name for name, _value in _RESPONSE_SECURITY_HEADERS}
+                    headers = [
+                        (bytes(key).lower(), bytes(value))
+                        for key, value in message.get("headers", [])
+                        if bytes(key).lower() not in replaced
+                    ]
+                    headers.extend(_RESPONSE_SECURITY_HEADERS)
+                    message["headers"] = headers
+                await send(message)
+
             await self.inner(scope, secured_receive, secured_send)
         finally:
             await self._release_request()
@@ -230,3 +229,40 @@ class LocalSecurityMiddleware:
         start, body = _response(status, message)
         await send(start)
         await send({"type": "http.response.body", "body": body})
+
+
+class RequestFailureMiddleware:
+    """Convert unexpected request failures to a private-safe 500 with local diagnostics."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = False
+
+        async def tracked_send(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracked_send)
+        except Exception as error:
+            from .safe_events import record_failure
+
+            record_failure("MM-REQUEST-FAIL", "lifecycle", error)
+            if started:
+                # A partial response cannot be replaced with a second HTTP response.
+                # Retain failure semantics without forwarding private exception text to Uvicorn.
+                raise RuntimeError("MM-REQUEST-FAIL after response start") from None
+            start, body = _response(
+                500,
+                "The local operation could not be completed. "
+                "Reload to check its status before retrying.",
+            )
+            await send(start)
+            await send({"type": "http.response.body", "body": body})

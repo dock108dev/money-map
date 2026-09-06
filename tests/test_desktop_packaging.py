@@ -46,8 +46,8 @@ def test_native_exit_request_owns_runtime_shutdown_before_process_exit() -> None
     exit_handler = source.split("RunEvent::ExitRequested { api, .. } =>", 1)[1]
     exit_handler = exit_handler.split("RunEvent::Exit =>", 1)[0]
     assert "api.prevent_exit();" in exit_handler
-    assert "controller.shutdown();" in exit_handler
-    assert "handle.exit(0);" in exit_handler
+    assert "controller.shutdown().is_err()" in exit_handler
+    assert "handle.exit(if cleanup_failed { 1 } else { 0 });" in exit_handler
 
 
 def test_release_builder_embeds_the_exact_source_commit_in_about() -> None:

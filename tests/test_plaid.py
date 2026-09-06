@@ -843,3 +843,100 @@ def test_global_refresh_isolates_connection_failure_and_preserves_previous_data(
 def test_refresh_lock_rejects_overlapping_global_refresh(session: Session) -> None:
     with refresh_guard(), pytest.raises(RefreshAlreadyRunningError):
         sync_all_connections(session)
+
+
+def test_refresh_recovers_session_after_early_connection_failure(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from paycheck_map.models import ApplicationSetting
+    from paycheck_map.plaid_service import sync_plaid_connection as original_sync
+
+    store, sofi_client, fidelity_client, sofi_id, fidelity_id = _connect_synthetic_items(session)
+
+    def fail_first(session: Session, connection_id: int, **kwargs: object) -> PlaidConnection:
+        if connection_id == sofi_id:
+            session.add(ApplicationSetting(key="must-not-commit", value="PRIVATE-CANARY"))
+            raise ValueError("PRIVATE-CANARY")
+        return original_sync(session, connection_id, store=store, client=fidelity_client)
+
+    monkeypatch.setattr("paycheck_map.refresh.sync_plaid_connection", fail_first)
+    result = sync_all_connections(
+        session, store=store, clients={sofi_id: sofi_client, fidelity_id: fidelity_client}
+    )
+    assert result["failed"] == 1
+    assert result["succeeded"] == 1
+    assert session.get(ApplicationSetting, "must-not-commit") is None
+    assert "PRIVATE-CANARY" not in str(result)
+
+
+def test_refresh_does_not_suppress_unexpected_forecast_errors(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, sofi_client, fidelity_client, sofi_id, fidelity_id = _connect_synthetic_items(session)
+
+    def broken_baseline(*args: object) -> None:
+        raise ValueError("unexpected calculation error")
+
+    monkeypatch.setattr("paycheck_map.refresh.ensure_baseline", broken_baseline)
+    with pytest.raises(ValueError, match="unexpected calculation"):
+        sync_all_connections(
+            session, store=store, clients={sofi_id: sofi_client, fidelity_id: fidelity_client}
+        )
+
+
+def test_malformed_holdings_cannot_delete_existing_positions(session: Session) -> None:
+    store, _, fidelity, _, fidelity_id = _connect_synthetic_items(session)
+    before = session.scalar(select(func.count(InvestmentHolding.id)))
+
+    class MalformedHoldings(FakeFidelityPlaidClient):
+        def investments_holdings_get(self, access_token: str) -> JsonObject:
+            result = fidelity.investments_holdings_get(access_token)
+            result["holdings"] = ["invalid-row"]
+            return result
+
+    with pytest.raises(ValueError, match="invalid record collections"):
+        sync_plaid_connection(session, fidelity_id, store=store, client=MalformedHoldings())
+    assert session.scalar(select(func.count(InvestmentHolding.id))) == before
+    latest = session.scalar(
+        select(PlaidSyncRun)
+        .where(PlaidSyncRun.connection_id == fidelity_id)
+        .order_by(PlaidSyncRun.id.desc())
+    )
+    assert latest is not None and latest.status == "failed"
+
+
+@pytest.mark.parametrize(
+    "kind", ["missing_balance", "unknown_account", "missing_amount", "nonfinite_amount"]
+)
+def test_incomplete_provider_values_do_not_mark_sync_current(session: Session, kind: str) -> None:
+    store, _, _, sofi_id, _ = _connect_synthetic_items(session)
+    connection = session.get(PlaidConnection, sofi_id)
+    assert connection is not None
+    before = connection.last_synced_at
+    count = session.scalar(select(func.count(AccountTransaction.id)))
+
+    class IncompleteSofi(FakeSofiPlaidClient):
+        def accounts_balance_get(self, access_token: str) -> JsonObject:
+            result = super().accounts_balance_get(access_token)
+            if kind == "missing_balance":
+                result["accounts"][0]["balances"] = {"current": None, "available": None}
+            return result
+
+        def transactions_sync(self, access_token: str, cursor: str | None) -> list[JsonObject]:
+            pages = super().transactions_sync(access_token, cursor)
+            row = pages[0]["added"][0]
+            if kind == "unknown_account":
+                row["account_id"] = "unknown"
+            elif kind == "missing_amount":
+                row["amount"] = None
+            elif kind == "nonfinite_amount":
+                row["amount"] = "NaN"
+            return pages
+
+    with pytest.raises(ValueError):
+        sync_plaid_connection(session, sofi_id, store=store, client=IncompleteSofi())
+    session.refresh(connection)
+    assert connection.last_synced_at == before
+    assert connection.status == "needs_attention"
+    assert session.scalar(select(func.count(AccountTransaction.id))) == count

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 import keyring
-from keyring.errors import KeyringError, PasswordDeleteError
+from keyring.errors import KeyringError
 
 
 class SecretStoreError(RuntimeError):
@@ -70,10 +70,11 @@ class MacOSKeychainSecretStore:
             raise SecretStoreError("macOS Keychain could not store the requested secret") from exc
 
     def delete(self, namespace: str, key: str) -> None:
+        # Missing secrets are idempotent; a failed deletion of an existing secret is not success.
+        if self.get(namespace, key) is None:
+            return
         try:
             keyring.delete_password(self._service(namespace), self._account(namespace, key))
-        except PasswordDeleteError:
-            return
         except KeyringError as exc:
             raise SecretStoreError("macOS Keychain could not delete the requested secret") from exc
 

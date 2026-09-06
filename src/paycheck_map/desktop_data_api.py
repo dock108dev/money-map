@@ -15,6 +15,7 @@ from .config import settings
 from .cutover_readiness import CutoverReadinessManager
 from .data_home import DataHomeError, DataHomeManager, DataHomePaths
 from .db import engine
+from .safe_events import record_failure
 
 router = APIRouter(prefix="/api/desktop/data-home", tags=["desktop-data-home"])
 
@@ -91,7 +92,8 @@ def _call[ResultT](action: Callable[[], ResultT]) -> ResultT:
             status_code=status,
             detail={"code": error.code, "message": str(error)},
         ) from None
-    except Exception:
+    except Exception as error:
+        record_failure("MM-DATA-OPERATION-FAIL", "data_integrity", error)
         raise HTTPException(
             status_code=500,
             detail={
@@ -225,7 +227,11 @@ def _diagnostics() -> dict[str, Any]:
             "all_verified": all(bool(item.get("verified")) for item in backups),
         },
         "database_checks": {
-            "integrity": "pass" if integrity else "unavailable",
-            "foreign_keys": "pass" if foreign_keys else "unavailable",
+            "integrity": ("pass" if integrity else "fail")
+            if status.get("ready")
+            else "unavailable",
+            "foreign_keys": ("pass" if foreign_keys else "fail")
+            if status.get("ready")
+            else "unavailable",
         },
     }

@@ -109,46 +109,45 @@ class DesktopSecurityMiddleware:
                 await self._reject(send, 429, "The desktop service is busy.")
                 return
             self._active_requests += 1
-        bounded = await self._read_body(receive)
-        if bounded is None:
-            await self._release_request()
-            await self._reject(send, 413, "The desktop request was too large.")
-            return
-        messages = iter(bounded)
-
-        async def secured_receive() -> Message:
-            return next(messages, {"type": "http.disconnect"})
-
-        if scope.get("path") == "/api/desktop/health":
-            if method != "GET":
-                await self._release_request()
-                await self._reject(send, 405, "The desktop health request method was rejected.")
+        try:
+            bounded = await self._read_body(receive)
+            if bounded is None:
+                await self._reject(send, 413, "The desktop request was too large.")
                 return
-            body = json.dumps(
-                {"ready": True, "version": app.version}, separators=(",", ":")
-            ).encode("utf-8")
-            response_headers = [
-                (b"content-type", b"application/json"),
-                (b"cache-control", b"no-store"),
-                (b"content-length", str(len(body)).encode("ascii")),
-            ]
-            if origin:
-                response_headers.extend(self._cors(origin))
-            await send({"type": "http.response.start", "status": 200, "headers": response_headers})
-            await send({"type": "http.response.body", "body": body})
-            await self._release_request()
-            return
+            messages = iter(bounded)
 
-        async def secured_send(message: Message) -> None:
-            if message.get("type") == "http.response.start":
-                response_headers = list(message.get("headers", []))
-                response_headers.append((b"cache-control", b"no-store"))
+            async def secured_receive() -> Message:
+                return next(messages, {"type": "http.disconnect"})
+
+            if scope.get("path") == "/api/desktop/health":
+                if method != "GET":
+                    await self._reject(send, 405, "The desktop health request method was rejected.")
+                    return
+                body = json.dumps(
+                    {"ready": True, "version": app.version}, separators=(",", ":")
+                ).encode("utf-8")
+                response_headers = [
+                    (b"content-type", b"application/json"),
+                    (b"cache-control", b"no-store"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ]
                 if origin:
                     response_headers.extend(self._cors(origin))
-                message["headers"] = response_headers
-            await send(message)
+                await send(
+                    {"type": "http.response.start", "status": 200, "headers": response_headers}
+                )
+                await send({"type": "http.response.body", "body": body})
+                return
 
-        try:
+            async def secured_send(message: Message) -> None:
+                if message.get("type") == "http.response.start":
+                    response_headers = list(message.get("headers", []))
+                    response_headers.append((b"cache-control", b"no-store"))
+                    if origin:
+                        response_headers.extend(self._cors(origin))
+                    message["headers"] = response_headers
+                await send(message)
+
             await self.inner(scope, secured_receive, secured_send)
         finally:
             await self._release_request()
