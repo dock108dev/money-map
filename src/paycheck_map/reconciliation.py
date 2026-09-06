@@ -111,10 +111,6 @@ def _currency(value: Decimal) -> str:
     return f"${money(value):,.2f}"
 
 
-def _transaction_total(transactions: list[AccountTransaction], role: str) -> Decimal:
-    return money(sum((row.amount for row in transactions if row.role == role), ZERO))
-
-
 def _payroll_section_total(lines: list[PayrollLineItem], section: str) -> Decimal:
     prefix = f"{section}."
     return money(sum((line.amount for line in lines if line.category.startswith(prefix)), ZERO))

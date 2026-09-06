@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .forecasting import _observed_monthly_outflow
@@ -21,11 +21,8 @@ from .models import (
     InvestmentHolding,
     LifeGoal,
     LifePlanProfile,
-    LifeProjectionPeriod,
-    LifeScenario,
     PayrollAllocation,
     PayrollScheduleEntry,
-    utcnow,
 )
 from .money import ZERO, money
 from .service_common import _account_category, _investment_access
@@ -113,44 +110,6 @@ class LifePlanProfileInput(BaseModel):
         if any(age <= current_age or age >= self.end_age for age in self.target_ages):
             raise ValueError("Target ages must be after the current age and before the end age")
         return self
-
-
-class LifeGoalInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    name: str = Field(min_length=1, max_length=120)
-    target_date: date
-    target_amount: Decimal = Field(ge=0)
-    reserved_amount: Decimal = Field(default=ZERO, ge=0)
-    annual_cost: Decimal = Field(default=ZERO, ge=0)
-    priority: Literal["required", "flexible"] = "required"
-    enabled: bool = True
-    notes: str = Field(default="", max_length=500)
-
-    _money_values = _decimal_fields("target_amount", "reserved_amount", "annual_cost")
-
-
-class ProjectionRequest(BaseModel):
-    target_ages: list[int] | None = Field(default=None, max_length=8)
-
-    @field_validator("target_ages")
-    @classmethod
-    def normalize_target_ages(cls, value: list[int] | None) -> list[int] | None:
-        if value is None:
-            return None
-        if not value:
-            raise ValueError("Select at least one target age")
-        if any(age < 18 or age > 110 for age in value):
-            raise ValueError("Target ages must be between 18 and 110")
-        return sorted(set(value))
-
-
-class ScenarioSaveInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    name: str = Field(min_length=1, max_length=120)
-    target_age: int = Field(ge=18, le=110)
-    path_key: Literal["middle", "rough", "early_crash"] = "middle"
 
 
 @dataclass(frozen=True)
@@ -287,36 +246,6 @@ def projection_profile(profile: LifePlanProfile) -> ProjectionProfile:
         notes=profile.notes,
         created_at=profile.created_at,
         updated_at=profile.updated_at,
-    )
-
-
-def projection_goal(goal: LifeGoal) -> ProjectionGoal:
-    return ProjectionGoal(
-        id=goal.id,
-        profile_id=goal.profile_id,
-        name=goal.name,
-        target_date=goal.target_date,
-        target_amount=money(goal.target_amount),
-        reserved_amount=money(goal.reserved_amount),
-        annual_cost=money(goal.annual_cost),
-        priority=cast(Literal["required", "flexible"], goal.priority),
-        enabled=goal.enabled,
-        notes=goal.notes,
-        created_at=goal.created_at,
-        updated_at=goal.updated_at,
-    )
-
-
-def projection_inputs_from_legacy(
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
-    start: dict[str, Any],
-) -> ProjectionInputs:
-    return ProjectionInputs(
-        profile=projection_profile(profile),
-        goals=tuple(projection_goal(goal) for goal in goals),
-        starting_point=ProjectionStartingPoint.from_dict(start),
-        input_context="legacy_combined",
     )
 
 
@@ -546,35 +475,6 @@ def get_profile(session: Session) -> LifePlanProfile | None:
     return session.scalar(select(LifePlanProfile).order_by(LifePlanProfile.id).limit(1))
 
 
-def profile_dict(profile: LifePlanProfile) -> dict[str, Any]:
-    return {
-        "id": profile.id,
-        "birth_date": profile.birth_date,
-        "state": profile.state,
-        "end_age": profile.end_age,
-        "current_monthly_outflow": str(profile.current_monthly_outflow),
-        "essential_monthly_spend": str(profile.essential_monthly_spend),
-        "flexible_monthly_spend": str(profile.flexible_monthly_spend),
-        "cash_floor": str(profile.cash_floor),
-        "retirement_tax_rate_pct": str(profile.retirement_tax_rate_pct),
-        "target_ages": profile.target_ages,
-        "notes": profile.notes,
-        "created_at": profile.created_at,
-        "updated_at": profile.updated_at,
-        "provenance": {
-            "birth_date": "user_entered",
-            "state": "user_entered",
-            "end_age": "assumed",
-            "current_monthly_outflow": "user_entered",
-            "essential_monthly_spend": "user_entered",
-            "flexible_monthly_spend": "user_entered",
-            "cash_floor": "user_entered",
-            "retirement_tax_rate_pct": "assumed",
-            "target_ages": "user_entered",
-        },
-    }
-
-
 def projection_profile_dict(profile: ProjectionProfile) -> dict[str, Any]:
     return {
         "id": profile.id,
@@ -604,39 +504,6 @@ def projection_profile_dict(profile: ProjectionProfile) -> dict[str, Any]:
     }
 
 
-def upsert_profile(session: Session, payload: LifePlanProfileInput) -> LifePlanProfile:
-    profile = get_profile(session)
-    values = payload.model_dump()
-    if profile is None:
-        profile = LifePlanProfile(**values)
-        session.add(profile)
-    else:
-        for key, value in values.items():
-            setattr(profile, key, value)
-        profile.updated_at = utcnow()
-    session.commit()
-    session.refresh(profile)
-    return profile
-
-
-def goal_dict(goal: LifeGoal) -> dict[str, Any]:
-    return {
-        "id": goal.id,
-        "profile_id": goal.profile_id,
-        "name": goal.name,
-        "target_date": goal.target_date,
-        "target_amount": str(goal.target_amount),
-        "reserved_amount": str(goal.reserved_amount),
-        "annual_cost": str(goal.annual_cost),
-        "priority": goal.priority,
-        "enabled": goal.enabled,
-        "notes": goal.notes,
-        "created_at": goal.created_at,
-        "updated_at": goal.updated_at,
-        "provenance": "user_entered",
-    }
-
-
 def projection_goal_dict(goal: ProjectionGoal) -> dict[str, Any]:
     return {
         "id": goal.id,
@@ -663,23 +530,6 @@ def list_goals(session: Session, profile_id: int) -> list[LifeGoal]:
             .order_by(LifeGoal.target_date, LifeGoal.id)
         )
     )
-
-
-def create_goal(session: Session, profile: LifePlanProfile, payload: LifeGoalInput) -> LifeGoal:
-    goal = LifeGoal(profile_id=profile.id, **payload.model_dump())
-    session.add(goal)
-    session.commit()
-    session.refresh(goal)
-    return goal
-
-
-def update_goal(session: Session, goal: LifeGoal, payload: LifeGoalInput) -> LifeGoal:
-    for key, value in payload.model_dump().items():
-        setattr(goal, key, value)
-    goal.updated_at = utcnow()
-    session.commit()
-    session.refresh(goal)
-    return goal
 
 
 def _profile_snapshot(profile: LifePlanProfile | ProjectionProfile) -> dict[str, Any]:
@@ -1365,23 +1215,6 @@ def _assumptions() -> dict[str, Any]:
     }
 
 
-def project_life_plan(
-    session: Session,
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
-    *,
-    target_ages: list[int] | None = None,
-    as_of: date | None = None,
-) -> dict[str, Any]:
-    today = as_of or date.today()
-    inputs = projection_inputs_from_legacy(
-        profile,
-        goals,
-        starting_point(session, as_of=today),
-    )
-    return project_projection_inputs(inputs, target_ages=target_ages, as_of=today)
-
-
 def project_projection_inputs(
     inputs: ProjectionInputs,
     *,
@@ -1526,124 +1359,7 @@ def project_projection_inputs(
     }
 
 
-def save_scenario(
-    session: Session,
-    profile: LifePlanProfile,
-    goals: list[LifeGoal],
-    payload: ScenarioSaveInput,
-    *,
-    as_of: date | None = None,
-) -> LifeScenario:
-    projection = project_life_plan(
-        session, profile, goals, target_ages=[payload.target_age], as_of=as_of
-    )
-    target = cast(dict[str, Any], projection["results"][0])
-    selected = next(
-        row
-        for row in cast(list[dict[str, Any]], target["paths"])
-        if row["path_key"] == payload.path_key
-    )
-    scenario = LifeScenario(
-        profile_id=profile.id,
-        name=payload.name,
-        target_age=payload.target_age,
-        path_key=payload.path_key,
-        input_snapshot=_json_safe(
-            {
-                "profile": _profile_snapshot(profile),
-                "goals": [_goal_snapshot(goal) for goal in goals],
-                "starting_point": projection["starting_point"],
-                "assumptions": projection["assumptions"],
-            }
-        ),
-        source_fingerprint=str(projection["source_fingerprint"]),
-        engine_version=ENGINE_VERSION,
-        assumption_version=ASSUMPTION_VERSION,
-        benchmark_version=str(projection["benchmarks"].get("version", "unavailable")),
-        status=str(selected["status"]),
-        warnings=cast(list[str], projection["warnings"]),
-        summary=_json_safe({key: value for key, value in selected.items() if key != "periods"}),
-    )
-    session.add(scenario)
-    session.flush()
-    for period in cast(list[dict[str, Any]], selected["periods"]):
-        scenario.periods.append(
-            LifeProjectionPeriod(
-                scenario_id=scenario.id,
-                month=date.fromisoformat(str(period["month"])),
-                age_months=int(period["age_months"]),
-                working=bool(period["working"]),
-                gross_income=Decimal(str(period["gross_income"])),
-                net_income=Decimal(str(period["net_income"])),
-                employee_retirement=Decimal(str(period["employee_retirement"])),
-                employer_retirement=Decimal(str(period["employer_retirement"])),
-                stock_plan=Decimal(str(period["stock_plan"])),
-                essential_spend=Decimal(str(period["essential_spend"])),
-                flexible_spend=Decimal(str(period["flexible_spend"])),
-                goal_spend=Decimal(str(period["goal_spend"])),
-                cash=Decimal(str(period["cash"])),
-                accessible_investments=Decimal(str(period["accessible_investments"])),
-                pretax_retirement=Decimal(str(period["pretax_retirement"])),
-                hsa=Decimal(str(period["hsa"])),
-                restricted_assets=Decimal(str(period["restricted_assets"])),
-                debt=Decimal(str(period["debt"])),
-                investment_result=Decimal(str(period["investment_result"])),
-                total_spendable=Decimal(str(period["total_spendable"])),
-            )
-        )
-    session.commit()
-    session.refresh(scenario)
-    return scenario
-
-
-def scenario_dict(scenario: LifeScenario, current_fingerprint: str) -> dict[str, Any]:
-    return {
-        "id": scenario.id,
-        "name": scenario.name,
-        "target_age": scenario.target_age,
-        "path_key": scenario.path_key,
-        "status": scenario.status,
-        "summary": scenario.summary,
-        "warnings": scenario.warnings,
-        "engine_version": scenario.engine_version,
-        "assumption_version": scenario.assumption_version,
-        "benchmark_version": scenario.benchmark_version,
-        "source_fingerprint": scenario.source_fingerprint,
-        "stale": scenario.source_fingerprint != current_fingerprint,
-        "created_at": scenario.created_at,
-        "periods": [
-            {
-                "month": period.month,
-                "age_months": period.age_months,
-                "working": period.working,
-                "cash": str(period.cash),
-                "accessible_investments": str(period.accessible_investments),
-                "pretax_retirement": str(period.pretax_retirement),
-                "total_spendable": str(period.total_spendable),
-            }
-            for period in sorted(scenario.periods, key=lambda row: row.month)
-        ],
-    }
-
-
 def current_fingerprint(session: Session, profile: LifePlanProfile, goals: list[LifeGoal]) -> str:
     start = starting_point(session)
     benchmarks = load_benchmarks(profile.state)
     return source_fingerprint(profile, goals, start, str(benchmarks.get("version", "unavailable")))
-
-
-def delete_goal(session: Session, goal: LifeGoal) -> None:
-    session.delete(goal)
-    session.commit()
-
-
-def delete_scenario(session: Session, scenario: LifeScenario) -> None:
-    session.delete(scenario)
-    session.commit()
-
-
-def clear_life_plan(session: Session) -> None:
-    """Test helper for removing only Life Lab state."""
-
-    session.execute(delete(LifePlanProfile))
-    session.commit()

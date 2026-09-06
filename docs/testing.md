@@ -44,8 +44,16 @@ examples and fixtures are synthetic and are the only approved financial-file sha
 
 Native shell, lifecycle, proxy, path, capability, and qualification changes require:
 
+Use a disposable checkout with the frontend already built by the install workflow. A clean tree
+needs Tauri's compile-time sidecar entry, so create the same empty fixture as CI before checking:
+
 ```bash
 cd desktop/src-tauri
+install -d binaries
+ci_sidecar_fixture="binaries/money-map-sidecar-$(rustc --print host-tuple)"
+if [ ! -e "$ci_sidecar_fixture" ]; then
+  install -m 755 /dev/null "$ci_sidecar_fixture"
+fi
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
@@ -55,6 +63,7 @@ cargo test --locked
 do not create, sign, install, or launch a release application. On a clean hosted runner, CI creates
 an empty executable sidecar fixture solely to satisfy Tauri's compile-time external-binary manifest;
 native unit tests do not treat that fixture as a built or qualified sidecar.
+Never use this fixture to launch or package the application; release builds supply the real sidecar.
 
 ## Continuous integration
 

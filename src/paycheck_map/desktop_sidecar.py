@@ -24,7 +24,11 @@ from paycheck_map.desktop_bootstrap import (
     install_bootstrap,
 )
 from paycheck_map.desktop_lock import WriterLock
-from paycheck_map.desktop_policy import DISPOSABLE_DATA_MODE, uses_managed_data_home
+from paycheck_map.desktop_policy import (
+    ACCEPTANCE_DATA_MODE,
+    DISPOSABLE_DATA_MODE,
+    uses_managed_data_home,
+)
 from paycheck_map.keychain import MacOSKeychainSecretStore
 from paycheck_map.product_metadata import SCHEMA_HEAD
 from paycheck_map.safe_events import SafeEventLog
@@ -122,7 +126,7 @@ def _attestation_record(
         "cache_root",
         "log_root",
     }
-    if set(spec) != required or spec.get("mode") != "acceptance-synthetic-v1":
+    if set(spec) != required or spec.get("mode") != ACCEPTANCE_DATA_MODE:
         raise RuntimeError("Desktop attestation bootstrap was rejected")
     campaign = Path(str(spec["campaign_root"])).resolve(strict=True)
     identity_before = database_identity = None

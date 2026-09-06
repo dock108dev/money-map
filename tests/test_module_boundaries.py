@@ -3,7 +3,6 @@ from fastapi.routing import APIRoute
 
 from paycheck_map import services
 from paycheck_map.api import router as core_router
-from paycheck_map.api_life_plan import router as life_plan_router
 from paycheck_map.api_plaid import router as plaid_router
 from paycheck_map.api_v2 import router as v2_router
 from paycheck_map.service_accounts import account_detail, accounts_dashboard
@@ -26,7 +25,6 @@ def test_domain_router_operations_are_disjoint() -> None:
     groups = [
         _operations(core_router),
         _operations(v2_router),
-        _operations(life_plan_router),
         _operations(plaid_router),
     ]
     assert all(path.startswith("/api/") for group in groups for _, path in group)

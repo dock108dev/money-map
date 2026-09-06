@@ -29,7 +29,7 @@ macOS Keychain rather than source files, shell history, or the database.
 ## Run locally
 
 ```bash
-uv run paycheck-map serve
+uv run --locked --python 3.12 paycheck-map serve
 ```
 
 The command builds `web/dist` when it is absent, initializes the repository-mode database under
@@ -59,49 +59,17 @@ This is a development asset server, not the supported integrated product workflo
 - `docs/`: current engineering guides, architecture decisions, release records, and versioned contracts
 
 The current module authority map is [single-source-of-truth.md](v3/single-source-of-truth.md).
+Use the v2 Goals, Retirement and Lab APIs for planning. The retired combined Life Plan routes and
+editors are removed; historical snapshots remain available in Lab through its current API.
 API route families use `api_*.py`; read projections use `service_*.py`; `api.py` and `services.py`
 remain stable entry facades. React product views live in domain folders, while `components.tsx`
 retains only stable exports and the shared evidence/review surfaces.
 
 ## Validation
 
-Run the complete source gate before handoff:
-
-```bash
-uv run paycheck-map verify
-```
-
-Useful focused commands while editing:
-
-```bash
-uv run pytest tests/test_api.py
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy src tests
-pnpm --dir web test
-pnpm --dir web lint
-pnpm --dir web build
-uv run python scripts/check_docs.py
-uv run python scripts/check_private_data.py
-```
-
-For native changes:
-
-```bash
-cd desktop/src-tauri
-cargo fmt --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
-```
-
-`uv run paycheck-map verify` does not run the Rust checks, dependency audits, signed packaging, or
-installed-app owner qualification. Those are separate gates documented in the versioned desktop and
-release guides.
-
-Pull requests and pushes to `main` run two stable workflow checks: `source` and
-`native-macos`. CI uses locked installs, read-only repository permissions,
-ephemeral synthetic state, and no credentials. Signing, packaging, release qualification, provider
-access, and owner-data checks remain outside ordinary pull-request CI.
+Use [Testing](testing.md) for the complete source gate, focused commands, native prerequisites and
+CI check names. That guide owns validation commands; avoid adding a second checklist here.
+[Maintenance](maintenance.md) records the large-file boundaries and appropriate extraction points.
 
 ## Deployment and release boundary
 

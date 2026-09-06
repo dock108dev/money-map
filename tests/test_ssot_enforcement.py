@@ -1,5 +1,15 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
+
+import httpx
 import pytest
 
+from paycheck_map import business_time, plaid_service, refresh, retirement_lab
+from paycheck_map.app import app
 from paycheck_map.desktop_policy import (
     ACCEPTANCE_DATA_MODE,
     DISPOSABLE_DATA_MODE,
@@ -17,6 +27,85 @@ from paycheck_map.product_metadata import (
 )
 
 from .conftest import PROJECT_ROOT
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/life-plan/profile"),
+        ("PUT", "/api/life-plan/profile"),
+        ("GET", "/api/life-plan/starting-point"),
+        ("GET", "/api/life-plan/benchmarks"),
+        ("GET", "/api/life-plan/goals"),
+        ("POST", "/api/life-plan/goals"),
+        ("PUT", "/api/life-plan/goals/1"),
+        ("DELETE", "/api/life-plan/goals/1"),
+        ("POST", "/api/life-plan/project"),
+        ("GET", "/api/life-plan/scenarios"),
+        ("POST", "/api/life-plan/scenarios"),
+        ("GET", "/api/life-plan/scenarios/1"),
+    ],
+)
+def test_combined_planning_endpoints_are_unavailable(method: str, path: str) -> None:
+    async def exercise() -> None:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8765"
+        ) as client:
+            response = await client.request(
+                method, path, headers={"Content-Type": "application/json"}
+            )
+        assert response.status_code in {404, 405}
+
+    asyncio.run(exercise())
+
+
+def test_lab_qualification_observes_current_mounted_routes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract = json.loads(
+        (root / "tests/fixtures/synthetic/v1_2_1/release-state-contract.json").read_text()
+    )
+    # Check the actual mounted operations rather than a second endpoint allowlist.
+    operations = {
+        f"{method.upper()} {path}"
+        for path, methods in app.openapi()["paths"].items()
+        for method in methods
+    }
+    lab = contract["routes"]["lab"]["combination_defaults"]["expected_api_endpoints"]
+    assert set(lab) <= operations
+    native = (root / "desktop/src-tauri/src/main.rs").read_text()
+    lab_observer = native.split('"lab" => &[', 1)[1].split("],", 1)[0]
+    assert all(f'"{operation.split(" ", 1)[1]}"' in lab_observer for operation in lab)
+    assert "/api/life-plan" not in native
+
+
+def test_provider_refresh_and_planning_use_shared_clock_policy() -> None:
+    assert (
+        vars(plaid_service)["as_utc"]
+        is vars(refresh)["as_utc"]
+        is vars(retirement_lab)["as_utc"]
+        is business_time.as_utc
+    )
+    assert (
+        vars(plaid_service)["clock_timestamp"]
+        is vars(refresh)["clock_timestamp"]
+        is business_time.clock_timestamp
+    )
+    assert vars(plaid_service)["local_business_date"] is vars(refresh)["local_business_date"]
+    # Both sides of midnight and DST use the same Eastern calendar policy.
+    assert business_time.local_business_date(
+        datetime(2026, 9, 6, 3, 59, tzinfo=UTC)
+    ).isoformat() == ("2026-09-05")
+    assert business_time.local_business_date(datetime(2026, 9, 6, 4, 0)).isoformat() == "2026-09-06"
+    assert business_time.local_business_date(
+        datetime(2026, 1, 6, 4, 59, tzinfo=UTC)
+    ).isoformat() == ("2026-01-05")
+    floor = datetime(2026, 9, 6, 12, tzinfo=timezone(timedelta(hours=-4)))
+    assert business_time.clock_timestamp(
+        lambda: datetime(2026, 9, 6, 15), not_before=floor
+    ) == datetime(2026, 9, 6, 16, tzinfo=UTC)
+    assert business_time.clock_timestamp(lambda: datetime(2026, 9, 6, 17)) == datetime(
+        2026, 9, 6, 17, tzinfo=UTC
+    )
 
 
 @pytest.mark.parametrize(

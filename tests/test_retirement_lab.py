@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from paycheck_map.app import app
 from paycheck_map.db import get_session
 from paycheck_map.goal_service import calculate_primary_goal_position, program_edit_token
+from paycheck_map.life_plan import current_fingerprint, list_goals
 from paycheck_map.models import (
     ApplicationSetting,
     GoalCheckIn,
@@ -205,7 +206,9 @@ def test_lab_seeds_and_snapshots_are_isolated_and_preserve_legacy_context(
         target_age=50,
         path_key="middle",
         input_snapshot={"profile": {}, "goals": [], "starting_point": {}, "assumptions": {}},
-        source_fingerprint="a" * 64,
+        source_fingerprint=current_fingerprint(
+            migrated_session, profile, list_goals(migrated_session, profile.id)
+        ),
         engine_version="life-lab-v0.3.0",
         assumption_version="life-lab-drive-paths-v3",
         benchmark_version="synthetic",
@@ -218,7 +221,14 @@ def test_lab_seeds_and_snapshots_are_isolated_and_preserve_legacy_context(
     rows = list_lab_snapshots(migrated_session)
     legacy_row = next(row for row in rows if row["id"] == legacy.id)
     assert legacy_row["context_label"] == "Legacy combined plan · v1.2.1 inputs"
+    assert legacy_row["stale"] is False
     assert open_lab_snapshot(migrated_session, legacy.id)["input_snapshot"] == legacy.input_snapshot
+    stored_evidence = copy.deepcopy(legacy.input_snapshot)
+    profile.flexible_monthly_spend += Decimal("1.00")
+    migrated_session.commit()
+    reopened = open_lab_snapshot(migrated_session, legacy.id)
+    assert reopened["stale"] is True
+    assert reopened["input_snapshot"] == stored_evidence
 
 
 def test_promotion_preview_and_stale_confirmation_perform_zero_writes(

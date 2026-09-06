@@ -17,19 +17,6 @@ export interface LifePlanProfile {
   provenance: Record<string, "observed" | "user_entered" | "assumed" | "unverified">;
 }
 
-export interface LifePlanProfileInput {
-  birth_date: string;
-  state: string;
-  end_age: number;
-  current_monthly_outflow: string;
-  essential_monthly_spend: string;
-  flexible_monthly_spend: string;
-  cash_floor: string;
-  retirement_tax_rate_pct: string;
-  target_ages: number[];
-  notes: string;
-}
-
 export interface LifeGoal {
   id: number;
   profile_id: number;
@@ -44,17 +31,6 @@ export interface LifeGoal {
   created_at: string;
   updated_at: string;
   provenance: "user_entered";
-}
-
-export interface LifeGoalInput {
-  name: string;
-  target_date: string;
-  target_amount: string;
-  reserved_amount: string;
-  annual_cost: string;
-  priority: "required" | "flexible";
-  enabled: boolean;
-  notes: string;
 }
 
 export interface LifeStartingPoint {
@@ -188,29 +164,4 @@ export interface LifeProjection {
   results: TargetResult[];
   goal_impacts: Record<string, GoalImpact[]>;
   warnings: string[];
-}
-
-export interface SavedLifeScenario {
-  id: number;
-  name: string;
-  target_age: number;
-  path_key: string;
-  status: string;
-  summary: Record<string, unknown>;
-  warnings: string[];
-  engine_version: string;
-  assumption_version: string;
-  benchmark_version: string;
-  source_fingerprint: string;
-  stale: boolean;
-  created_at: string;
-  periods: Array<{
-    month: string;
-    age_months: number;
-    working: boolean;
-    cash: Money;
-    accessible_investments: Money;
-    pretax_retirement: Money;
-    total_spendable: Money;
-  }>;
 }

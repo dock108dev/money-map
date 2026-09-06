@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __product_version__
 from .api import router
-from .api_life_plan import router as life_plan_router
 from .api_plaid import router as plaid_router
 from .api_v2 import router as v2_router
 from .config import settings
@@ -61,7 +60,6 @@ app.add_middleware(RequestFailureMiddleware)
 app.add_middleware(LocalSecurityMiddleware)
 app.include_router(router)
 app.include_router(v2_router)
-app.include_router(life_plan_router)
 app.include_router(plaid_router)
 if settings.desktop_mode and uses_managed_data_home(settings.desktop_data_mode):
     from .desktop_data_api import router as desktop_data_router

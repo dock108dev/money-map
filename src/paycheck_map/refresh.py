@@ -9,8 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .business_time import as_utc as _as_utc
-from .business_time import local_business_date as local_business_date
+from .business_time import as_utc, clock_timestamp, local_business_date
 from .forecasting import ForecastUnavailableError, ensure_baseline
 from .goal_observation import (
     CompletedOperationState,
@@ -50,12 +49,6 @@ def refresh_guard() -> Iterator[None]:
 
 def _system_clock() -> datetime:
     return datetime.now(UTC)
-
-
-def _clock_timestamp(clock: Clock, *, not_before: datetime | None = None) -> datetime:
-    value = _as_utc(clock())
-    floor = _as_utc(not_before) if not_before is not None else None
-    return floor if floor is not None and value < floor else value
 
 
 def _setting(session: Session, key: str) -> str | None:
@@ -98,10 +91,10 @@ def refresh_status(
         connection
         for connection in active
         if connection.last_synced_at is not None
-        and local_business_date(_as_utc(connection.last_synced_at)) == today
+        and local_business_date(as_utc(connection.last_synced_at)) == today
     ]
     completed = [
-        _as_utc(connection.last_synced_at) for connection in active if connection.last_synced_at
+        as_utc(connection.last_synced_at) for connection in active if connection.last_synced_at
     ]
     last_successful = min(completed) if len(completed) == len(active) and completed else None
     last_attempt = _setting(session, AUTO_ATTEMPT_KEY)
@@ -146,14 +139,14 @@ def sync_all_connections(
     if now is not None and clock is not None:
         raise ValueError("Provide either a fixed time or a clock, not both")
     operation_clock = clock or ((lambda: now) if now is not None else _system_clock)
-    started = _clock_timestamp(operation_clock)
+    started = clock_timestamp(operation_clock)
     business_date = local_business_date(started)
     with refresh_guard():
         status_before = refresh_status(session, now=started, in_progress=True)
         if automatic:
             if not status_before["automatic_refresh_due"]:
                 freshness = refresh_status(session, now=started, in_progress=False)
-                finished = _clock_timestamp(operation_clock, not_before=started)
+                finished = clock_timestamp(operation_clock, not_before=started)
                 observation = coordinate_goal_observation(
                     session,
                     trigger=GoalCheckInTrigger.POST_REFRESH,
@@ -195,7 +188,7 @@ def sync_all_connections(
                 .order_by(PlaidSyncRun.id.desc())
                 .limit(1)
             )
-            attempt_started = _clock_timestamp(operation_clock, not_before=last_event)
+            attempt_started = clock_timestamp(operation_clock, not_before=last_event)
             try:
                 refreshed = sync_plaid_connection(
                     session,
@@ -218,13 +211,13 @@ def sync_all_connections(
                     and (prior_run_id is None or latest_run.id > prior_run_id)
                     else None
                 )
-                run_started = _as_utc(current_run.started_at) if current_run else attempt_started
+                run_started = as_utc(current_run.started_at) if current_run else attempt_started
                 run_finished = (
-                    _as_utc(current_run.finished_at)
+                    as_utc(current_run.finished_at)
                     if current_run and current_run.finished_at is not None
-                    else _clock_timestamp(operation_clock, not_before=run_started)
+                    else clock_timestamp(operation_clock, not_before=run_started)
                 )
-                last_event = _as_utc(run_finished)
+                last_event = as_utc(run_finished)
                 results.append(
                     {
                         "connection_id": refreshed.id,
@@ -237,7 +230,7 @@ def sync_all_connections(
                         "started_at": run_started,
                         "finished_at": run_finished,
                         "last_synced_at": (
-                            _as_utc(refreshed.last_synced_at)
+                            as_utc(refreshed.last_synced_at)
                             if refreshed.last_synced_at is not None
                             else None
                         ),
@@ -278,13 +271,13 @@ def sync_all_connections(
                     and (prior_run_id is None or latest_run.id > prior_run_id)
                     else None
                 )
-                run_started = _as_utc(current_run.started_at) if current_run else attempt_started
+                run_started = as_utc(current_run.started_at) if current_run else attempt_started
                 run_finished = (
-                    _as_utc(current_run.finished_at)
+                    as_utc(current_run.finished_at)
                     if current_run and current_run.finished_at is not None
-                    else _clock_timestamp(operation_clock, not_before=run_started)
+                    else clock_timestamp(operation_clock, not_before=run_started)
                 )
-                last_event = _as_utc(run_finished)
+                last_event = as_utc(run_finished)
                 failed_connection = session.get(PlaidConnection, connection_id)
                 results.append(
                     {
@@ -298,7 +291,7 @@ def sync_all_connections(
                         "started_at": run_started,
                         "finished_at": run_finished,
                         "last_synced_at": (
-                            _as_utc(failed_connection.last_synced_at)
+                            as_utc(failed_connection.last_synced_at)
                             if failed_connection is not None
                             and failed_connection.last_synced_at is not None
                             else None
@@ -329,7 +322,7 @@ def sync_all_connections(
             except ForecastUnavailableError as error:
                 # Accounts remain useful before the first payroll import.
                 record_failure("MM-FORECAST-UNAVAILABLE", "data_integrity", error)
-        finished = _clock_timestamp(operation_clock, not_before=last_event)
+        finished = clock_timestamp(operation_clock, not_before=last_event)
         failed = len(connection_ids) - succeeded
         operation_state = (
             CompletedOperationState.COMPLETE if failed == 0 else CompletedOperationState.PARTIAL

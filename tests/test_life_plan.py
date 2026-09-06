@@ -11,19 +11,12 @@ from paycheck_map.config import Settings
 from paycheck_map.ingestion import import_private_inbox
 from paycheck_map.life_plan import (
     PATHS,
-    LifePlanProfileInput,
-    ScenarioSaveInput,
     _additional_income_needed,
     _retirement_capital_needed,
     _simulate,
     _take_retirement,
-    current_fingerprint,
     load_benchmarks,
-    save_scenario,
-    scenario_dict,
-    source_fingerprint,
     starting_point,
-    upsert_profile,
 )
 from paycheck_map.models import Account, LifeGoal, LifePlanProfile
 
@@ -198,40 +191,3 @@ def test_benchmarks_are_versioned_state_agi_context() -> None:
     assert result["normalized_dollar_basis"] == "June 2026"
     assert set(result["thresholds"]) == {"top_50", "top_25", "top_10", "top_5", "top_1"}
     assert "definitions differ" in result["warning"]
-
-
-def test_saved_scenario_becomes_stale_when_profile_changes(session: Session) -> None:
-    profile = upsert_profile(
-        session,
-        LifePlanProfileInput(
-            birth_date=date(1991, 1, 1),
-            state="NJ",
-            end_age=41,
-            current_monthly_outflow=Decimal("0"),
-            essential_monthly_spend=Decimal("0"),
-            flexible_monthly_spend=Decimal("0"),
-            cash_floor=Decimal("0"),
-            retirement_tax_rate_pct=Decimal("20"),
-            target_ages=[40],
-            notes="",
-        ),
-    )
-    scenario = save_scenario(
-        session,
-        profile,
-        [],
-        ScenarioSaveInput(name="Before assumptions move", target_age=40, path_key="middle"),
-        as_of=date(2026, 8, 3),
-    )
-    original_fingerprint = source_fingerprint(
-        profile,
-        [],
-        starting_point(session, as_of=date(2026, 8, 3)),
-        str(load_benchmarks("NJ")["version"]),
-    )
-    assert scenario_dict(scenario, original_fingerprint)["stale"] is False
-
-    profile.flexible_monthly_spend = Decimal("1")
-    session.commit()
-    changed_fingerprint = current_fingerprint(session, profile, [])
-    assert scenario_dict(scenario, changed_fingerprint)["stale"] is True

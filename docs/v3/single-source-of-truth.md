@@ -1,91 +1,153 @@
 # Current single sources of truth
 
-This document records the supported authority boundaries in the current Money Map tree. It is a
-maintenance map, not a new compatibility contract.
+Reviewed September 6, 2026 from `73be97c`. This is the current supported source contract, not proof
+that these changes are installed or qualified. Historical candidate evidence stays identity-bound.
 
-## Runtime routing and client access
+## Authority map
 
-- `paycheck_map.app` assembles FastAPI and mounts the supported routers.
-- `paycheck_map.api` owns core account, payroll, import, correction, report, and forecast routes.
-  `paycheck_map.api_v2`, `paycheck_map.api_life_plan`, and `paycheck_map.api_plaid` own their named
-  route families. `paycheck_map.app` mounts each router exactly once.
-- `paycheck_map.desktop_data_api` owns the authenticated desktop data-home routes.
-- `paycheck_map.api_inputs` owns request bodies used only by the ordinary API router; versioned
-  cross-surface contracts remain in `paycheck_map.v2_contracts` and `paycheck_map.v21_contracts`.
-- `web/src/api.ts` is the browser client's request and safe-error boundary. UI components do not
-  invent missing backend state. The data-home UI reports an omitted schema as unavailable.
+Domain: Routing and client API access
 
-## Configuration and feature policy
+SSOT module/file: `paycheck_map.app`, domain routers `api`, `api_v2`, `api_plaid`; `web/src/api.ts`
 
-- `paycheck_map.config.Settings` owns repository and Python runtime path configuration.
-- `paycheck_map.desktop_policy` owns Python decisions about supported managed, acceptance, and
-  disposable desktop data modes. Python callers use its predicates instead of local mode lists.
-- `desktop/src-tauri/src/data_home.rs` is the native authority that creates and passes trusted macOS
-  paths. Matching Python validation is an intentional cross-process trust check, not an alternate
-  configuration path.
+Why this is authoritative: App assembly mounts supported domain routers once. The shared client
+owns transport and safe errors; domain client modules supply typed endpoints.
 
-## Persistence and migration
+Known callers: CLI/sidecar startup, App, Goals, Retirement, Lab and data-home UI.
 
-- `paycheck_map.data_home.DataHomeManager` alone owns packaged desktop database preparation,
-  migration, activation, backup, restore, and recovery-journal state.
-- `paycheck_map.db` owns SQLAlchemy engine/session construction and repository-mode initialization.
-- `paycheck_map.product_metadata.SCHEMA_HEAD` is the Python schema identity consumed by data-home,
-  sidecar attestation, release packaging, and qualification.
+Domain: Planning and operational goals
 
-## Product and release identity
+SSOT module/file: `api_v2.py`, `retirement_lab.py`, `goal_service.py`, `life_plan.py`
 
-- `paycheck_map.product_metadata` owns the Python public version, package version, schema head, and
-  derived DMG name.
-- `paycheck_map.release_candidate` owns candidate and promotion-state validation and consumes that
-  identity instead of redefining it.
-- `pyproject.toml`, frontend, Tauri/Cargo, and native metadata repeat versions because their build
-  systems require it. `tests/test_version_consistency.py` rejects drift across those representations.
+Why this is authoritative: `goal_service` controls operational goal writes; `retirement_lab`
+controls Retirement edits, isolated Lab experiments, promotion confirmation and snapshot storage.
+`life_plan.project_projection_inputs` is the immutable-input calculation engine, not an alternate
+combined-plan mutation service.
 
-## Data ingestion and provider access
+Known callers: v2 routers, goal observation, Goals/Retirement/Lab clients and synthetic validation.
 
-- `paycheck_map.ingestion` coordinates manual imports; `paycheck_map.adapters` owns source parsing;
-  `paycheck_map.reconciliation` owns accounting classification and matching.
-- `paycheck_map.plaid_service` owns read-only Plaid workflows and normalized persistence;
-  `paycheck_map.plaid_client` owns the provider HTTP boundary.
-- Manual import and optional Plaid are both supported. Manual import is not a legacy fallback.
+Domain: Configuration and feature policy
 
-## Read projections
+SSOT module/file: `config.Settings`, `desktop_policy.py`, native `data_home.rs`
 
-- `paycheck_map.service_common` owns shared account classification and investment-access policy.
-- `paycheck_map.service_wealth`, `service_accounts`, `service_overview`, `service_payroll`, and
-  `service_summaries` own their read projections. `paycheck_map.services` is a stable public facade;
-  it contains no competing projection implementation.
+Why this is authoritative: Settings defines Python runtime paths; desktop_policy defines supported
+modes and secret-store policy. Native code supplies trusted desktop paths; Python independently
+validates the cross-process input. Production, managed synthetic acceptance, Keychain acceptance
+and disposable synthetic test modes all have launcher/test callers.
 
-## Scheduling and observation
+Known callers: App, database initialization, sidecar, data-home API, cutover and Keychain selection.
 
-- `paycheck_map.refresh` owns explicit and once-per-local-day provider refresh orchestration.
-- `paycheck_map.goal_observation` owns post-mutation goal observation and sanitized failure behavior.
+Domain: Persistence and recovery
 
-## Authentication and authorization
+SSOT module/file: `data_home.DataHomeManager`, `db.py`
 
-- The packaged native runtime creates the private session/bootstrap contract;
-  `paycheck_map.desktop_bootstrap` validates it for the loopback API.
-- `paycheck_map.local_security` enforces session authentication, request origin/host policy,
-  method/content limits, and browser security headers.
-- `paycheck_map.keychain.MacOSKeychainSecretStore` is the production credential authority. The
-  in-memory store is restricted by `paycheck_map.desktop_policy` to synthetic acceptance modes.
+Why this is authoritative: DataHomeManager alone owns packaged migration/activation/backup/restore
+and recovery journals. db owns SQLAlchemy and supported repository-mode initialization.
 
-## Rendering and state management
+Known callers: Desktop data API, startup, CLI development flows and release qualification.
 
-- FastAPI responses are authoritative financial state. React owns presentation and ephemeral drafts.
-- `web/src/App.tsx` owns top-level navigation and refresh coordination. Account/Activity, Income,
-  Connections, Overview, and Wealth views live in their domain folders and submit changes through
-  `web/src/api.ts`. `web/src/components.tsx` is only the stable export facade plus shared evidence and
-  review views.
-- `web/src/format.ts` owns shared general-purpose money and UTC date presentation. Domain-specific
-  formatters may intentionally use different unavailable labels or precision.
+Domain: Product/schema identity
 
-## Retained compatibility boundaries
+SSOT module/file: `product_metadata.py`, `release_candidate.py`
 
-- Repository `.local` paths and the CLI remain supported development and manual-import behavior;
-  they are not a packaged-runtime fallback.
-- Synthetic and Keychain acceptance modes are required by signed-app qualification. Disposable
-  synthetic mode is required by isolated sidecar tests. None is reachable as a production data mode
-  without the native launcher contract.
-- Historical database classification and Life Lab legacy evidence remain readable because current
-  cutover and evidence views use them. They do not provide an alternate mutation engine.
+Why this is authoritative: product_metadata owns Python version/schema/DMG identity;
+release_candidate consumes it for candidate validation. Build-manifest/native repetitions are
+required by their tools and checked by `test_version_consistency.py`.
+
+Known callers: Data-home, sidecar attestation, build scripts, About and qualification.
+
+Domain: Ingestion and provider access
+
+SSOT module/file: `ingestion.py`, `adapters`, `reconciliation.py`, `plaid_service.py`, `plaid_records.py`, `plaid_client.py`
+
+Why this is authoritative: Import coordination, format parsing, accounting classification, provider
+workflows, pure payload parsing/classification and provider HTTP each have one responsibility. Manual import and optional Plaid are
+both supported sources.
+
+Known callers: API/CLI mutation workflows, refresh and deterministic import/provider tests.
+
+Domain: Scheduling, time and observation
+
+SSOT module/file: `refresh.py`, `business_time.py`, `goal_operations.py`, `goal_observation.py`
+
+Why this is authoritative: refresh owns explicit/daily provider orchestration; business_time owns
+UTC normalization, Eastern refresh dates and nondecreasing operation timestamps. goal_operations
+coordinates durable mutations and goal_observation handles optional post-mutation observation.
+
+Known callers: Provider service, API, CLI, Retirement, goal operations and refresh.
+
+Domain: Read projections
+
+SSOT module/file: `service_common.py`, `service_accounts`, `service_wealth`, `service_overview`,
+`service_payroll`, `service_summaries`
+
+Why this is authoritative: Shared classification stays in service_common; each domain owns its
+projection. `services.py` is a public export facade without competing calculations.
+
+Known callers: API, forecast/planning inputs and report generation.
+
+Domain: Authentication, authorization and validation
+
+SSOT module/file: `desktop_bootstrap.py`, `desktop_app.py`, `local_security.py`, `keychain.py`,
+`api_inputs.py`, `v2_contracts.py`, `v21_contracts.py`
+
+Why this is authoritative: Native creates the private bootstrap/session; desktop_app enforces its
+loopback boundary. local_security enforces browser Host/origin/framing and response privacy.
+MacOSKeychainSecretStore owns production credentials; schemas own their versioned input contracts.
+Independent native/Python validation is intentional defense at a process boundary.
+
+Known callers: Sidecar, standalone server, routers, production provider workflows and synthetic tests.
+
+Domain: Rendering and state
+
+SSOT module/file: `web/src/App.tsx`, domain views, `web/src/format.ts`
+
+Why this is authoritative: App owns navigation/refresh coordination, domain views own presentation
+and ephemeral drafts, and backend responses own financial state. Shared formatters own general
+money/UTC date display; domain-specific labels and precision remain intentional.
+
+Known callers: All current routes. `components.tsx` remains a used facade/shared evidence UI.
+
+## Conflicting and unused construct inventory
+
+| Candidate | Usage evidence and relationship to authority | Action |
+| --- | --- | --- |
+| Combined `/api/life-plan/*` router | No current UI, CLI or provider caller. Its writers bypassed v2 edit tokens/provenance and separate planning policy. Native qualification still called old reads. | Deleted all 12 operations and `api_life_plan.py`; requests receive the existing API not-found/method-not-allowed response. Updated native observer and oracle to current Lab entry requests. |
+| Legacy projection/save/CRUD helpers in `life_plan.py` | Only the removed router, its tests or no callers used them. | Deleted legacy request models, persistence writers, duplicate serializers, database-to-combined-run adapter and unused deletion/test helpers. Kept deterministic core and legacy fingerprint/read support. |
+| Legacy client functions, GoalEditor, LifeProfileForm | No imports from the mounted UI. Current Lab edits isolated drafts and promotes explicitly. | Deleted helpers, components, their unused styles and request/snapshot types; removed stale successful-response mocks. |
+| Lab source reads | Same endpoints/types as Goals and Retirement client modules. | Lab now calls `loadPrimaryGoal` and `loadRetirementProfile` directly; removed both wrappers. |
+| Goals read/write transport | Reads had a no-op catch/rethrow wrapper; writes separately decoded errors and could mishandle null bodies. | Reads use the shared request directly. Writes use it with a typed status-to-GoalApiError adapter so existing conflict recovery remains intact. Structured/null error regressions cover the shared decoder. |
+| Provider/refresh UTC conversion and timestamp-floor implementations | Both actively implemented identical policy. Retirement also duplicated UTC conversion. | Routed through business_time; API/CLI/planning import business dates directly from that module. |
+| Acceptance-mode literals outside desktop_policy | Sidecar seed validation, data-home fixture selection and cutover rehearsal use the same mode. | Replaced repeated literals with ACCEPTANCE_DATA_MODE. |
+| Runtime-resource module inventory | The package inventory still named the retired router. | Removed that module; inventory checks continue to validate the remaining package. |
+| Qualification Lab expectations | Native and fixture repeated obsolete endpoints while the UI used v2. | Updated both and added a guard against disagreement with mounted current routes. Repinned the reviewed source oracle in `preflight_slice6_source_matrix.py`; this changes future qualification inputs, not historical acceptance. |
+
+## Retained boundaries and follow-ups
+
+- Repository CLI/manual import remains a supported development surface, not a packaged fallback.
+  No environment aliases or supported launcher modes were removed. Fault-injection/startup-delay
+  hooks have bounded synthetic qualification callers and remain guarded by the launcher contract.
+- Legacy `LifeGoal`/`LifeScenario` records, fingerprinting and snapshot classification remain required
+  by cutover, historical evidence display and Lab seeding. They are read compatibility, not a second
+  public mutation API. A regression verifies legacy evidence stays unchanged while stale status
+  updates after current assumptions change. Removing those records requires a separate migration.
+- Strict timestamp input validation deliberately rejects naive timestamps in some contracts;
+  persistence normalization deliberately accepts historical naive UTC values. Do not merge these
+  into a permissive validator merely because both inspect timezones.
+- Other financial/forecast calendar defaults still use explicit as-of dates or the host calendar.
+  Unifying all planning calendars with the Eastern refresh day would change behavior and needs a
+  separate date-policy pass with boundary tests. This pass consolidates identical clock behavior.
+- Python and Rust admission/framing checks and desktop mode validation remain independent process
+  boundaries. Shared numeric limits could be generated later, but authentication must remain
+  validated on both sides. Version/qualification representations use guard tests where practical.
+- No schema, version, financial calculation, release/cutover state or installed artifact changed.
+  Qualifying these source changes requires a new exact candidate; real Keychain/provider and
+  signed-app owner workflows were not exercised by synthetic source tests.
+
+## Regression evidence
+
+`test_ssot_enforcement.py` rejects retired API calls, binds the Lab qualification oracle to mounted
+routes and native observation, and checks shared timestamp behavior at Eastern midnight and
+backwards clocks. Existing v2 profile/goal/experiment/promotion tests protect active workflows;
+legacy snapshot read/staleness coverage remains in `test_retirement_lab.py`. The full source gate,
+native checks and package inventory validation remain required. Run totals are in the Desktop
+`savings_next_steps.md` tracker.

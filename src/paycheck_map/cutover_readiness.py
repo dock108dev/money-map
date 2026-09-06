@@ -29,6 +29,7 @@ from paycheck_map.data_home import (
     verify_database,
 )
 from paycheck_map.desktop_bootstrap import active_bootstrap
+from paycheck_map.desktop_policy import ACCEPTANCE_DATA_MODE
 from paycheck_map.product_metadata import SCHEMA_HEAD
 
 CUTOVER_CONTRACT = "money-map-cutover-readiness-v1"
@@ -253,7 +254,7 @@ class CutoverReadinessManager:
                 application=home / "Library/Application Support/Money Map",
                 cache=home / "Library/Caches/com.moneymap.desktop",
                 logs=home / "Library/Logs/Money Map",
-                mode="acceptance-synthetic-v1",
+                mode=ACCEPTANCE_DATA_MODE,
             )
             rehearsal = DataHomeManager(paths, migration_dir=self.data_home.migration_dir)
             rehearsal.prepare()

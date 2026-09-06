@@ -4,14 +4,15 @@ import hashlib
 import json
 from collections.abc import Callable
 from datetime import UTC, date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Literal
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from . import plaid_records
+from .business_time import as_utc, clock_timestamp, local_business_date
 from .keychain import SecretStore, SecretStoreError, keychain
 from .models import (
     Account,
@@ -28,7 +29,7 @@ from .models import (
     PlaidSyncRun,
     SourceEvidence,
 )
-from .money import ZERO, money
+from .money import money
 from .plaid_client import JsonObject, PlaidAPIError, PlaidClient
 from .reconciliation import reconcile_all
 
@@ -38,25 +39,11 @@ PlaidTarget = Literal["sofi", "fidelity"]
 PARSER_VERSION = "1.0.2"
 CONFIG_NAMESPACE = "plaid.config"
 ITEM_NAMESPACE = "plaid.items"
-LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 Clock = Callable[[], datetime]
 
 
 def _system_clock() -> datetime:
     return datetime.now(UTC)
-
-
-def _clock_timestamp(clock: Clock, *, not_before: datetime | None = None) -> datetime:
-    value = _as_utc(clock())
-    floor = _as_utc(not_before) if not_before is not None else None
-    return floor if floor is not None and value < floor else value
-
-
-def _eastern_business_date(value: datetime | None = None) -> date:
-    instant = value or datetime.now(UTC)
-    if instant.tzinfo is None:
-        instant = instant.replace(tzinfo=UTC)
-    return instant.astimezone(LOCAL_TIMEZONE).date()
 
 
 def configure_plaid(
@@ -167,8 +154,8 @@ def create_plaid_link_session(
         target=target,
         client_user_id=_client_user_id(store),
     )
-    link_token = _required_text(response, "link_token")
-    expires_at = _parse_datetime(_required_text(response, "expiration"))
+    link_token = plaid_records.required_text(response, "link_token")
+    expires_at = plaid_records.parse_datetime(plaid_records.required_text(response, "expiration"))
     local_session = PlaidLinkSession(
         id=str(uuid4()),
         environment=environment,
@@ -204,8 +191,10 @@ def create_plaid_update_session(
     )
     return {
         "connection_id": connection.id,
-        "link_token": _required_text(response, "link_token"),
-        "expiration": _parse_datetime(_required_text(response, "expiration")),
+        "link_token": plaid_records.required_text(response, "link_token"),
+        "expiration": plaid_records.parse_datetime(
+            plaid_records.required_text(response, "expiration")
+        ),
         "environment": connection.environment,
         "target": connection.target,
     }
@@ -225,23 +214,23 @@ def exchange_plaid_public_token(
     now = datetime.now(UTC)
     if link_session.used_at is not None:
         raise ValueError("Plaid link session has already been used")
-    if _as_utc(link_session.expires_at) <= now:
+    if as_utc(link_session.expires_at) <= now:
         raise ValueError("Plaid link session has expired")
     environment = _environment(link_session.environment)
     target = _target(link_session.target)
     api = _client(environment, store, client)
     exchange = api.exchange_public_token(public_token)
-    access_token = _required_text(exchange, "access_token")
-    item_id = _required_text(exchange, "item_id")
+    access_token = plaid_records.required_text(exchange, "access_token")
+    item_id = plaid_records.required_text(exchange, "item_id")
     item_response = api.item_get(access_token)
-    item = _object(item_response.get("item"))
-    institution_id = _optional_text(item.get("institution_id"))
+    item = plaid_records.object_fields(item_response.get("item"))
+    institution_id = plaid_records.optional_text(item.get("institution_id"))
     institution_name = "Sandbox institution" if environment == "sandbox" else "Institution"
     if institution_id:
         institution_response = api.institution_get(institution_id)
-        institution = _object(institution_response.get("institution"))
-        institution_name = _optional_text(institution.get("name")) or institution_name
-    consent_expires_at = _optional_datetime(item.get("consent_expiration_time"))
+        institution = plaid_records.object_fields(institution_response.get("institution"))
+        institution_name = plaid_records.optional_text(institution.get("name")) or institution_name
+    consent_expires_at = plaid_records.optional_datetime(item.get("consent_expiration_time"))
 
     existing = session.scalar(select(PlaidConnection).where(PlaidConnection.item_id == item_id))
     if existing is not None:
@@ -283,7 +272,7 @@ def sync_plaid_connection(
     clock: Clock | None = None,
 ) -> PlaidConnection:
     operation_clock = clock or _system_clock
-    operation_started_at = _as_utc(started_at or operation_clock())
+    operation_started_at = as_utc(started_at or operation_clock())
     connection = session.get(PlaidConnection, connection_id)
     if connection is None:
         raise ValueError("Plaid connection was not found")
@@ -293,7 +282,7 @@ def sync_plaid_connection(
     target = _target(connection.target)
     api = _client(environment, store, client)
     access_token = _access_token(connection, store)
-    snapshot_date = business_date or _eastern_business_date(operation_started_at)
+    snapshot_date = business_date or local_business_date(operation_started_at)
     batch = ImportBatch(
         requested_source=f"plaid_{environment}",
         status="running",
@@ -327,9 +316,9 @@ def sync_plaid_connection(
                     connection=connection,
                     endpoint=f"/transactions/sync?page={page_number}",
                     response=response,
-                    record_count=_list_count(response, "added")
-                    + _list_count(response, "modified")
-                    + _list_count(response, "removed"),
+                    record_count=plaid_records.list_count(response, "added")
+                    + plaid_records.list_count(response, "modified")
+                    + plaid_records.list_count(response, "removed"),
                 )
                 endpoint_count += 1
                 new_artifacts += int(created)
@@ -339,7 +328,9 @@ def sync_plaid_connection(
                 )
                 transaction_count += changed
                 account_ids.update(seen_accounts)
-                next_cursor = _optional_text(response.get("next_cursor")) or next_cursor
+                next_cursor = (
+                    plaid_records.optional_text(response.get("next_cursor")) or next_cursor
+                )
             history_pages = api.transactions_get(access_token, end_date=snapshot_date)
             for page_number, response in enumerate(history_pages, start=1):
                 artifact, created = _record_endpoint(
@@ -349,7 +340,7 @@ def sync_plaid_connection(
                     connection=connection,
                     endpoint=f"/transactions/get?page={page_number}",
                     response=response,
-                    record_count=_list_count(response, "transactions"),
+                    record_count=plaid_records.list_count(response, "transactions"),
                 )
                 endpoint_count += 1
                 new_artifacts += int(created)
@@ -373,7 +364,7 @@ def sync_plaid_connection(
                 connection=connection,
                 endpoint="/accounts/balance/get",
                 response=balances,
-                record_count=_list_count(balances, "accounts"),
+                record_count=plaid_records.list_count(balances, "accounts"),
             )
             endpoint_count += 1
             new_artifacts += int(created)
@@ -396,7 +387,7 @@ def sync_plaid_connection(
                 connection=connection,
                 endpoint="/investments/holdings/get",
                 response=holdings,
-                record_count=_list_count(holdings, "holdings"),
+                record_count=plaid_records.list_count(holdings, "holdings"),
             )
             endpoint_count += 1
             new_artifacts += int(created)
@@ -420,7 +411,7 @@ def sync_plaid_connection(
                     connection=connection,
                     endpoint=f"/investments/transactions/get?page={page_number}",
                     response=response,
-                    record_count=_list_count(response, "investment_transactions"),
+                    record_count=plaid_records.list_count(response, "investment_transactions"),
                 )
                 endpoint_count += 1
                 new_artifacts += int(created)
@@ -437,7 +428,7 @@ def sync_plaid_connection(
     except PlaidAPIError as exc:
         savepoint.rollback()
         run.status = "failed"
-        run.finished_at = _clock_timestamp(operation_clock, not_before=operation_started_at)
+        run.finished_at = clock_timestamp(operation_clock, not_before=operation_started_at)
         run.error_code = exc.code
         run.error_message = exc.safe_message
         batch.status = "complete_with_errors"
@@ -461,7 +452,7 @@ def sync_plaid_connection(
     except Exception:
         savepoint.rollback()
         run.status = "failed"
-        run.finished_at = _clock_timestamp(operation_clock, not_before=operation_started_at)
+        run.finished_at = clock_timestamp(operation_clock, not_before=operation_started_at)
         run.error_code = "LOCAL_SYNC_ERROR"
         run.error_message = "Local normalization failed; no partial sync was committed."
         batch.status = "complete_with_errors"
@@ -471,7 +462,7 @@ def sync_plaid_connection(
         session.commit()
         raise
 
-    now = _clock_timestamp(operation_clock, not_before=operation_started_at)
+    now = clock_timestamp(operation_clock, not_before=operation_started_at)
     run.status = "complete"
     run.finished_at = now
     run.account_count = len(account_ids)
@@ -577,7 +568,7 @@ def plaid_status(session: Session, store: SecretStore = keychain) -> dict[str, A
                 "products": connection.products,
                 "consent_expires_at": connection.consent_expires_at,
                 "last_synced_at": (
-                    _as_utc(connection.last_synced_at)
+                    as_utc(connection.last_synced_at)
                     if connection.last_synced_at is not None
                     else None
                 ),
@@ -593,9 +584,9 @@ def plaid_status(session: Session, store: SecretStore = keychain) -> dict[str, A
                         "accounts": latest_run.account_count,
                         "transactions": latest_run.transaction_count,
                         "holdings": latest_run.holding_count,
-                        "started_at": _as_utc(latest_run.started_at),
+                        "started_at": as_utc(latest_run.started_at),
                         "finished_at": (
-                            _as_utc(latest_run.finished_at)
+                            as_utc(latest_run.finished_at)
                             if latest_run.finished_at is not None
                             else None
                         ),
@@ -662,7 +653,7 @@ def _record_endpoint(
             sync_run_id=run.id,
             artifact_id=artifact.id,
             endpoint=endpoint,
-            request_id=_optional_text(response.get("request_id")),
+            request_id=plaid_records.optional_text(response.get("request_id")),
             response_sha256=digest,
             record_count=record_count,
             parser_version=PARSER_VERSION,
@@ -693,8 +684,8 @@ def _store_accounts(
     institution = _institution(session, connection)
     accounts: dict[str, Account] = {}
     for raw in rows:
-        row = _object(raw)
-        provider_account_id = _required_text(row, "account_id")
+        row = plaid_records.object_fields(raw)
+        provider_account_id = plaid_records.required_text(row, "account_id")
         external_key = _provider_key(
             connection.item_id,
             "account",
@@ -711,18 +702,18 @@ def _store_accounts(
                 institution_id=institution.id,
                 plaid_connection_id=connection.id,
                 external_key=external_key,
-                display_name=_account_display_name(row),
-                account_type=_optional_text(row.get("subtype"))
-                or _optional_text(row.get("type"))
+                display_name=plaid_records.account_display_name(row),
+                account_type=plaid_records.optional_text(row.get("subtype"))
+                or plaid_records.optional_text(row.get("type"))
                 or "other",
             )
             session.add(account)
             session.flush()
         else:
-            account.display_name = _account_display_name(row)
+            account.display_name = plaid_records.account_display_name(row)
             account.account_type = (
-                _optional_text(row.get("subtype"))
-                or _optional_text(row.get("type"))
+                plaid_records.optional_text(row.get("subtype"))
+                or plaid_records.optional_text(row.get("type"))
                 or account.account_type
             )
         accounts[provider_account_id] = account
@@ -737,18 +728,18 @@ def _store_current_balances(
     *,
     snapshot_date: date,
 ) -> set[int]:
-    account_rows = _objects(response.get("accounts"))
+    account_rows = plaid_records.object_records(response.get("accounts"))
     accounts = _store_accounts(session, connection, list(account_rows))
     for row in account_rows:
-        external_key = _required_text(row, "account_id")
+        external_key = plaid_records.required_text(row, "account_id")
         account = accounts[external_key]
-        balances = _object(row.get("balances"))
+        balances = plaid_records.object_fields(row.get("balances"))
         raw_amount = balances.get("current")
         if raw_amount is None:
             raw_amount = balances.get("available")
         if raw_amount is None:
             raise ValueError("Plaid returned an account without an available balance")
-        value = _money(raw_amount)
+        value = plaid_records.money_amount(raw_amount)
         snapshot = session.scalar(
             select(BalanceSnapshot).where(
                 BalanceSnapshot.account_id == account.id,
@@ -778,9 +769,11 @@ def _store_sofi_transactions(
     artifact: ImportArtifact,
     response: JsonObject,
 ) -> tuple[int, set[int]]:
-    accounts = _store_accounts(session, connection, list(_objects(response.get("accounts"))))
-    for removed in _objects(response.get("removed")):
-        transaction_id = _optional_text(removed.get("transaction_id"))
+    accounts = _store_accounts(
+        session, connection, list(plaid_records.object_records(response.get("accounts")))
+    )
+    for removed in plaid_records.object_records(response.get("removed")):
+        transaction_id = plaid_records.optional_text(removed.get("transaction_id"))
         if transaction_id:
             _delete_provider_transaction(
                 session,
@@ -788,25 +781,28 @@ def _store_sofi_transactions(
             )
     changed = 0
     for source_row, row in enumerate(
-        [*_objects(response.get("added")), *_objects(response.get("modified"))],
+        [
+            *plaid_records.object_records(response.get("added")),
+            *plaid_records.object_records(response.get("modified")),
+        ],
         start=1,
     ):
         if bool(row.get("pending")):
             continue
-        account = accounts.get(_required_text(row, "account_id"))
+        account = accounts.get(plaid_records.required_text(row, "account_id"))
         if account is None:
             raise ValueError("Plaid returned a record without a matching account")
         provider_id = _provider_key(
             connection.item_id,
             "transaction",
-            _required_text(row, "transaction_id"),
+            plaid_records.required_text(row, "transaction_id"),
         )
-        normalized_amount = money(-_decimal(row.get("amount")))
-        role = _sofi_role(row, normalized_amount)
+        normalized_amount = money(-plaid_records.decimal_amount(row.get("amount")))
+        role = plaid_records.sofi_role(row, normalized_amount)
         description = (
-            _optional_text(row.get("merchant_name"))
-            or _optional_text(row.get("name"))
-            or _optional_text(row.get("original_description"))
+            plaid_records.optional_text(row.get("merchant_name"))
+            or plaid_records.optional_text(row.get("name"))
+            or plaid_records.optional_text(row.get("original_description"))
             or ""
         )
         _upsert_transaction(
@@ -814,7 +810,7 @@ def _store_sofi_transactions(
             artifact=artifact,
             account=account,
             provider_id=provider_id,
-            posted_date=_parse_date(_required_text(row, "date")),
+            posted_date=plaid_records.parse_date(plaid_records.required_text(row, "date")),
             description=description,
             role=role,
             amount=normalized_amount,
@@ -833,7 +829,7 @@ def _store_fidelity_holdings(
     *,
     snapshot_date: date,
 ) -> tuple[set[int], int]:
-    account_rows = _objects(response.get("accounts"))
+    account_rows = plaid_records.object_records(response.get("accounts"))
     accounts = _store_accounts(session, connection, list(account_rows))
     _store_current_balances(
         session,
@@ -848,14 +844,15 @@ def _store_fidelity_holdings(
             delete(InvestmentHolding).where(InvestmentHolding.account_id.in_(account_ids))
         )
     securities = {
-        _required_text(row, "security_id"): row for row in _objects(response.get("securities"))
+        plaid_records.required_text(row, "security_id"): row
+        for row in plaid_records.object_records(response.get("securities"))
     }
     holding_count = 0
-    for row in _objects(response.get("holdings")):
-        account = accounts.get(_required_text(row, "account_id"))
+    for row in plaid_records.object_records(response.get("holdings")):
+        account = accounts.get(plaid_records.required_text(row, "account_id"))
         if account is None:
             raise ValueError("Plaid returned a record without a matching account")
-        security_id = _required_text(row, "security_id")
+        security_id = plaid_records.required_text(row, "security_id")
         security = securities.get(security_id, {})
         raw_as_of = security.get("close_price_as_of")
         holding = InvestmentHolding(
@@ -863,17 +860,17 @@ def _store_fidelity_holdings(
             artifact_id=artifact.id,
             security_id=security_id,
             security_name=(
-                _optional_text(security.get("name"))
-                or _optional_text(security.get("ticker_symbol"))
+                plaid_records.optional_text(security.get("name"))
+                or plaid_records.optional_text(security.get("ticker_symbol"))
                 or "Unidentified security"
             ),
-            ticker_symbol=_optional_text(security.get("ticker_symbol")),
-            security_type=_optional_text(security.get("type")) or "other",
-            quantity=_decimal(row.get("quantity")),
-            institution_price=_optional_money(row.get("institution_price")),
-            institution_value=_money(row.get("institution_value")),
-            cost_basis=_optional_money(row.get("cost_basis")),
-            as_of=_parse_date(str(raw_as_of)) if raw_as_of else snapshot_date,
+            ticker_symbol=plaid_records.optional_text(security.get("ticker_symbol")),
+            security_type=plaid_records.optional_text(security.get("type")) or "other",
+            quantity=plaid_records.decimal_amount(row.get("quantity")),
+            institution_price=plaid_records.optional_money(row.get("institution_price")),
+            institution_value=plaid_records.money_amount(row.get("institution_value")),
+            cost_basis=plaid_records.optional_money(row.get("cost_basis")),
+            as_of=plaid_records.parse_date(str(raw_as_of)) if raw_as_of else snapshot_date,
         )
         session.add(holding)
         holding_count += 1
@@ -887,26 +884,30 @@ def _store_fidelity_transactions(
     artifact: ImportArtifact,
     response: JsonObject,
 ) -> tuple[int, set[int]]:
-    accounts = _store_accounts(session, connection, list(_objects(response.get("accounts"))))
+    accounts = _store_accounts(
+        session, connection, list(plaid_records.object_records(response.get("accounts")))
+    )
     changed = 0
-    for source_row, row in enumerate(_objects(response.get("investment_transactions")), start=1):
-        account = accounts.get(_required_text(row, "account_id"))
+    for source_row, row in enumerate(
+        plaid_records.object_records(response.get("investment_transactions")), start=1
+    ):
+        account = accounts.get(plaid_records.required_text(row, "account_id"))
         if account is None:
             raise ValueError("Plaid returned a record without a matching account")
         provider_id = _provider_key(
             connection.item_id,
             "investment",
-            _required_text(row, "investment_transaction_id"),
+            plaid_records.required_text(row, "investment_transaction_id"),
         )
-        normalized_amount = money(-_decimal(row.get("amount")))
-        description = _optional_text(row.get("name")) or ""
-        role, confidence = _fidelity_role(row, description)
+        normalized_amount = money(-plaid_records.decimal_amount(row.get("amount")))
+        description = plaid_records.optional_text(row.get("name")) or ""
+        role, confidence = plaid_records.fidelity_role(row, description)
         _upsert_transaction(
             session,
             artifact=artifact,
             account=account,
             provider_id=provider_id,
-            posted_date=_parse_date(_required_text(row, "date")),
+            posted_date=plaid_records.parse_date(plaid_records.required_text(row, "date")),
             description=description,
             role=role,
             amount=normalized_amount,
@@ -991,87 +992,6 @@ def _delete_provider_transaction(session: Session, provider_id: str) -> None:
     session.delete(transaction)
 
 
-def _sofi_role(row: JsonObject, amount: Decimal) -> str:
-    description = " ".join(
-        value
-        for value in (
-            _optional_text(row.get("name")),
-            _optional_text(row.get("merchant_name")),
-            _optional_text(row.get("original_description")),
-        )
-        if value
-    ).upper()
-    category = _object(row.get("personal_finance_category"))
-    primary = (_optional_text(category.get("primary")) or "").upper()
-    detailed = (_optional_text(category.get("detailed")) or "").upper()
-    owned_transfer_markers = (
-        "FROM SAVINGS",
-        "TO SAVINGS",
-        "FROM CHECKING",
-        "TO CHECKING",
-    )
-    if "PAYROLL" in description or detailed == "INCOME_WAGES":
-        return "payroll_deposit"
-    if "INTEREST" in description or detailed == "INCOME_INTEREST_EARNED":
-        return "interest"
-    if primary == "BANK_FEES" or "FEE" in detailed:
-        return "fee"
-    if any(marker in description for marker in owned_transfer_markers) or (
-        "FIDELITY" in description and primary in {"TRANSFER_IN", "TRANSFER_OUT"}
-    ):
-        return "internal_transfer"
-    return "external_inflow" if amount >= ZERO else "external_outflow"
-
-
-def _fidelity_role(row: JsonObject, description: str) -> tuple[str, str]:
-    transaction_type = (_optional_text(row.get("type")) or "").lower()
-    subtype = (_optional_text(row.get("subtype")) or "").lower()
-    label = description.upper()
-    if "REALIZEDGAINLOSS" in label.replace(" ", ""):
-        return "adjustment", "high"
-    if "EMPLOYER" in label and ("MATCH" in label or "CONTRIB" in label):
-        return "employer_contribution", "medium"
-    if "EMPLOYEE" in label and "CONTRIB" in label:
-        return "employee_contribution", "medium"
-    if transaction_type == "buy":
-        return "purchase", "high"
-    if transaction_type == "sell":
-        return "sale", "high"
-    if subtype in {"dividend", "qualified dividend", "non-qualified dividend"}:
-        return "dividend", "high"
-    if subtype == "interest":
-        return "interest", "high"
-    if transaction_type == "fee" or "fee" in subtype:
-        return "fee", "high"
-    if transaction_type == "transfer" or any(
-        marker in label
-        for marker in (
-            "TRANSFERRED TO",
-            "TRANSFERRED FROM",
-            "TRANSFER TO FIDELITY",
-            "FIDELITY CRYPTO",
-        )
-    ):
-        return "internal_transfer", "medium"
-    if (
-        "ESPP" in label
-        or "STOCK PLAN" in label
-        or "SPP PURCHASE CREDIT" in label
-        or "JOURNALED SPP" in label
-    ) and subtype in {
-        "contribution",
-        "deposit",
-    }:
-        return "stock_plan_contribution", "medium"
-    if subtype in {"contribution", "deposit"}:
-        return "external_deposit", "high"
-    if subtype in {"withdrawal"}:
-        return "external_withdrawal", "high"
-    if subtype == "reinvestment":
-        return "reinvestment", "high"
-    return "unresolved", "low"
-
-
 def _access_token(connection: PlaidConnection, store: SecretStore) -> str:
     environment = _environment(connection.environment)
     token = store.get(ITEM_NAMESPACE, _item_key(environment, connection.item_id))
@@ -1087,90 +1007,6 @@ def _item_key(environment: PlaidEnvironment, item_id: str) -> str:
 def _provider_key(item_id: str, record_kind: str, provider_id: str) -> str:
     digest = hashlib.sha256(f"{item_id}:{record_kind}:{provider_id}".encode()).hexdigest()
     return f"plaid:{digest}"
-
-
-def _account_display_name(row: JsonObject) -> str:
-    name = (
-        _optional_text(row.get("official_name"))
-        or _optional_text(row.get("name"))
-        or "Connected account"
-    )
-    mask = _optional_text(row.get("mask"))
-    return f"{name} ••{mask}" if mask else name
-
-
-def _objects(value: object) -> list[JsonObject]:
-    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
-        raise ValueError("Plaid returned invalid record collections")
-    return value
-
-
-def _object(value: object) -> JsonObject:
-    return value if isinstance(value, dict) else {}
-
-
-def _list_count(response: JsonObject, key: str) -> int:
-    value = response.get(key)
-    return len(value) if isinstance(value, list) else 0
-
-
-def _required_text(row: JsonObject, key: str) -> str:
-    value = _optional_text(row.get(key))
-    if not value:
-        raise ValueError(f"Plaid response is missing {key}")
-    return value
-
-
-def _optional_text(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value)
-    return text if text else None
-
-
-def _decimal(value: object) -> Decimal:
-    if value is None:
-        raise ValueError("Plaid returned a missing required amount")
-    try:
-        amount = Decimal(str(value))
-        if not amount.is_finite():
-            raise ValueError("Plaid returned a non-finite amount")
-        return amount
-    except InvalidOperation as exc:
-        raise ValueError("Plaid returned a non-numeric amount") from exc
-
-
-def _money(value: object) -> Decimal:
-    return money(_decimal(value))
-
-
-def _optional_money(value: object) -> Decimal | None:
-    return None if value is None else _money(value)
-
-
-def _parse_date(value: str) -> date:
-    try:
-        return date.fromisoformat(value)
-    except ValueError as error:
-        raise ValueError("Plaid returned an invalid date") from error
-
-
-def _parse_datetime(value: str) -> datetime:
-    try:
-        return _as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
-    except ValueError as error:
-        raise ValueError("Plaid returned an invalid timestamp") from error
-
-
-def _optional_datetime(value: object) -> datetime | None:
-    text = _optional_text(value)
-    return _parse_datetime(text) if text else None
-
-
-def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
 
 
 def _environment(value: str) -> PlaidEnvironment:

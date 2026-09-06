@@ -135,6 +135,22 @@ describe("Goals API", () => {
     ).rejects.toMatchObject({ status: 409, message: "Goal changed" });
   });
 
+  it("uses the shared error decoder while retaining goal conflict status", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json({ detail: { message: "Reload the changed goal" } }, 409)));
+    await expect(selectPrimaryGoal({
+      goal_program_id: goalProgram.goal_program_id,
+      expected_edit_token: editToken,
+    })).rejects.toMatchObject({ status: 409, message: "Reload the changed goal" });
+  });
+
+  it("handles null error bodies through the shared request boundary", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json(null, 503)));
+    await expect(selectPrimaryGoal({
+      goal_program_id: goalProgram.goal_program_id,
+      expected_edit_token: editToken,
+    })).rejects.toMatchObject({ status: 503, message: "Request failed (503)" });
+  });
+
   it("encodes cursor pagination and keeps each page bounded", async () => {
     const fetch = vi.fn(async () => json(historyPage));
     vi.stubGlobal("fetch", fetch);

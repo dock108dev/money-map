@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
@@ -10,6 +11,15 @@ LOCAL_TIMEZONE = ZoneInfo("America/New_York")
 
 def as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def clock_timestamp(
+    clock: Callable[[], datetime], *, not_before: datetime | None = None
+) -> datetime:
+    """Normalize an operation clock and prevent backwards persisted event ordering."""
+    value = as_utc(clock())
+    floor = as_utc(not_before) if not_before is not None else None
+    return floor if floor is not None and value < floor else value
 
 
 def local_business_date(value: datetime | None = None) -> date:

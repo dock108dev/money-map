@@ -15,6 +15,7 @@ from .config import settings
 from .cutover_readiness import CutoverReadinessManager
 from .data_home import DataHomeError, DataHomeManager, DataHomePaths
 from .db import engine
+from .desktop_policy import ACCEPTANCE_DATA_MODE
 from .safe_events import record_failure
 
 router = APIRouter(prefix="/api/desktop/data-home", tags=["desktop-data-home"])
@@ -53,7 +54,7 @@ def data_home_manager() -> DataHomeManager:
     bundle = os.environ.get("PAYCHECK_MAP_DESKTOP_BUNDLE_ROOT")
     repository = (
         settings.project_root
-        if paths.mode == "acceptance-synthetic-v1"
+        if paths.mode == ACCEPTANCE_DATA_MODE
         and os.environ.get("PAYCHECK_MAP_DESKTOP_TEST_PROJECT_ROOT")
         else None
     )

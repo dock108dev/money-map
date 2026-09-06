@@ -67,6 +67,13 @@ export class GoalGapApiError extends Error {
   }
 }
 
+export class ApiRequestError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
@@ -74,7 +81,10 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
-    throw new Error(detailMessage(body?.detail, `Request failed (${response.status})`));
+    throw new ApiRequestError(
+      response.status,
+      detailMessage(body?.detail, `Request failed (${response.status})`),
+    );
   }
   return response.json() as Promise<T>;
 }

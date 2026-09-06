@@ -178,11 +178,6 @@ function workingFetch(
     if (url === "/api/v2/lab/snapshots") return json([legacySnapshot]);
     if (url === "/api/v2/lab/experiments") return json(labSeed("blank"));
     if (url === "/api/v2/lab/experiments/project") return json(labResult(labSeed("blank")));
-    if (url === "/api/life-plan/profile") return json(null);
-    if (url === "/api/life-plan/goals" || url === "/api/life-plan/scenarios") return json([]);
-    if (url === "/api/life-plan/starting-point") return json({
-      as_of: "2026-08-03", cash: "6761.75", accessible_investments: "26253.17", pretax_retirement: "459830.08", hsa: "0.00", restricted_assets: "0.00", debt: "0.00", accessible_total: "33014.92", tracked_total: "492845.00", observed_monthly_outflow: "5500.00", outflow_months: [], payroll: null, accounts: [], warnings: [],
-    });
     return new Response("Not found", { status: 404 });
   });
 }
@@ -595,6 +590,10 @@ describe("application states", () => {
     expect(navigation).toHaveAttribute("aria-label", "Primary navigation");
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/life-plan"))).toBe(false);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/overview"))).toBe(false);
+    // Finish the initial read-only Cash Flow preview before measuring Goals navigation.
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      "/api/v2/goals/gap-preview", expect.any(Object),
+    ));
     const callsBeforeGoals = fetch.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Goals" }));
     expect(await screen.findByRole("heading", { name: "Quiet place by the water" })).toBeInTheDocument();

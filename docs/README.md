@@ -4,6 +4,7 @@ Start with the guides that describe the current tree:
 
 - [Development](development.md): install, run, repository layout, and validation
 - [Configuration](configuration.md): environment variables, static inputs, runtime modes, and secrets
+- [Maintenance](maintenance.md): module-size decisions and focused cleanup follow-ups
 - [Testing](testing.md): local checks, CI jobs, test isolation, and release-only gates
 - [Operations](operations.md): private paths, imports, refresh, payroll, backup, restore, and reports
 - [Known limitations](known-limitations.md): unsupported use cases and validation requiring external access

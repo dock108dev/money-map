@@ -25,11 +25,10 @@ from paycheck_map.models import (
     ReconciliationResult,
 )
 from paycheck_map.plaid_client import JsonObject, PlaidAPIError, PlaidClient
+from paycheck_map.plaid_records import fidelity_role, sofi_role
 from paycheck_map.plaid_service import (
     CONFIG_NAMESPACE,
     ITEM_NAMESPACE,
-    _fidelity_role,
-    _sofi_role,
     configure_plaid,
     create_plaid_link_session,
     exchange_plaid_public_token,
@@ -394,7 +393,7 @@ def test_configuration_reports_an_explicit_failure_when_keychain_rollback_is_inc
 
 
 def test_realized_gain_loss_is_not_counted_as_an_investment_deposit() -> None:
-    role, confidence = _fidelity_role(
+    role, confidence = fidelity_role(
         {"type": "cash", "subtype": "deposit"},
         "VANG INST 500 IDX TR - realizedGainLoss",
     )
@@ -402,11 +401,11 @@ def test_realized_gain_loss_is_not_counted_as_an_investment_deposit() -> None:
 
 
 def test_fidelity_internal_transfers_and_stock_plan_credits_keep_their_roles() -> None:
-    assert _fidelity_role(
+    assert fidelity_role(
         {"type": "cash", "subtype": "withdrawal"},
         "TRANSFERRED TO VS X00-000000-1",
     ) == ("internal_transfer", "medium")
-    assert _fidelity_role(
+    assert fidelity_role(
         {"type": "cash", "subtype": "deposit"},
         "JOURNALED SPP PURCHASE CREDIT",
     ) == ("stock_plan_contribution", "medium")
@@ -414,7 +413,7 @@ def test_fidelity_internal_transfers_and_stock_plan_credits_keep_their_roles() -
 
 def test_plaid_transfer_category_is_external_without_an_owned_account_marker() -> None:
     assert (
-        _sofi_role(
+        sofi_role(
             {
                 "name": "PAYPAL",
                 "personal_finance_category": {"primary": "TRANSFER_OUT", "detailed": ""},
@@ -424,7 +423,7 @@ def test_plaid_transfer_category_is_external_without_an_owned_account_marker() -
         == "external_outflow"
     )
     assert (
-        _sofi_role(
+        sofi_role(
             {
                 "name": "To Savings - 0002",
                 "personal_finance_category": {"primary": "TRANSFER_OUT", "detailed": ""},

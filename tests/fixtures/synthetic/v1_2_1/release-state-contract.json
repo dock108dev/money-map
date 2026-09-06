@@ -213,7 +213,7 @@
       "authority_refs": ["AUTH-RELEASE-MATRIX", "AUTH-LIFE-LAB", "AUTH-LIFE-FIXTURE"],
       "combination_defaults": {
         "applicable": true,
-        "expected_api_endpoints": ["GET /api/life-plan/profile", "GET /api/life-plan/starting-point", "GET /api/life-plan/goals", "GET /api/life-plan/scenarios"],
+        "expected_api_endpoints": ["GET /api/v2/lab/snapshots", "GET /api/v2/retirement/snapshots", "GET /api/v2/goals/primary", "GET /api/v2/retirement/profile"],
         "expected_http_status": ["200", "200", "200", "200"],
         "expected_stable_response_fields": {"route": "lab", "draft_isolation": true},
         "expected_primary_result": "Life Lab profile, missions, and saved evidence without automatic promotion.",

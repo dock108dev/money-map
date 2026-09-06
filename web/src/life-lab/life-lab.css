@@ -12,16 +12,6 @@
 .life-section-heading { padding: 21px 23px 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
 .life-section-heading h2 { margin: 5px 0 0; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
 
-.life-form { padding-bottom: 23px; }
-.life-form-intro, .life-goals-panel > p { margin: 18px 23px 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.life-form-grid { padding: 20px 23px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.life-form label, .goal-form label { display: grid; gap: 7px; color: #43504b; font-size: 11px; font-weight: 700; }
-.life-form input, .life-form textarea, .goal-form input, .goal-form textarea, .goal-form select, .scenario-save input { width: 100%; border: 1px solid #cbd2cc; border-radius: 8px; background: white; color: var(--ink); padding: 10px 11px; outline: none; }
-.life-form textarea, .goal-form textarea { min-height: 70px; resize: vertical; }
-.life-form input:focus, .life-form textarea:focus, .goal-form input:focus, .goal-form textarea:focus, .goal-form select:focus, .scenario-save input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(31, 114, 89, .1); }
-.life-form label small { color: #82908a; font-size: 9px; font-weight: 400; }
-.life-form-wide { grid-column: 1 / -1; }
-.life-form-actions { padding: 20px 23px 0; display: flex; justify-content: flex-end; gap: 10px; }
 .provenance-chip { border-radius: 999px; padding: 6px 9px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .provenance-chip.assumed { background: #f3e8c9; color: #765d1f; }
 
@@ -109,22 +99,8 @@
 .income-context-panel .benchmark-list > div { display: grid; }
 .income-context-panel .benchmark-note { padding-left: 0; padding-right: 0; }
 
-.life-goals-panel { overflow: hidden; }
-.goal-form { margin: 18px 23px; padding: 0 0 20px; border: 1px solid var(--line); border-radius: 11px; background: #f8f7f1; }
-.goal-list { padding: 18px 22px 22px; display: grid; gap: 9px; }
-.goal-card { padding: 15px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(180px, .8fr) auto; align-items: center; gap: 15px; border: 1px solid var(--line); border-radius: 10px; }
-.goal-card.disabled { opacity: .58; }
-.goal-card h3 { margin: 4px 0; font-family: Georgia, serif; font-size: 20px; font-weight: 500; }
-.goal-card p { margin: 0; color: var(--muted); font-size: 10px; }
-.goal-impact strong, .goal-impact span { display: block; }
-.goal-impact strong { font-family: Georgia, serif; font-size: 18px; font-weight: 500; }
-.goal-impact span { margin-top: 4px; color: var(--muted); font-size: 9px; }
-.goal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
-.goal-actions button { border: 0; background: transparent; color: var(--green); font-size: 10px; font-weight: 700; padding: 5px; }
-.goal-actions .danger-text { color: #aa4b43; }
 .life-empty { padding: 23px; color: var(--muted); font-size: 11px; text-align: center; }
 
-.scenario-save { padding: 18px 22px; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
 .scenario-list { padding: 0 22px 22px; display: grid; gap: 7px; }
 .scenario-list article { padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border: 1px solid var(--line); border-radius: 8px; }
 .scenario-list strong, .scenario-list small { display: block; }
@@ -145,19 +121,16 @@
   .life-control-row, .life-two-column { grid-template-columns: 1fr; }
   .life-verdict { align-items: flex-start; flex-direction: column; }
   .verdict-metrics { width: 100%; }
-  .goal-card { grid-template-columns: 1fr 1fr; }
-  .goal-actions { grid-column: 1 / -1; justify-content: flex-start; }
   .drive-heading, .drive-routes { grid-template-columns: 1fr; }
   .income-context-panel .benchmark-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 680px) {
   .life-hero { align-items: flex-start; flex-direction: column; }
-  .life-form-grid, .action-grid, .assumption-content { grid-template-columns: 1fr; }
+  .action-grid, .assumption-content { grid-template-columns: 1fr; }
   .life-start-grid, .verdict-metrics { grid-template-columns: 1fr; }
   .life-control-row, .life-verdict, .life-chart-wrap, .life-section-heading { padding-left: 17px; padding-right: 17px; }
-  .bridge-callout, .goal-card { grid-template-columns: 1fr; }
-  .scenario-save { grid-template-columns: 1fr; }
+  .bridge-callout { grid-template-columns: 1fr; }
   .drive-heading { padding: 24px 18px; }
   .drive-prerequisite { padding: 13px 18px; align-items: flex-start; flex-direction: column; gap: 4px; }
   .drive-routes { padding: 10px; }

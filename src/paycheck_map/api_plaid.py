@@ -15,6 +15,7 @@ from .api_inputs import (
     PlaidLinkInput,
     PlaidSyncAllInput,
 )
+from .business_time import local_business_date
 from .config import settings
 from .db import get_session
 from .desktop_policy import uses_memory_secret_store
@@ -35,7 +36,6 @@ from .plaid_service import (
 )
 from .refresh import (
     RefreshAlreadyRunningError,
-    local_business_date,
     refresh_guard,
     refresh_status,
     set_auto_refresh_enabled,

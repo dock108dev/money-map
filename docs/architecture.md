@@ -71,10 +71,13 @@ cutover behavior is documented in [desktop architecture](v3/desktop-architecture
 
 ## Life Lab boundary
 
-`life_plan.py` owns the monthly today-dollar projection engine. It reads normalized
-balances and the latest completed detailed payroll, but it never mutates source records
-or existing 12-month forecast scenarios. User assumptions, generic goals, and saved
-projection periods live in separate `life_*` tables introduced by migration 0008.
+`life_plan.project_projection_inputs` owns the monthly today-dollar calculation from immutable
+inputs. `retirement_lab.py` builds those inputs and owns current Retirement edits, isolated Lab
+experiments, explicit promotions and snapshot persistence through `/api/v2`. Operational goal
+writes belong to `goal_service.py`. The old combined `/api/life-plan/*` API is unsupported and
+removed. Stored legacy `life_*` evidence remains readable through Lab; it does not supply an
+alternate mutation API. Neither planning engine mutates imported financial source records or
+existing 12-month forecast scenarios.
 
 The React Plan bundle is lazy-loaded after the ordinary dashboard has rendered. Runtime
 calculation is local and network-free. The checked-in income benchmark JSON is generated

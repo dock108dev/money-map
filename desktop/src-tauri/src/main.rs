@@ -688,10 +688,10 @@ fn matrix_api_endpoints(route: &str) -> &'static [(&'static str, &'static str)] 
             ),
         ],
         "lab" => &[
-            ("life-profile", "/api/life-plan/profile"),
-            ("life-starting-point", "/api/life-plan/starting-point"),
-            ("life-goals", "/api/life-plan/goals"),
-            ("life-scenarios", "/api/life-plan/scenarios"),
+            ("lab-snapshots", "/api/v2/lab/snapshots"),
+            ("retirement-snapshots", "/api/v2/retirement/snapshots"),
+            ("primary-goal", "/api/v2/goals/primary"),
+            ("retirement-profile", "/api/v2/retirement/profile"),
         ],
         "overview" => &[
             ("overview", "/api/overview"),

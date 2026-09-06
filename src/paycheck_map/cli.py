@@ -14,6 +14,7 @@ from pathlib import Path
 import uvicorn
 
 from . import __product_version__
+from .business_time import local_business_date
 from .config import settings
 from .db import SessionLocal, initialize_database
 from .goal_operations import (
@@ -22,7 +23,7 @@ from .goal_operations import (
 )
 from .ingestion import rollback_import_batch
 from .payroll import schedule_validation
-from .refresh import local_business_date, refresh_status, sync_all_connections
+from .refresh import refresh_status, sync_all_connections
 from .reporting import generate_trailing_report
 
 DATABASE_INITIALIZING_COMMANDS = frozenset(

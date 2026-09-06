@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
 
+import { loadPrimaryGoal } from "../goals/api";
 import { FocusedDialog } from "../FocusedDialog";
 import type { LifeProjection, PathResult } from "./life-lab-types";
 import type {
@@ -13,13 +14,11 @@ import type {
   PromotionTarget,
 } from "../v2-contracts";
 import type { PlanningSnapshot } from "../retirement/api";
-import { loadRetirementSnapshots } from "../retirement/api";
+import { loadRetirementProfile, loadRetirementSnapshots } from "../retirement/api";
 import {
   confirmLabPromotion,
   createLabExperiment,
   loadLabSnapshots,
-  loadPrimaryPromotionGoal,
-  loadRetirementPromotionProfile,
   openLabSnapshot,
   previewLabPromotion,
   projectLabExperiment,
@@ -217,7 +216,7 @@ export default function LifeLabView({ requiresProfile = false }: { requiresProfi
   const snapshotButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    void Promise.all([loadLabSnapshots(), loadRetirementSnapshots(), loadPrimaryPromotionGoal(), loadRetirementPromotionProfile()])
+    void Promise.all([loadLabSnapshots(), loadRetirementSnapshots(), loadPrimaryGoal(), loadRetirementProfile()])
       .then(([nextSnapshots, nextRetirementSnapshots, goalState, retirementProfile]) => {
         setSnapshots(recentFirst(nextSnapshots));
         setRetirementSnapshots(nextRetirementSnapshots);

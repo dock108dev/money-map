@@ -5,13 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from .business_time import as_utc, local_business_date
 from .goal_observation import CompletedOperationState, coordinate_goal_observation
 from .goal_service import (
     GoalCheckInTrigger,
@@ -44,7 +45,6 @@ from .models import (
     utcnow,
 )
 from .money import ZERO, money
-from .refresh import local_business_date
 from .safe_events import record_failure
 from .v2_contracts import (
     EvidenceClass,
@@ -109,10 +109,6 @@ def _canonical_hash(payload: object) -> str:
 
 def _json_safe(value: object) -> Any:
     return json.loads(json.dumps(value, ensure_ascii=True, default=str))
-
-
-def _aware_utc(value: datetime) -> datetime:
-    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _entered(value: Decimal, refs: tuple[str, ...]) -> EvidencedMoney:
@@ -225,7 +221,7 @@ def retirement_profile_token(profile: LifePlanProfile) -> str:
             "retirement_tax_haircut_pct": format(Decimal(profile.retirement_tax_rate_pct), ".4f"),
             "work_optional_ages": list(profile.target_ages),
             "notes": profile.notes,
-            "updated_at": _aware_utc(profile.updated_at).isoformat(timespec="microseconds"),
+            "updated_at": as_utc(profile.updated_at).isoformat(timespec="microseconds"),
         }
     )
 
@@ -253,7 +249,7 @@ def retirement_profile_view(session: Session, profile: LifePlanProfile) -> Retir
         work_optional_ages=tuple(profile.target_ages),
         notes=profile.notes,
         edit_token=retirement_profile_token(profile),
-        updated_at=_aware_utc(profile.updated_at),
+        updated_at=as_utc(profile.updated_at),
     )
 
 

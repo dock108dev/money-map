@@ -12,7 +12,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 ORACLE_PATH = ROOT / "scripts/materialize_release_state_contract.py"
-EXPECTED_DIGEST = "8384e44e3097d5f4eff348a0f1edac41e931ccb8c2e2173d4828e983d13fd8a9"
+# September 6 SSOT revision: Lab entry reads the current v2 endpoints.
+# This pins the revised source oracle; historical installed evidence is not transferable.
+EXPECTED_DIGEST = "d37af0d41807b5f0b05eb8f0f874cedadc0be4e18f334d5973cdc178159fe1df"
 
 ROUTE_SOURCES = {
     "cash-flow": ("web/src/App.tsx", "web/src/cash-flow/CashFlowView.tsx"),
