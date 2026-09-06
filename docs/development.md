@@ -2,7 +2,7 @@
 
 ## Supported toolchain
 
-The source gate is exercised with Python 3.12, `uv`, Node.js 22, and pnpm 10. The native macOS
+The source gate is exercised with Python 3.12, `uv`, Node.js 22, and pnpm 10.9.0. The native macOS
 runtime additionally requires the Rust toolchain and the system dependencies needed by Tauri.
 The declared Python range remains 3.12 through 3.14. For the current single-machine stage, CI
 runs the complete source gate only on 3.12; 3.13/3.14 compatibility runs are deferred. The native
@@ -32,17 +32,19 @@ macOS Keychain rather than source files, shell history, or the database.
 uv run --locked --python 3.12 paycheck-map serve
 ```
 
-The command builds `web/dist` when it is absent, initializes the repository-mode database under
+The command builds `web/dist` when it is absent or files under `web/src` are newer, initializes the repository-mode database under
 `.local/`, and serves the API and compiled React application at `http://127.0.0.1:8765`. The server
 rejects a non-loopback host.
 
-For frontend-only iteration after dependencies are installed:
+For frontend changes, stop the integrated server, rebuild with `pnpm --dir web build`, and run
+`serve` again. Rebuild explicitly after changing Vite configuration, dependencies or compiler
+settings: the automatic stale-asset check watches `web/src`, not those files. There is no live
+reload in the integrated server.
 
-```bash
-pnpm --dir web dev
-```
-
-This is a development asset server, not the supported integrated product workflow.
+`web/package.json` also defines `dev` for Vite asset development on port 5173. Its proxy targets
+8765, but does not satisfy the API's exact Host/origin boundary; it is not an end-to-end product
+workflow. Do not loosen backend admission checks to make this proxy work. A supported hot-reload
+workflow needs a separate development transport decision.
 
 ## Repository map
 

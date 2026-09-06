@@ -18,7 +18,7 @@ a user-defined life timeline.
 The product is an evidence and reconciliation system, not a transaction categorizer,
 financial advisor, tax-return engine, broker, or money-movement tool.
 
-## v1.0 commitments
+## Implemented product surfaces
 
 - Local-only server bound to `127.0.0.1`.
 - Permanent manual file-import path with source hashes and idempotency.
@@ -30,7 +30,7 @@ financial advisor, tax-return engine, broker, or money-movement tool.
   credentials and revocation.
 - Trailing 12 complete months and a separate latest-payroll forecast baseline.
 - Contributions-only baseline forecast; optional return scenarios remain separate.
-- Account-first navigation with generic bank, investment, and debt drill-downs.
+- Cash Flow-first navigation with account, income, wealth, goal and planning detail views.
 - Deterministic paycheck-category allocation across every completed payroll period.
 - Transaction-derived bank balance history and dated investment performance bridges.
 - A separate Life Lab engine with arbitrary work-optional ages, deterministic real-return
@@ -47,12 +47,12 @@ A figure may appear as reconciled only when the available source fields satisfy 
 accounting equation to the cent. Historical payroll files are archived inputs rather
 than a completeness-validation queue.
 
-## Current private-document decision
+## Payroll baseline
 
-The latest detailed paycheck defines the recurring baseline until the user replaces
-it. Older payroll files are retained only as archived source evidence.
-The July 31, 2026 statement is the latest salary baseline and is used for forecasts even
-though July is not a complete historical statement month.
+Forecasting chooses its baseline from stored payroll evidence through `forecasting.py` and
+`payroll.py`. The current baseline depends on the imported dataset; no owner's statement date is
+a repository-wide guarantee. The trailing historical window and forward allocation baseline are
+different views and must not be conflated.
 
 ## Life Lab boundary
 

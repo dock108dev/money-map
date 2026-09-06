@@ -71,7 +71,10 @@ Pull requests and pushes to `main` run:
 
 - `source`: complete source gate and Python distribution build on Python 3.12.
 - `native-macos`: the native macOS gate.
-- repository-managed CodeQL analysis for Actions, JavaScript/TypeScript, Python, and Rust.
+
+The same workflow supports manual dispatch. `.github/dependabot.yml` schedules dependency-update
+pull requests weekly on Monday at 09:00 Eastern for uv, npm, Cargo and Actions. That is repository
+maintenance, not an application data-refresh job.
 
 Python 3.13/3.14 compatibility jobs are deferred while the app is used on one machine. The
 source job already runs the complete backend suite; the native job checks separate Rust code.
@@ -85,12 +88,11 @@ enforces `--locked`, so it cannot silently refresh dependency resolution. Action
 command's output; runtime state, databases and financial fixtures are not uploaded as artifacts.
 Download the per-job logs from the Actions run when diagnosing a failure.
 
-CodeQL is configured through GitHub's default setup, not a second checked-in workflow. Its checks
-are `Analyze (actions)`, `Analyze (javascript-typescript)`, `Analyze (python)` and `Analyze (rust)`.
-As inspected on September 6, 2026, `main` has no branch protection or applicable ruleset requiring
-checks. Running checks and enforcing merge protection are separate; this review does not change
-repository settings. GitHub-hosted action execution, cache services and CodeQL cannot be proven
-solely by running the local source/native commands.
+CodeQL default setup, required checks and branch protection are GitHub-side settings, not defined
+by this workflow. This documentation pass did not refresh that remote configuration or run hosted
+Actions. Inspect the repository's Actions runs, code-scanning setup and rulesets before claiming
+hosted readiness or enforced merge protection. Local source/native success cannot establish runner,
+cache, CodeQL or branch-rule behavior.
 
 ## Gates intentionally outside ordinary CI
 
@@ -99,3 +101,20 @@ reproducibility, installed-app qualification, sleep/wake and offline campaigns, 
 Plaid checks, owner-data cutover, tagging, and publishing have platform, identity, external-service,
 or release-authorization requirements. Follow the versioned desktop and release guides for those
 gates; a green pull request does not satisfy or authorize them.
+
+## Documentation workflow validation — September 6, 2026
+
+Validated a fresh disposable checkout of `d9c2cd0` plus this documentation/CLI change, with a new
+locked Python 3.12 environment. Frozen frontend install, frontend build and `uv sync --all-extras
+--locked` passed. The complete source gate passed: 557 Python tests, one existing opt-in restored-copy
+drill skipped, 225 web tests, Ruff formatting/lint, strict mypy (113 files), TypeScript, documentation
+links and the private-data scan. Native formatting, Clippy and 44 tests passed using the compile-only
+sidecar fixture; Python sdist/wheel construction also passed.
+
+A disposable synthetic operation walkthrough exercised CLI help/version, initial and duplicate
+imports, partial-import failure, report prerequisite rejection, report generation with payroll,
+backup, rollback, restore, payroll regeneration/status, and sync/status with zero provider
+connections. Integrated `serve` returned health and HTML on an alternate IPv4 loopback port and was
+stopped afterward. No provider, Keychain or installed signed-app workflow was exercised. Benchmark
+regeneration and release/cutover scripts were inspected but not executed because they fetch external
+inputs or construct/qualify a different release artifact; use their dedicated reviewed workflow.

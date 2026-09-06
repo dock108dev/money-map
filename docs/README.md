@@ -8,6 +8,8 @@ Start with the guides that describe the current tree:
 - [Testing](testing.md): local checks, CI jobs, test isolation, and release-only gates
 - [Operations](operations.md): private paths, imports, refresh, payroll, backup, restore, and reports
 - [Known limitations](known-limitations.md): unsupported use cases and validation requiring external access
+- [Data models](data-models.md): persistence families, transactions and migration ownership
+- [Integrations](integrations.md): provider/network boundaries and unverified external dependencies
 - [Architecture](architecture.md) and [single sources of truth](v3/single-source-of-truth.md)
 - [Security model](security-model.md), [desktop threat model](v3/desktop-threat-model.md), and
   [error handling](v3/error-handling.md)
@@ -35,8 +37,8 @@ packaging, qualification, and release contracts only for explicitly authorized r
 - `releases/` contains version-specific release notes and campaign records.
 - `v2/` contains historical v2 contracts, recovery plans, and accepted checklists that remain useful
   for compatibility and evidence review. They are not general setup instructions.
-- [API roadmap](api-roadmap.md) is planning context; implemented behavior is defined by current routes,
-  tests, and the SSOT map.
+- [Former API roadmap](api-roadmap.md) redirects to the current integration guide; old account and
+  pricing observations are not current operating instructions.
 
 Do not copy command counts or acceptance claims from historical documents into current handoffs.
 Re-run the commands in the development guide and report fresh results.

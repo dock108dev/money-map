@@ -40,8 +40,8 @@ and performs no write when canceled.
 
 ## Standalone loopback browser boundary
 
-`uv run paycheck-map serve` is a single-owner local surface, not a public or multi-user service.
-It binds only the configured `127.0.0.1:8765` authority. The standalone middleware requires that
+`uv run --locked --python 3.12 paycheck-map serve` is a single-owner local surface, not a public or multi-user service.
+It binds only `127.0.0.1` at the configured port (default `8765`). The standalone middleware requires that
 exact Host, rejects cross-origin and cross-site browser requests, requires JSON for mutations,
 rejects ambiguous framing and duplicate security headers, and bounds bodies and active requests.
 Bodies have a two-second total read deadline, a 1 MiB size limit, and a 1,024-chunk limit.
@@ -95,7 +95,8 @@ and has no cookies; it must not be reverse-proxied or exposed on a network.
   data.
 - Disconnect invokes Plaid item removal, deletes the Keychain access token, and by
   default cascade-deletes that connection’s normalized local records.
-- Remote Plaid and CDN calls occur only after explicit connector actions. Manual
+- The Plaid CDN loads when a connection is opened. Provider calls also occur during enabled
+  automatic refresh after setup; see [Operations](operations.md). Manual
   import, reconciliation, forecasting, reporting, backup, and restore remain local.
 - Life Lab projection requests, profiles, goals, and saved scenarios remain in the local
   SQLite database. Its runtime has no public-network dependency and returns no provider
@@ -109,7 +110,7 @@ and has no cookies; it must not be reverse-proxied or exposed on a network.
 - Packaged macOS paths are supplied only by the Tauri path authority after its inherited child
   environment is cleared. Data, cache, and logs are separate; private directories use `0700` and
   accepted database/backup files use `0600`.
-- Import is explicit and read-only until a second confirmation. Symlink chains, active-file hard
+- Packaged data-home import selection is read-only until a second confirmation. Symlink chains, active-file hard
   links, repository/app-bundle relationships, unapproved backup parents, corrupt or incompatible
   revisions, and insufficient space fail closed.
 - Migration and restore operate on isolated online-backup restores. Atomic activation retains the

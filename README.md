@@ -1,7 +1,8 @@
 # Money Map
 
-Money Map is a local-first, read-only application for reconstructing where compensation went and
-exploring future allocation choices. It does not move money or store bank passwords.
+Money Map is a local-first financial evidence application for reconstructing where compensation went and
+exploring future allocation choices. Provider access is read-only; the app writes local imports,
+corrections, goals and planning snapshots. It does not move money or store bank passwords.
 
 Current candidate: **3.0.0-beta.1 — not accepted for release**.
 
@@ -30,6 +31,7 @@ Never commit financial files or credentials. Tests use synthetic data and dispos
 - [Maintenance](docs/maintenance.md): source ownership, cleanup decisions and remaining boundaries
 - [Documentation index](docs/README.md): security, accounting, product and release references
 
+Run `uv run --locked --python 3.12 paycheck-map verify` for the complete source checks.
 Run `uv run --locked --python 3.12 paycheck-map --help` for supported commands. There is no hosted
 deployment. Signed desktop builds and owner acceptance are separate workflows; passing tests does
 not qualify or release a candidate.

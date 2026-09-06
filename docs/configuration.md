@@ -17,7 +17,7 @@ supported developer-facing overrides:
 Set overrides in the process environment, for example:
 
 ```bash
-PAYCHECK_MAP_LOCAL_DIR=/absolute/private/path uv run paycheck-map serve
+PAYCHECK_MAP_LOCAL_DIR=/absolute/private/path uv run --locked --python 3.12 paycheck-map serve
 ```
 
 Settings validates loopback Host before application construction. Runtime private directories
@@ -50,8 +50,9 @@ supported as environment variables, `.env` entries, request bodies, browser stor
 columns.
 
 The production application exposes only production Plaid setup in the Connections view. Tests and
-bounded acceptance paths also exercise sandbox configuration. Provider calls occur only after the
-operator configures, connects, refreshes, reauthorizes, or removes a connection.
+bounded acceptance paths also exercise sandbox configuration. Provider calls occur during explicit connector operations and, after setup, enabled automatic
+refresh. See [Operations](operations.md) for the Eastern-day attempt policy. Automatic refresh is a
+database preference, enabled by default; there is no environment switch or background scheduler.
 
 ## Checked-in calculation and identity inputs
 

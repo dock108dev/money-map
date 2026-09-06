@@ -196,6 +196,9 @@ def main() -> None:
             print(f"  {error['filename']}: {error['message']}")
         if observation.status in {"not_current", "unavailable"}:
             print(f"Goal observation: {observation.message}")
+        if outcome.errors:
+            # Successful files are durable, but shell callers must see the partial failure.
+            raise SystemExit("One or more private imports were rejected; review the batch summary.")
     elif arguments.command == "rollback":
         with SessionLocal() as session:
             if not rollback_import_batch(session, arguments.batch_id):

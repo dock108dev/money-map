@@ -187,3 +187,37 @@ def test_subprocess_verify_backup_and_restore_leave_real_v1_database_at_0008(
     safety_backup = Path(restore_result.stdout.strip().rsplit(" at ", maxsplit=1)[1])
     assert _revision(active) == "0008_life_lab_v01"
     assert _revision(safety_backup) == "0008_life_lab_v01"
+
+
+def test_import_cli_reports_partial_failure_and_preserves_successful_files(tmp_path: Path) -> None:
+    local_dir = tmp_path / "state"
+    inbox = local_dir / "inbox"
+    inbox.mkdir(parents=True)
+    shutil.copy2(PROJECT_ROOT / "examples/synthetic/sofi-ledger.csv", inbox / "valid.csv")
+    rejected = inbox / "invalid.csv"
+    rejected.write_text("invalid,synthetic\n1,2\n")
+    environment = os.environ.copy()
+    environment["PAYCHECK_MAP_LOCAL_DIR"] = str(local_dir)
+
+    def run_import() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "paycheck_map.cli", "import"],
+            cwd=PROJECT_ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    result = run_import()
+    assert result.returncode == 1
+    assert "1 imported, 0 duplicates, 1 errors" in result.stdout
+    with sqlite3.connect(local_dir / "data/paycheck-map.sqlite3") as connection:
+        assert connection.execute("SELECT COUNT(*) FROM import_artifacts").fetchone() == (1,)
+        assert connection.execute("SELECT status FROM import_batches").fetchone() == (
+            "complete_with_errors",
+        )
+    rejected.unlink()
+    repeated = run_import()
+    assert repeated.returncode == 0
+    assert "0 imported, 1 duplicates, 0 errors" in repeated.stdout

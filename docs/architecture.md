@@ -26,7 +26,7 @@ FastAPI serves both the API and the production React build from one loopback pro
 There is no separate service account, cloud database, or telemetry. Manual imports
 have no runtime external dependency. Plaid Link loads from Plaid’s CDN only when the
 operator starts a Plaid connection, and Plaid API calls occur only for configuration,
-authorization, explicit sync, reauthorization, or revocation actions.
+authorization, explicit or enabled automatic sync, reauthorization, or revocation actions.
 
 ## Adapter boundary
 
@@ -53,9 +53,13 @@ registration, windows and menu wiring. The sidecar remains the only SQLite write
 OS-selected loopback port. Desktop environment variables are launcher-owned protocol fields, not user configuration.
 
 There are no independent workers, queues, cron jobs, launch agents, or long-lived schedulers.
-Automatic Plaid refresh is a once-per-local-day request made by the loaded React application when
-the backend reports stale connected data. Import, payroll regeneration, reporting, backup, restore,
+Automatic Plaid refresh is a once-per-Eastern-day attempt made by the loaded React application when
+the backend reports stale connected data. The attempt and retry rules live in
+[Operations](operations.md). Import, payroll regeneration, reporting, backup, restore,
 and provider mutations are explicit operations.
+
+See [Data models](data-models.md) for record families, transactions and the migration chain;
+[Integrations](integrations.md) describes provider and benchmark network boundaries.
 
 ## Persistence and schema
 
@@ -82,7 +86,7 @@ removed. Stored legacy `life_*` evidence remains readable through Lab; it does n
 alternate mutation API. Neither planning engine mutates imported financial source records or
 existing 12-month forecast scenarios.
 
-The React Plan bundle is lazy-loaded after the ordinary dashboard has rendered. Runtime
+The Retirement and Lab route bundles are lazy-loaded after the ordinary dashboard has rendered. Runtime
 calculation is local and network-free. The checked-in income benchmark JSON is generated
 separately from fixed public IRS and BLS sources; its source URLs, hashes, source year,
 CPI periods, normalization factor, and artifact version travel with the data.
