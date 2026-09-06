@@ -13,9 +13,14 @@ gate uses the Rust version pinned in `rust-toolchain.toml`.
 From the repository root:
 
 ```bash
-uv sync --all-extras --locked
 pnpm --dir web install --frozen-lockfile
+pnpm --dir web build
+uv sync --python 3.12 --all-extras --locked
 ```
+
+Build the frontend before installing Python: the package includes `web/dist`, including during
+editable installation. CI repeats the build inside the verification gate so the gate is also
+self-contained after installation.
 
 There is no checked-in `.env` template. Ordinary manual-import development needs no credentials.
 Plaid credentials are optional and must be entered through the application so secrets stay in

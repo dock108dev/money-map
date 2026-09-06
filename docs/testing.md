@@ -6,7 +6,7 @@ From the repository root, after the locked Python and frontend installations des
 [Development](development.md), run:
 
 ```bash
-uv run paycheck-map verify
+uv run --locked --python 3.12 paycheck-map verify
 ```
 
 The command builds the frontend first so a clean checkout has the assets required by runtime tests,
@@ -17,7 +17,7 @@ credentials or real financial files.
 Build the distributable Python artifacts separately when packaging metadata changed:
 
 ```bash
-uv build
+uv build --python 3.12
 ```
 
 ## Focused checks
@@ -70,6 +70,18 @@ source job already runs the complete backend suite; the native job checks separa
 The workflow uses read-only repository permissions, immutable action revisions, lockfile-keyed
 download caches, ephemeral state, bounded timeouts, and cancellation of superseded runs. It does not
 receive application secrets or run release operations.
+
+The packaging step selects the same Python 3.12 interpreter as the source gate. The gate also
+enforces `--locked`, so it cannot silently refresh dependency resolution. Action logs retain each
+command's output; runtime state, databases and financial fixtures are not uploaded as artifacts.
+Download the per-job logs from the Actions run when diagnosing a failure.
+
+CodeQL is configured through GitHub's default setup, not a second checked-in workflow. Its checks
+are `Analyze (actions)`, `Analyze (javascript-typescript)`, `Analyze (python)` and `Analyze (rust)`.
+As inspected on September 6, 2026, `main` has no branch protection or applicable ruleset requiring
+checks. Running checks and enforcing merge protection are separate; this review does not change
+repository settings. GitHub-hosted action execution, cache services and CodeQL cannot be proven
+solely by running the local source/native commands.
 
 ## Gates intentionally outside ordinary CI
 

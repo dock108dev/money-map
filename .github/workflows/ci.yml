@@ -72,10 +72,10 @@ jobs:
           uv sync --python 3.12 --all-extras --locked
 
       - name: Run complete source gate
-        run: uv run --python 3.12 paycheck-map verify
+        run: uv run --locked --python 3.12 paycheck-map verify
 
       - name: Build Python distribution
-        run: uv build
+        run: uv build --python 3.12
 
   native:
     name: native-macos
