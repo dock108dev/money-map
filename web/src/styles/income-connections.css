@@ -1,0 +1,357 @@
+.filter-bar {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+}
+
+.filter-bar button {
+  padding: 8px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: #f9f8f3;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.filter-bar button.active {
+  border-color: var(--deep-green);
+  color: white;
+  background: var(--deep-green);
+}
+
+.simple-empty {
+  padding: 40px 22px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+}
+
+.add-account-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.add-account-card {
+  min-height: 110px;
+  padding: 22px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #cbd7cf;
+  border-radius: 14px;
+  color: var(--ink);
+  background: #edf4ed;
+  text-align: left;
+}
+
+.add-account-card:hover:not(:disabled) {
+  border-color: var(--green);
+  transform: translateY(-1px);
+}
+
+.add-account-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.add-account-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  color: white;
+  background: var(--deep-green);
+  font-size: 24px;
+}
+
+.add-account-card strong,
+.add-account-card small {
+  display: block;
+}
+
+.add-account-card strong {
+  font-family: Georgia, serif;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.add-account-card small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.connection-row {
+  min-height: 78px;
+  padding: 13px 18px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  gap: 13px;
+  align-items: center;
+  border-bottom: 1px solid #e7e8e1;
+}
+
+.connection-avatar {
+  background: var(--deep-green);
+}
+
+.connection-row > div:nth-child(2) strong,
+.connection-row > div:nth-child(2) small,
+.connection-row > div:nth-child(2) em {
+  display: block;
+}
+
+.connection-row > div:nth-child(2) strong { font-size: 12px; }
+.connection-row > div:nth-child(2) small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.connection-row > div:nth-child(2) em { margin-top: 4px; color: #a04d3e; font-size: 9px; }
+
+.plain-danger-button {
+  padding: 6px;
+  border: 0;
+  color: #a04d3e;
+  background: transparent;
+  font-size: 10px;
+}
+
+.income-snapshot-metrics {
+  padding-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.income-snapshot-metrics .metric-card {
+  box-shadow: none;
+}
+
+.income-heading {
+  background: linear-gradient(135deg, #183c31, #285a48);
+  color: white;
+}
+
+.income-heading .eyebrow {
+  color: #afc5bb;
+}
+
+.date-range {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.date-range label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.date-range input {
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.income-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.payroll-list {
+  display: grid;
+}
+
+.payroll-row {
+  min-height: 66px;
+  padding: 10px 18px;
+  display: grid;
+  grid-template-columns: 74px 90px minmax(180px, 1fr) 100px 100px 12px;
+  gap: 12px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid #e7e8e1;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.payroll-row:hover {
+  background: #f4f6f0;
+}
+
+.payroll-source {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #365346;
+  background: #dfe9df;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.payroll-source.source-calculated {
+  color: #6b5b36;
+  background: #eee8d7;
+}
+
+.payroll-date strong,
+.payroll-date small,
+.payroll-role strong,
+.payroll-role small,
+.payroll-gross strong,
+.payroll-gross small,
+.payroll-net strong,
+.payroll-net small {
+  display: block;
+}
+
+.payroll-date strong,
+.payroll-role strong {
+  font-size: 11px;
+}
+
+.payroll-date small,
+.payroll-role small,
+.payroll-gross small,
+.payroll-net small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.payroll-gross,
+.payroll-net {
+  text-align: right;
+}
+
+.payroll-gross strong,
+.payroll-net strong {
+  font-size: 11px;
+}
+
+.payroll-net strong {
+  color: var(--green);
+}
+
+.payroll-net em {
+  display: none;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.payroll-drawer > .payroll-source {
+  margin-bottom: 12px;
+}
+
+.payroll-detail-summary {
+  margin: 20px 0;
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.payroll-detail-summary > div,
+.payroll-detail-lines > div {
+  padding: 10px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.plaid-match {
+  margin: 18px 0 0;
+  padding: 11px 13px;
+  border-radius: 9px;
+  color: #244e3f;
+  background: #e5efe7;
+  font-size: 10px;
+}
+
+.refresh-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.data-state {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.data-state small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: right;
+}
+
+.refresh-button {
+  min-width: 104px;
+  min-height: 36px;
+  padding: 8px 13px;
+  border: 1px solid #315d4e;
+  border-radius: 9px;
+  color: white;
+  background: var(--deep-green);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: #285a48;
+}
+
+.refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.refresh-preference {
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.refresh-preference span,
+.refresh-preference strong,
+.refresh-preference small {
+  display: block;
+}
+
+.refresh-preference strong {
+  font-size: 12px;
+}
+
+.refresh-preference small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.refresh-preference input {
+  width: 19px;
+  height: 19px;
+  accent-color: var(--green);
+}
+

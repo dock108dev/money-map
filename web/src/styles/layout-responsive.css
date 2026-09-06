@@ -1,0 +1,166 @@
+@media (max-width: 980px) {
+  .app-shell .content-wrap :is(button, input, select, textarea, summary),
+  .focused-dialog :is(button, input, select, textarea, summary) {
+    min-height: 44px;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    height: auto;
+    position: fixed;
+    inset: auto 0 0;
+    padding: 7px 8px;
+    z-index: 15;
+  }
+
+  .brand,
+  .privacy-card {
+    display: none;
+  }
+
+  .sidebar nav {
+    margin: 0;
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .nav-group {
+    display: flex;
+    flex: 0 0 auto;
+  }
+
+  .nav-group-items {
+    display: flex;
+    gap: 5px;
+  }
+
+  .nav-group-label {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .sidebar nav button {
+    width: auto;
+    min-width: 82px;
+    padding: 8px 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+    font-size: 9px;
+    min-height: 52px;
+    scroll-snap-align: center;
+    white-space: nowrap;
+  }
+
+  .sidebar nav button > span {
+    font-size: 14px;
+  }
+
+  .mobile-brand {
+    display: block;
+  }
+
+  .topbar {
+    padding: 0 20px;
+  }
+
+  .content-wrap {
+    padding: 32px 22px 110px;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .flow-map {
+    padding: 28px;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .flow-source::after,
+  .flow-trunk {
+    display: none;
+  }
+
+  .review-grid,
+  .import-grid,
+  .account-grid,
+  .tracking-grid,
+  .scenario-layout,
+  .connection-grid,
+  .connection-security,
+  .keychain-panel,
+  .plaid-setup {
+    grid-template-columns: 1fr;
+  }
+
+  .forecast-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .top-import {
+    display: none;
+  }
+
+  .hero {
+    display: block;
+  }
+
+  .coverage-ring {
+    margin-top: 22px;
+  }
+
+  .metric-grid,
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-card strong {
+    font-size: 27px;
+  }
+
+  .flow-map {
+    padding: 20px;
+  }
+
+  .flow-row {
+    grid-template-columns: minmax(70px, 1fr) 145px;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .connection-actions,
+  .connection-row,
+  .row-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .connection-actions button,
+  .row-actions button {
+    width: 100%;
+  }
+
+  .content-wrap {
+    padding-inline: 14px;
+  }
+}
+

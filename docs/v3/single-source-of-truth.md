@@ -1,6 +1,6 @@
 # Current single sources of truth
 
-Reviewed September 6, 2026 from `73be97c`. This is the current supported source contract, not proof
+Reviewed September 6, 2026; source follow-ups based on `e0f3567`. This is the current supported source contract, not proof
 that these changes are installed or qualified. Historical candidate evidence stays identity-bound.
 
 ## Authority map
@@ -16,10 +16,12 @@ Known callers: CLI/sidecar startup, App, Goals, Retirement, Lab and data-home UI
 
 Domain: Planning and operational goals
 
-SSOT module/file: `api_v2.py`, `retirement_lab.py`, `goal_service.py`, `life_plan.py`
+SSOT module/file: `api_v2.py`, `retirement_lab.py`, `planning_snapshots.py`, `goal_service.py`, `life_plan.py`
 
 Why this is authoritative: `goal_service` controls operational goal writes; `retirement_lab`
-controls Retirement edits, isolated Lab experiments, promotion confirmation and snapshot storage.
+controls Retirement edits, isolated Lab experiments, promotion confirmation and snapshot validation.
+`planning_snapshots` owns snapshot/period persistence and serialization without committing; API
+handlers own the transaction.
 `life_plan.project_projection_inputs` is the immutable-input calculation engine, not an alternate
 combined-plan mutation service.
 
@@ -99,13 +101,24 @@ Known callers: Sidecar, standalone server, routers, production provider workflow
 
 Domain: Rendering and state
 
-SSOT module/file: `web/src/App.tsx`, domain views, `web/src/format.ts`
+SSOT module/file: `web/src/App.tsx`, domain views, `web/src/format.ts`, ordered `web/src/styles.css` imports
 
 Why this is authoritative: App owns navigation/refresh coordination, domain views own presentation
 and ephemeral drafts, and backend responses own financial state. Shared formatters own general
-money/UTC date display; domain-specific labels and precision remain intentional.
+money/UTC date display; domain-specific labels and precision remain intentional. Global stylesheet
+imports preserve the original cascade across layout, product, responsive and print owners.
 
 Known callers: All current routes. `components.tsx` remains a used facade/shared evidence UI.
+
+Domain: Native artifact commands
+
+SSOT module/file: `desktop/src-tauri/src/commands/{data_files,diagnostics}.rs`
+
+Why this is authoritative: These modules own verified file actions and sanitized diagnostic
+preview/export. Their parent shares authenticated local reads; main registers commands and owns
+window/menu wiring. Existing capabilities and backend validation remain independent boundaries.
+
+Known callers: Native menu dispatch and the frontend desktop bridge.
 
 ## Conflicting and unused construct inventory
 

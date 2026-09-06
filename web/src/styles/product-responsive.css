@@ -1,0 +1,217 @@
+@media (max-width: 980px) {
+  .net-worth-hero,
+  .account-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .income-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .wealth-access-hero,
+  .performance-result {
+    grid-template-columns: 1fr;
+  }
+
+  .wealth-paycheck-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .performance-equation {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .payroll-row {
+    grid-template-columns: 70px 80px minmax(150px, 1fr) 90px 12px;
+  }
+
+  .payroll-gross {
+    display: none;
+  }
+
+  .payroll-net em {
+    display: block;
+  }
+}
+
+@media (max-width: 680px) {
+  .topbar {
+    height: auto;
+    min-height: 66px;
+    padding-block: 9px;
+  }
+
+  .refresh-controls {
+    gap: 8px;
+  }
+
+  .data-state {
+    max-width: 122px;
+    font-size: 9px;
+    line-height: 1.25;
+  }
+
+  .data-state .privacy-dot { display: none; }
+  .data-state-label { text-align: right; }
+  .data-state small { color: #874431; }
+
+  .refresh-button {
+    min-width: 92px;
+    min-height: 44px;
+  }
+
+  .net-worth-hero {
+    min-height: 270px;
+    padding: 28px 22px;
+  }
+
+  .worth-breakdown,
+  .overview-metrics,
+  .add-account-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .overview-links { grid-template-columns: 1fr 1fr; }
+
+  .account-snapshot {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+  }
+
+  .account-bar,
+  .activity-kind {
+    display: none;
+  }
+
+  .activity-row {
+    padding-inline: 14px;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+
+  .simple-page-heading {
+    min-height: 90px;
+  }
+
+  .simple-page-heading > strong {
+    font-size: 16px;
+  }
+
+  .connection-row {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+  }
+
+  .connection-row .row-actions {
+    grid-column: 1 / -1;
+    display: flex;
+  }
+
+  .income-snapshot-metrics,
+  .income-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wealth-access-hero,
+  .fidelity-performance-heading,
+  .fidelity-observation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fidelity-performance-heading {
+    display: grid;
+  }
+
+  .performance-funding-summary {
+    text-align: left;
+  }
+
+  .wealth-account-row {
+    grid-template-columns: 9px minmax(0, 1fr) auto;
+  }
+
+  .wealth-account-movement,
+  .wealth-access-badge {
+    display: none;
+  }
+
+  .payroll-row {
+    grid-template-columns: 70px minmax(0, 1fr) 88px 12px;
+  }
+
+  .payroll-date small,
+  .payroll-role {
+    display: none;
+  }
+}
+
+@media (max-width: 460px) {
+  .net-worth-copy > strong {
+    font-size: 48px;
+  }
+
+  .worth-breakdown,
+  .overview-metrics,
+  .add-account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-links { grid-template-columns: 1fr; }
+
+  .simple-page-heading > strong {
+    display: none;
+  }
+
+  .wealth-access-hero {
+    padding: 24px 20px;
+  }
+
+  .wealth-access-total > strong {
+    font-size: 42px;
+  }
+
+  .wealth-paycheck-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .performance-result {
+    margin-inline: 14px;
+  }
+
+  .fidelity-observation-grid {
+    padding-inline: 14px;
+  }
+
+  .paycheck-strip {
+    grid-template-columns: auto 1fr;
+  }
+
+  .paycheck-strip > small {
+    grid-column: 1 / -1;
+  }
+
+  .date-range {
+    align-items: stretch;
+  }
+
+  .date-range label {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .date-range input {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .focused-dialog-backdrop * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -604,3 +604,51 @@ def test_corrupt_retirement_provenance_is_not_defaulted_or_overwritten(
             origin="test",
         )
     assert row.value == value
+
+
+@pytest.mark.parametrize("kind", ["retirement", "lab"])
+def test_snapshot_and_periods_share_the_callers_transaction(
+    migrated_session: Session, kind: str
+) -> None:
+    from paycheck_map.models import LifeProjectionPeriod
+
+    _seed(migrated_session)
+    migrated_session.commit()
+    snapshots_before = migrated_session.scalar(select(func.count()).select_from(LifeScenario))
+    periods_before = migrated_session.scalar(select(func.count()).select_from(LifeProjectionPeriod))
+    if kind == "retirement":
+        run = run_retirement_projection(
+            migrated_session,
+            request=RetirementProjectionRequest(work_optional_age=50, path=RetirementPath.MIDDLE),
+            observed_on=date(2026, 8, 10),
+        )
+        saved = save_retirement_snapshot(migrated_session, name="Rollback Retirement", run=run)
+    else:
+        seed = seed_lab_experiment(
+            migrated_session,
+            request=LifeLabExperimentCreateRequest(seed_kind=LabExperimentSeedKind.CURRENT_GOAL),
+            today=date(2026, 8, 10),
+        )
+        result = project_lab_experiment(
+            request=LifeLabExperimentProjectRequest(
+                experiment_id=seed.experiment_id,
+                expected_experiment_fingerprint=seed.experiment_fingerprint,
+                draft=seed.draft,
+            )
+        )
+        saved = save_lab_snapshot(migrated_session, name="Rollback Lab", result=result)
+    assert saved["periods"]
+    assert migrated_session.get(LifeScenario, saved["id"]) is not None
+    assert migrated_session.scalar(
+        select(func.count())
+        .select_from(LifeProjectionPeriod)
+        .where(LifeProjectionPeriod.scenario_id == saved["id"])
+    ) == len(saved["periods"])
+    migrated_session.rollback()
+    assert (
+        migrated_session.scalar(select(func.count()).select_from(LifeScenario)) == snapshots_before
+    )
+    assert (
+        migrated_session.scalar(select(func.count()).select_from(LifeProjectionPeriod))
+        == periods_before
+    )

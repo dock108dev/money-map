@@ -1,0 +1,70 @@
+@media print {
+  .sidebar,
+  .topbar,
+  .top-import,
+  .print-hidden,
+  .overview-print-button,
+  .wealth-print-button {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .content-wrap {
+    max-width: none;
+    padding: 0;
+  }
+
+  .panel,
+  .metric-card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-evidence-header {
+    margin: 0 0 12px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid #77827d;
+    color: #34443d;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  details > summary {
+    display: none !important;
+  }
+
+  details > *:not(summary) {
+    display: block !important;
+  }
+
+  .goal-detail[data-print-ready="false"] {
+    display: none !important;
+  }
+
+  .goal-detail[data-print-ready="true"] {
+    break-inside: auto;
+  }
+
+  .notice,
+  .critical-notice,
+  .critical-warning,
+  .error-banner,
+  [role="alert"] {
+    display: grid !important;
+    color: #111 !important;
+    border: 2px solid #111 !important;
+    background: white !important;
+  }
+
+  .content-wrap {
+    font-size: 10pt;
+  }
+}
+

@@ -1,3 +1,4 @@
+mod commands;
 mod data_home;
 mod lifecycle;
 mod metadata;
@@ -9,7 +10,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
-use std::{fs, os::unix::fs::MetadataExt};
 
 use data_home::DataHomePaths;
 use metadata::{about_info_for_mode, native_about_metadata, AboutInfo, BUILD_COMMIT};
@@ -261,24 +261,6 @@ fn desktop_runtime_status(state: tauri::State<'_, Arc<RuntimeController>>) -> Ru
     state.status()
 }
 
-fn fetch_json(controller: &RuntimeController, path: String) -> Result<serde_json::Value, String> {
-    let (port, session) = controller.target()?;
-    let response = forward(
-        port,
-        &session,
-        DesktopRequest {
-            path,
-            method: "GET".to_string(),
-            body: None,
-        },
-    )?;
-    if response.status != 200 {
-        return Err("The requested local artifact was rejected safely.".to_string());
-    }
-    serde_json::from_str(&response.body)
-        .map_err(|_| "The requested local artifact could not be verified.".to_string())
-}
-
 #[tauri::command]
 async fn desktop_restart(
     window: tauri::WebviewWindow,
@@ -339,286 +321,6 @@ fn desktop_open_external(url: String) -> Result<(), String> {
     if !status.success() {
         return Err("The approved external link could not open.".to_string());
     }
-    Ok(())
-}
-
-#[tauri::command]
-async fn desktop_select_import(
-    state: tauri::State<'_, Arc<RuntimeController>>,
-) -> Result<Option<serde_json::Value>, String> {
-    let selected = tauri::async_runtime::spawn_blocking(|| {
-        rfd::FileDialog::new()
-            .add_filter("Money Map database", &["sqlite3", "sqlite", "db"])
-            .pick_file()
-    })
-    .await
-    .map_err(|_| "The import chooser could not open.".to_string())?;
-    let Some(selected) = selected else {
-        return Ok(None);
-    };
-    let body = serde_json::to_string(&serde_json::json!({
-        "selected_path": selected
-    }))
-    .map_err(|_| "The selected data could not be inspected.".to_string())?;
-    let controller = Arc::clone(state.inner());
-    let response = tauri::async_runtime::spawn_blocking(move || {
-        let (port, session) = controller.target()?;
-        forward(
-            port,
-            &session,
-            DesktopRequest {
-                path: "/api/desktop/data-home/candidate".to_string(),
-                method: "POST".to_string(),
-                body: Some(body),
-            },
-        )
-    })
-    .await
-    .map_err(|_| "The selected data could not be inspected.".to_string())??;
-    if response.status != 200 {
-        return Err("The selected Money Map data was rejected safely.".to_string());
-    }
-    serde_json::from_str(&response.body)
-        .map(Some)
-        .map_err(|_| "The migration preview was unavailable.".to_string())
-}
-
-#[tauri::command]
-async fn desktop_reveal_backup(
-    state: tauri::State<'_, Arc<RuntimeController>>,
-    backup_id: String,
-) -> Result<(), String> {
-    if backup_id.len() != 24 || !backup_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err("The selected backup was rejected.".to_string());
-    }
-    let controller = Arc::clone(state.inner());
-    let backup_root = controller.backup_root();
-    let response = tauri::async_runtime::spawn_blocking(move || {
-        let (port, session) = controller.target()?;
-        forward(
-            port,
-            &session,
-            DesktopRequest {
-                path: format!("/api/desktop/data-home/backups/{backup_id}/reveal"),
-                method: "GET".to_string(),
-                body: None,
-            },
-        )
-    })
-    .await
-    .map_err(|_| "The backup location could not be revealed.".to_string())??;
-    if response.status != 200 {
-        return Err("The backup location was rejected.".to_string());
-    }
-    let payload: serde_json::Value = serde_json::from_str(&response.body)
-        .map_err(|_| "The backup location could not be verified.".to_string())?;
-    let filename = payload
-        .get("filename")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| "The backup location could not be verified.".to_string())?;
-    if PathBuf::from(filename)
-        .file_name()
-        .and_then(|value| value.to_str())
-        != Some(filename)
-    {
-        return Err("The backup location was rejected.".to_string());
-    }
-    let path = backup_root.join(filename);
-    let metadata = std::fs::symlink_metadata(&path)
-        .map_err(|_| "The backup location is unavailable.".to_string())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err("The backup location was rejected.".to_string());
-    }
-    let approved = backup_root
-        .canonicalize()
-        .map_err(|_| "The backup location could not be verified.".to_string())?;
-    let parent = path
-        .parent()
-        .and_then(|value| value.canonicalize().ok())
-        .ok_or_else(|| "The backup location could not be verified.".to_string())?;
-    if parent != approved {
-        return Err("The backup location was rejected.".to_string());
-    }
-    let status = Command::new("/usr/bin/open")
-        .arg("-R")
-        .arg(&path)
-        .status()
-        .map_err(|_| "Finder could not reveal the verified backup.".to_string())?;
-    if !status.success() {
-        return Err("Finder could not reveal the verified backup.".to_string());
-    }
-    Ok(())
-}
-
-fn approved_child(root: &std::path::Path, filename: &str) -> Result<PathBuf, String> {
-    if PathBuf::from(filename)
-        .file_name()
-        .and_then(|value| value.to_str())
-        != Some(filename)
-    {
-        return Err("The selected local artifact was rejected.".to_string());
-    }
-    let path = root.join(filename);
-    let metadata = fs::symlink_metadata(&path)
-        .map_err(|_| "The selected local artifact is unavailable.".to_string())?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err("The selected local artifact was rejected.".to_string());
-    }
-    let approved = root
-        .canonicalize()
-        .map_err(|_| "The local artifact location could not be verified.".to_string())?;
-    let parent = path
-        .parent()
-        .and_then(|value| value.canonicalize().ok())
-        .ok_or_else(|| "The local artifact location could not be verified.".to_string())?;
-    if parent != approved {
-        return Err("The selected local artifact was rejected.".to_string());
-    }
-    Ok(path)
-}
-
-#[tauri::command]
-async fn desktop_report_action(
-    state: tauri::State<'_, Arc<RuntimeController>>,
-    report_id: String,
-    action: String,
-) -> Result<(), String> {
-    if report_id != "trailing-12-month" || !matches!(action.as_str(), "open" | "reveal") {
-        return Err("The selected report action was rejected.".to_string());
-    }
-    let controller = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || {
-        let payload = fetch_json(&controller, format!("/api/reports/{report_id}/approved"))?;
-        let filename = payload
-            .get("filename")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| "The selected report could not be verified.".to_string())?;
-        let path = approved_child(&controller.report_root(), filename)?;
-        if action == "reveal" {
-            if !Command::new("/usr/bin/open")
-                .arg("-R")
-                .arg(path)
-                .status()
-                .map_err(|_| "The report could not be revealed.".to_string())?
-                .success()
-            {
-                return Err("The report could not be revealed.".to_string());
-            }
-        } else {
-            Command::new("/usr/bin/qlmanage")
-                .arg("-p")
-                .arg(path)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-                .map_err(|_| "The report preview could not be opened.".to_string())?;
-        }
-        Ok(())
-    })
-    .await
-    .map_err(|_| "The report could not be opened.".to_string())?
-}
-
-fn diagnostic_backup_verification(backend: &serde_json::Value) -> serde_json::Value {
-    backend
-        .get("backup_verification")
-        .cloned()
-        .unwrap_or(serde_json::json!({
-            "count": 0,
-            "all_verified": false,
-            "status": "unavailable"
-        }))
-}
-
-fn diagnostic_payload(controller: &RuntimeController) -> Result<serde_json::Value, String> {
-    let backend = fetch_json(controller, "/api/desktop/data-home/diagnostics".to_string())?;
-    let status = controller.status();
-    let about = about_info_for_mode(controller.data_mode());
-    let macos = Command::new("/usr/bin/sw_vers")
-        .arg("-productVersion")
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|value| value.trim().to_string())
-        .unwrap_or_else(|| "unavailable".to_string());
-    Ok(serde_json::json!({
-        "contract": "money-map-sanitized-diagnostics-v1",
-        "product_version": about.runtime_version,
-        "release_state": about.release_state,
-        "schema_revision": backend.get("schema_revision").cloned().unwrap_or(serde_json::json!("unavailable")),
-        "desktop_build": about.desktop_build,
-        "source_commit": about.source_commit,
-        "target_architecture": about.target,
-        "macos_version": macos,
-        "data_mode": about.data_mode,
-        "runtime": { "state": status.state, "generation": status.generation },
-        "data_home_phase": backend.get("data_home_phase").cloned().unwrap_or(serde_json::json!("unavailable")),
-        "backup_verification": diagnostic_backup_verification(&backend),
-        "database_checks": backend.get("database_checks").cloned().unwrap_or(serde_json::json!({"integrity": "unavailable", "foreign_keys": "unavailable"})),
-        "network_mode": "local_data; connected updates are explicit",
-        "artifact_identity": { "build": about.desktop_build, "source": about.source_commit }
-    }))
-}
-
-#[tauri::command]
-async fn desktop_diagnostics_preview(
-    state: tauri::State<'_, Arc<RuntimeController>>,
-) -> Result<serde_json::Value, String> {
-    let controller = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || diagnostic_payload(&controller))
-        .await
-        .map_err(|_| "Sanitized diagnostics are unavailable.".to_string())?
-}
-
-#[tauri::command]
-async fn desktop_export_diagnostics(
-    state: tauri::State<'_, Arc<RuntimeController>>,
-) -> Result<bool, String> {
-    let controller = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || {
-        let payload = diagnostic_payload(&controller)?;
-        let selected = rfd::FileDialog::new()
-            .set_file_name("Money-Map-Sanitized-Diagnostics.json")
-            .add_filter("JSON", &["json"])
-            .save_file();
-        let Some(selected) = selected else {
-            return Ok(false);
-        };
-        write_diagnostics_file(&selected, &payload)?;
-        Ok(true)
-    })
-    .await
-    .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?
-}
-
-fn write_diagnostics_file(
-    selected: &std::path::Path,
-    payload: &serde_json::Value,
-) -> Result<(), String> {
-    match fs::symlink_metadata(selected) {
-        Ok(metadata) if !metadata.is_file() || metadata.nlink() != 1 => {
-            return Err("The diagnostics destination was rejected.".to_string());
-        }
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            return Err("The diagnostics destination was rejected.".to_string());
-        }
-        _ => {}
-    }
-    let parent = selected
-        .parent()
-        .ok_or_else(|| "The diagnostics destination was rejected.".to_string())?;
-    let mut temporary = tempfile::NamedTempFile::new_in(parent)
-        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
-    serde_json::to_writer_pretty(temporary.as_file_mut(), payload)
-        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
-    temporary
-        .persist(selected)
-        .map_err(|_| "Sanitized diagnostics could not be saved.".to_string())?;
     Ok(())
 }
 
@@ -1193,11 +895,11 @@ fn main() {
             desktop_runtime_status,
             desktop_restart,
             desktop_about,
-            desktop_select_import,
-            desktop_reveal_backup,
-            desktop_report_action,
-            desktop_diagnostics_preview,
-            desktop_export_diagnostics,
+            commands::data_files::desktop_select_import,
+            commands::data_files::desktop_reveal_backup,
+            commands::data_files::desktop_report_action,
+            commands::diagnostics::desktop_diagnostics_preview,
+            commands::diagnostics::desktop_export_diagnostics,
             desktop_set_operations_enabled,
             desktop_open_external,
             desktop_qualification_observe,
@@ -1301,9 +1003,8 @@ fn main() {
 #[cfg(test)]
 mod menu_tests {
     use super::{
-        approved_external_link, controlled_unavailable_status_applies,
-        diagnostic_backup_verification, internal_navigation_allowed, menu_action_script,
-        qualification_state_is_bridged, MENU_ACTION_IDS, OPERATION_MENU_IDS,
+        approved_external_link, controlled_unavailable_status_applies, internal_navigation_allowed,
+        menu_action_script, qualification_state_is_bridged, MENU_ACTION_IDS, OPERATION_MENU_IDS,
     };
 
     #[test]
@@ -1407,52 +1108,5 @@ mod menu_tests {
             "https://dashboard.plaid.com.evil.invalid/"
         ));
         assert!(!approved_external_link("http://dashboard.plaid.com/"));
-    }
-
-    #[test]
-    fn missing_backup_diagnostics_never_report_verified() {
-        let fallback = diagnostic_backup_verification(&serde_json::json!({}));
-        assert_eq!(fallback["count"], 0);
-        assert_eq!(fallback["all_verified"], false);
-        assert_eq!(fallback["status"], "unavailable");
-
-        let observed = serde_json::json!({"count": 2, "all_verified": true});
-        assert_eq!(
-            diagnostic_backup_verification(
-                &serde_json::json!({"backup_verification": observed.clone()})
-            ),
-            observed
-        );
-    }
-    #[test]
-    fn diagnostic_export_is_private_atomic_and_rejects_link_targets() {
-        use std::os::unix::fs::{symlink, MetadataExt};
-        let root = tempfile::tempdir().unwrap();
-        let destination = root.path().join("diagnostics.json");
-        let payload = serde_json::json!({"status": "synthetic"});
-        super::write_diagnostics_file(&destination, &payload).unwrap();
-        assert_eq!(
-            std::fs::metadata(&destination).unwrap().mode() & 0o777,
-            0o600
-        );
-        let replaced = serde_json::json!({"status": "updated"});
-        super::write_diagnostics_file(&destination, &replaced).unwrap();
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&destination).unwrap())
-                .unwrap(),
-            replaced
-        );
-        let linked = root.path().join("linked.json");
-        std::fs::hard_link(&destination, &linked).unwrap();
-        assert!(super::write_diagnostics_file(&linked, &payload).is_err());
-        std::fs::remove_file(&linked).unwrap();
-        symlink(&destination, &linked).unwrap();
-        assert!(super::write_diagnostics_file(&linked, &payload).is_err());
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&std::fs::read(&destination).unwrap())
-                .unwrap(),
-            replaced
-        );
-        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
     }
 }

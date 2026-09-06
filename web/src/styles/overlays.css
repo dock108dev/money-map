@@ -1,0 +1,212 @@
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 30, 25, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.drawer {
+  width: min(480px, 100%);
+  height: 100%;
+  padding: 30px;
+  overflow-y: auto;
+  background: #fbfaf5;
+  box-shadow: -15px 0 45px rgba(16, 31, 26, 0.2);
+  animation: slide-in 180ms ease-out;
+}
+
+@keyframes slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+}
+
+.drawer h2 {
+  margin: 7px 0 0;
+  font-family: Georgia, serif;
+  font-size: 30px;
+  font-weight: 500;
+}
+
+.drawer h3 {
+  margin: 26px 0 10px;
+  font-family: Georgia, serif;
+  font-weight: 500;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.icon-button {
+  float: right;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  font-size: 20px;
+}
+
+.formula-card {
+  margin-top: 22px;
+  padding: 12px;
+  background: #edf1eb;
+  border-radius: 10px;
+}
+
+.formula-card > div {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  padding: 7px;
+  font-size: 11px;
+}
+
+.formula-card > div:last-child {
+  margin-top: 5px;
+  padding-top: 12px;
+  border-top: 1px solid #bbc8be;
+}
+
+.formula-card strong {
+  font-family: Georgia, serif;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-list > div {
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.payroll-detail-group {
+  margin-top: 22px;
+}
+
+.payroll-detail-lines {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.payroll-detail-lines > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.payroll-detail-lines > div:last-child {
+  border-bottom: 0;
+}
+
+.payroll-detail-lines small,
+.table-subline {
+  color: var(--muted);
+}
+
+.payroll-detail-lines span > small {
+  display: block;
+  margin-top: 3px;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.table-subline {
+  display: block;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.evidence-list span,
+.evidence-list small {
+  display: block;
+}
+
+.evidence-list span {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.evidence-list small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.hash {
+  margin-top: 25px;
+}
+
+.hash span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.hash code {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 10px;
+  background: #eeeee8;
+  border-radius: 7px;
+  font-size: 9px;
+}
+
+.loading-state,
+.fatal-state {
+  min-height: 100vh;
+  padding: 30px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.loading-state p,
+.loading-state h1 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.loading-state h1 {
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.fatal-state h1 {
+  margin-bottom: 0;
+  font-family: Georgia, serif;
+  font-weight: 500;
+}
+
+.fatal-state p {
+  color: var(--muted);
+}
+
+.fatal-state .primary-button {
+  width: auto;
+}
+
+.error-banner {
+  margin: 15px 42px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f7dfd8;
+  color: #874431;
+  font-size: 12px;
+}
+

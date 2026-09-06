@@ -27,7 +27,7 @@ Never commit financial files or credentials. Tests use synthetic data and dispos
 - [Testing](docs/testing.md): complete source gate, native checks and CI
 - [Configuration](docs/configuration.md) and [operations](docs/operations.md): runtime settings and local workflows
 - [Architecture](docs/architecture.md) and [module ownership](docs/v3/single-source-of-truth.md)
-- [Maintenance](docs/maintenance.md): large-file boundaries and follow-up work
+- [Maintenance](docs/maintenance.md): source ownership, cleanup decisions and remaining boundaries
 - [Documentation index](docs/README.md): security, accounting, product and release references
 
 Run `uv run --locked --python 3.12 paycheck-map --help` for supported commands. There is no hosted

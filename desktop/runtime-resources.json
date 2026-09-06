@@ -16,7 +16,7 @@
       "paycheck_map.goal_service", "paycheck_map.ingestion", "paycheck_map.import_security", "paycheck_map.keychain", "paycheck_map.native_secrets",
       "paycheck_map.life_plan", "paycheck_map.local_security", "paycheck_map.logical_manifest", "paycheck_map.models",
       "paycheck_map.money", "paycheck_map.payroll", "paycheck_map.plaid_client",
-      "paycheck_map.plaid_records", "paycheck_map.plaid_service", "paycheck_map.product_metadata", "paycheck_map.reconciliation",
+      "paycheck_map.planning_snapshots", "paycheck_map.plaid_records", "paycheck_map.plaid_service", "paycheck_map.product_metadata", "paycheck_map.reconciliation",
       "paycheck_map.recurring_outflow_service", "paycheck_map.refresh",
       "paycheck_map.release_candidate", "paycheck_map.reporting", "paycheck_map.retirement_lab", "paycheck_map.safe_events", "paycheck_map.service_accounts", "paycheck_map.service_common", "paycheck_map.service_overview", "paycheck_map.service_payroll", "paycheck_map.service_summaries", "paycheck_map.service_wealth", "paycheck_map.services",
       "paycheck_map.v21_contracts", "paycheck_map.v2_contracts"

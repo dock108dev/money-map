@@ -1,0 +1,6 @@
+@media print {
+  .desktop-completion,
+  .diagnostics-preview,
+  .dialog-actions { display: none !important; }
+}
+

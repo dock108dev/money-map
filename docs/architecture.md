@@ -48,8 +48,9 @@ root is `.local/`.
 
 The packaged macOS mode runs a Tauri shell and one supervised Python sidecar. Tauri owns trusted
 macOS paths, the private bootstrap/session, lifecycle, native menus, and safe failure windows. The
-sidecar remains the only SQLite writer and binds an OS-selected loopback port. Desktop environment
-variables are launcher-owned protocol fields, not user configuration.
+native `commands/` modules group artifact actions and sanitized diagnostics; main retains command
+registration, windows and menu wiring. The sidecar remains the only SQLite writer and binds an
+OS-selected loopback port. Desktop environment variables are launcher-owned protocol fields, not user configuration.
 
 There are no independent workers, queues, cron jobs, launch agents, or long-lived schedulers.
 Automatic Plaid refresh is a once-per-local-day request made by the loaded React application when
@@ -73,7 +74,9 @@ cutover behavior is documented in [desktop architecture](v3/desktop-architecture
 
 `life_plan.project_projection_inputs` owns the monthly today-dollar calculation from immutable
 inputs. `retirement_lab.py` builds those inputs and owns current Retirement edits, isolated Lab
-experiments, explicit promotions and snapshot persistence through `/api/v2`. Operational goal
+experiments, explicit promotions and snapshot validation through `/api/v2`.
+`planning_snapshots.py` flushes snapshot records and periods in the caller-owned transaction and
+serializes stored evidence; route handlers own commit/rollback. Operational goal
 writes belong to `goal_service.py`. The old combined `/api/life-plan/*` API is unsupported and
 removed. Stored legacy `life_*` evidence remains readable through Lab; it does not supply an
 alternate mutation API. Neither planning engine mutates imported financial source records or
