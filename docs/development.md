@@ -4,8 +4,9 @@
 
 The source gate is exercised with Python 3.12, `uv`, Node.js 22, and pnpm 10. The native macOS
 runtime additionally requires the Rust toolchain and the system dependencies needed by Tauri.
-Python supports 3.12 through 3.14. CI runs the complete source gate on 3.12 and the backend test
-suite on 3.13 and 3.14. The native gate uses the Rust version pinned in `rust-toolchain.toml`.
+The declared Python range remains 3.12 through 3.14. For the current single-machine stage, CI
+runs the complete source gate only on 3.12; 3.13/3.14 compatibility runs are deferred. The native
+gate uses the Rust version pinned in `rust-toolchain.toml`.
 
 ## Install
 
@@ -92,8 +93,8 @@ cargo test --locked
 installed-app owner qualification. Those are separate gates documented in the versioned desktop and
 release guides.
 
-Pull requests and pushes to `main` run four stable GitHub checks: `source`, `python-3.13`,
-`python-3.14`, and `native-macos`. CI uses locked installs, read-only repository permissions,
+Pull requests and pushes to `main` run two stable workflow checks: `source` and
+`native-macos`. CI uses locked installs, read-only repository permissions,
 ephemeral synthetic state, and no credentials. Signing, packaging, release qualification, provider
 access, and owner-data checks remain outside ordinary pull-request CI.
 

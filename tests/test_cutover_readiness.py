@@ -273,17 +273,31 @@ def test_preview_and_cancel_write_nothing(tmp_path: Path) -> None:
 
 def test_owner_worksheet_fields_are_blank_and_cannot_be_synthesized() -> None:
     worksheet = owner_worksheet()
-    checked_in = json.loads(
-        (PROJECT_ROOT / "docs/v3/owner-cutover-worksheet.json").read_text(encoding="utf-8")
-    )
-    assert checked_in == worksheet
     assert set(worksheet["owner_responses"]) == set(OWNER_FIELDS)
     assert all(value is None for value in worksheet["owner_responses"].values())
     validate_owner_worksheet(worksheet)
-    worksheet["owner_responses"]["cutover_acceptance"] = "accepted"
+
+
+@pytest.mark.parametrize("field", OWNER_FIELDS)
+def test_fresh_owner_worksheet_rejects_prepopulated_responses(field: str) -> None:
+    worksheet = owner_worksheet()
+    worksheet["owner_responses"][field] = "accepted"
     with pytest.raises(DataHomeError) as rejected:
         validate_owner_worksheet(worksheet)
     assert rejected.value.code == "owner_response_prepopulated"
+
+
+def test_recorded_owner_worksheet_preserves_contract_shape() -> None:
+    # This is a live record, so completed owner responses need not be blank.
+    recorded = json.loads(
+        (PROJECT_ROOT / "docs/v3/owner-cutover-worksheet.json").read_text(encoding="utf-8")
+    )
+    blank = owner_worksheet()
+    assert set(recorded) == set(blank)
+    assert recorded["contract"] == blank["contract"]
+    assert set(recorded["owner_responses"]) == set(OWNER_FIELDS)
+    assert set(recorded["engineering"]) == set(blank["engineering"])
+    assert recorded["engineering"]["schema"] == SCHEMA_HEAD
 
 
 def test_schema_remains_0009_and_no_0010_exists() -> None:

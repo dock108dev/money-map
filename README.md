@@ -43,7 +43,7 @@ cargo test --locked
 
 - [Developer guide](docs/development.md): setup, repository map, focused checks, and change workflow
 - [Configuration](docs/configuration.md): supported environment overrides, static inputs, and secrets
-- [Testing](docs/testing.md): source, compatibility, native, CI, and release-validation boundaries
+- [Testing](docs/testing.md): source, native, CI, and release-validation boundaries
 - [Operations guide](docs/operations.md): imports, refresh, backup, restore, reporting, and safe data paths
 - [Known limitations](docs/known-limitations.md): intentional non-support and external validation gaps
 - [Documentation index](docs/README.md): current contracts, architecture, security, and historical records

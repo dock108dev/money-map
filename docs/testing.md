@@ -61,9 +61,11 @@ native unit tests do not treat that fixture as a built or qualified sidecar.
 Pull requests and pushes to `main` run:
 
 - `source`: complete source gate and Python distribution build on Python 3.12.
-- `python-3.13` and `python-3.14`: locked-install backend compatibility tests.
 - `native-macos`: the native macOS gate.
 - repository-managed CodeQL analysis for Actions, JavaScript/TypeScript, Python, and Rust.
+
+Python 3.13/3.14 compatibility jobs are deferred while the app is used on one machine. The
+source job already runs the complete backend suite; the native job checks separate Rust code.
 
 The workflow uses read-only repository permissions, immutable action revisions, lockfile-keyed
 download caches, ephemeral state, bounded timeouts, and cancellation of superseded runs. It does not
