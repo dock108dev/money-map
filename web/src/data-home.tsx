@@ -1,3 +1,5 @@
+import { displayMessage } from "./presentation";
+import { dataFormat, displayLabel } from "./presentation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { request } from "./api";
@@ -214,11 +216,11 @@ export default function DataHomePanel({
         <span className="eyebrow">Private data</span>
         <h1 id="data-home-title">{needsSetup ? "Set up Money Map" : "Data safety"}</h1>
         <p>
-          Money Map keeps its database, imports, reports, and verified backups in private macOS
+          Money Map keeps your records, imports, reports, and checked backups in private macOS
           locations. It never scans for existing data.
         </p>
-        {error && <div className="error-banner" role="alert">{error}</div>}
-        {busy && <div className="data-operation-state" role="status" aria-live="polite">Working safely… Controls will return after verification.</div>}
+        {error && <div className="error-banner" role="alert">{displayMessage(error)}</div>}
+        {busy && <div className="data-operation-state" role="status" aria-live="polite">Working… Please wait until the checks finish.</div>}
         {!busy && status.phase === "backup_verified" && <div className="data-operation-state success" role="status">Verified backup created.</div>}
         {!busy && status.phase === "restore_complete" && <div className="data-operation-state success" role="status">Restore verified and complete.</div>}
 
@@ -235,21 +237,21 @@ export default function DataHomePanel({
 
         {status.state && status.candidate_token && status.state !== "confirmation_required" && (
           <div className="data-home-preview">
-            <h2>Cutover readiness</h2>
+            <h2>Review existing data</h2>
             <dl>
               <div><dt>Source</dt><dd>{status.source}</dd></div>
-              <div><dt>Schema</dt><dd>{status.schema}</dd></div>
-              <div><dt>Size class</dt><dd>{status.size}</dd></div>
-              <div><dt>Integrity</dt><dd>{status.integrity}</dd></div>
-              <div><dt>Relationships</dt><dd>{status.foreign_keys}</dd></div>
-              <div><dt>Backup</dt><dd>{status.backup}</dd></div>
-              <div><dt>Destination</dt><dd>{status.destination}</dd></div>
-              <div><dt>Rehearsal</dt><dd>{status.rehearsal}</dd></div>
-              <div><dt>Rollback</dt><dd>{status.rollback}</dd></div>
-              <div><dt>Candidate</dt><dd>{status.candidate}</dd></div>
+              <div><dt>Data format</dt><dd>{dataFormat(status.schema)}</dd></div>
+              <div><dt>File size</dt><dd>{status.size}</dd></div>
+              <div><dt>File checks</dt><dd>{displayLabel(status.integrity)}</dd></div>
+              <div><dt>Record links</dt><dd>{displayLabel(status.foreign_keys)}</dd></div>
+              <div><dt>Backup</dt><dd>{displayMessage(displayLabel(status.backup))}</dd></div>
+              <div><dt>Destination</dt><dd>{displayMessage(displayLabel(status.destination))}</dd></div>
+              <div><dt>Test copy</dt><dd>{displayMessage(displayLabel(status.rehearsal))}</dd></div>
+              <div><dt>Recovery</dt><dd>{displayMessage(displayLabel(status.rollback))}</dd></div>
+              <div><dt>App check</dt><dd>{displayMessage(displayLabel(status.candidate))}</dd></div>
             </dl>
-            <p><strong>Next action:</strong> {status.action}</p>
-            <p>The selected original stays read-only. Rehearsal activates only in a disposable private home.</p>
+            <p><strong>Next action:</strong> {status.action && displayMessage(status.action)}</p>
+            <p>Your original file stays unchanged. The test uses a temporary copy.</p>
             <div className="data-home-actions">
               <button
                 className="primary-button"
@@ -259,7 +261,7 @@ export default function DataHomePanel({
                   return action("/api/desktop/data-home/cutover/prepare");
                 })}
               >
-                Run rehearsal and review confirmation
+                Test a copy and review confirmation
               </button>
               <button disabled={busy} onClick={() => update({ phase: "fresh_setup_available", ready: false })}>Cancel</button>
             </div>
@@ -268,23 +270,23 @@ export default function DataHomePanel({
 
         {status.state === "confirmation_required" && status.confirmation_token && (
           <div className="data-home-preview">
-            <h2>Confirm cutover</h2>
+            <h2>Confirm switching data</h2>
             <dl>
               <div><dt>Source</dt><dd>{status.source}</dd></div>
-              <div><dt>Schema</dt><dd>{status.schema}</dd></div>
-              <div><dt>Backup</dt><dd>{status.backup}</dd></div>
-              <div><dt>Destination</dt><dd>{status.destination}</dd></div>
-              <div><dt>Rehearsal</dt><dd>{status.rehearsal}</dd></div>
-              <div><dt>Rollback</dt><dd>{status.rollback}</dd></div>
-              <div><dt>Candidate</dt><dd>{status.candidate}</dd></div>
+              <div><dt>Data format</dt><dd>{dataFormat(status.schema)}</dd></div>
+              <div><dt>Backup</dt><dd>{displayMessage(displayLabel(status.backup))}</dd></div>
+              <div><dt>Destination</dt><dd>{displayMessage(displayLabel(status.destination))}</dd></div>
+              <div><dt>Test copy</dt><dd>{displayMessage(displayLabel(status.rehearsal))}</dd></div>
+              <div><dt>Recovery</dt><dd>{displayMessage(displayLabel(status.rollback))}</dd></div>
+              <div><dt>App check</dt><dd>{displayMessage(displayLabel(status.candidate))}</dd></div>
             </dl>
             <p>This one-use confirmation expires in {status.expires_in_seconds ?? 300} seconds.</p>
-            <p><strong>Next action:</strong> {status.action}</p>
+            <p><strong>Next action:</strong> {status.action && displayMessage(status.action)}</p>
             <div className="data-home-actions">
               <button className="primary-button" disabled={busy} onClick={() => void run(() => action(
                 "/api/desktop/data-home/cutover/confirm",
                 { confirmation_token: status.confirmation_token, requested_action: "activate_reviewed_source" },
-              ))}>Activate reviewed data</button>
+              ))}>Use reviewed data</button>
               <button disabled={busy} onClick={() => update({ phase: "fresh_setup_available", ready: false })}>Cancel</button>
             </div>
           </div>
@@ -293,10 +295,10 @@ export default function DataHomePanel({
         {status.phase === "recoverable_failure" && (
           <div role="alert" className="data-home-recovery">
             <h2>The operation paused safely.</h2>
-            <p>The original source and last accepted database were not silently repaired.</p>
+            <p>Your original file and previously approved data have not been repaired or replaced.</p>
             <div className="data-home-actions">
               {status.resume_available && <button disabled={busy} onClick={() => void run(() => action("/api/desktop/data-home/resume"))}>Resume</button>}
-              {status.rollback_available && <button disabled={busy} onClick={() => void run(() => action("/api/desktop/data-home/rollback"))}>Roll back</button>}
+              {status.rollback_available && <button disabled={busy} onClick={() => void run(() => action("/api/desktop/data-home/rollback"))}>Return to previous data</button>}
             </div>
           </div>
         )}
@@ -304,8 +306,8 @@ export default function DataHomePanel({
         {status.ready && (
           <>
             <div className="data-home-status" role="status">
-              <strong>Current database verified</strong>
-              <span>Schema {status.schema_revision ?? "unavailable"}</span>
+              <strong>Your saved data passed its checks</strong>
+              <span>{dataFormat(status.schema_revision ?? "unavailable")}</span>
             </div>
             <div className="data-home-actions">
               <button className="primary-button" disabled={busy} onClick={() => void run(() => action("/api/desktop/data-home/backup"))}>
@@ -318,7 +320,7 @@ export default function DataHomePanel({
               <ul className="backup-list">
                 {backups.map((backup) => (
                   <li key={backup.backup_id}>
-                    <div><strong>{backup.filename}</strong><span>{new Date(backup.created_at).toLocaleString()} · {backup.schema_revision} · {backup.size.toLocaleString()} bytes</span></div>
+                    <div><strong>{backup.filename}</strong><span>{new Date(backup.created_at).toLocaleString()} · {backup.size.toLocaleString()} bytes</span></div>
                     <div>
                       <button disabled={busy} onClick={() => void window.__MONEY_MAP_DESKTOP__?.revealBackup(backup.backup_id)}>Reveal in Finder</button>
                       <button disabled={busy} onClick={() => void run(async () => {
@@ -336,9 +338,9 @@ export default function DataHomePanel({
 
         {restore?.backup_id && restore.confirmation_token && (
           <div ref={restoreRef} className="restore-warning" role="alertdialog" aria-modal="true" aria-labelledby="restore-title">
-            <h2 id="restore-title">Replace the current database?</h2>
-            <p>{restore.replacement_warning}</p>
-            <p>A verified safety backup of the current database will be created first. Rollback remains available.</p>
+            <h2 id="restore-title">Replace your current data?</h2>
+            <p>{restore.replacement_warning && displayMessage(restore.replacement_warning)}</p>
+            <p>A checked backup of your current data will be created first. You can return to it if needed.</p>
             <div className="data-home-actions">
               <button disabled={busy} onClick={() => setRestore(null)}>Cancel</button>
               <button className="danger-button" disabled={busy} onClick={() => void run(async () => {

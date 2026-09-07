@@ -121,7 +121,7 @@ export function OverviewView({
           {baseline && <section className="paycheck-strip"><span>Every paycheck</span><strong>{currencyExact(baseline.all_account_value)} to your accounts</strong><small>{currencyExact(baseline.net_payment)} spendable cash · next {shortDate(baseline.next_expected_deposit)}</small></section>}
         </div>
       </details>
-      <button className="secondary-button overview-print-button print-hidden" onClick={() => window.print()}>Print evidence</button>
+      <button className="secondary-button overview-print-button print-hidden" onClick={() => window.print()}>Print summary</button>
     </div>
   );
 }

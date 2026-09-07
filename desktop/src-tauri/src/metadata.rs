@@ -55,15 +55,10 @@ pub fn native_about_metadata(mode: &str) -> tauri::menu::AboutMetadata<'static> 
     AboutMetadataBuilder::new()
         .name(Some(info.product))
         .version(Some(info.runtime_version))
-        .short_version(Some(info.desktop_build))
+        .short_version(Some(info.runtime_version))
         .credits(Some(format!(
-            "Release: {}\nSchema: {}\nSource: {}\nTarget: {}\nData: {}\nLocation: {}\n{}",
-            info.release_state,
-            info.schema_revision,
-            info.source_commit,
-            info.target,
-            info.data_mode,
-            info.data_location,
+            "Beta testing: final approval pending\nData: {}\nSaved privately on this Mac\n{}\n\nTechnical build details are available in the diagnostics report.",
+            if mode == "production-v1" { "Your local records" } else { "Temporary sample data" },
             info.boundary
         )))
         .build()

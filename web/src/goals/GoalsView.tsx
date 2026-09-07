@@ -1,3 +1,4 @@
+import { displayLabel, displayMessage } from "../presentation";
 import {
   type FormEvent,
   type RefObject,
@@ -131,9 +132,9 @@ function comparisonAmount(
 function triggerLabel(trigger: GoalCheckInTimelinePage["check_ins"][number]["trigger"]): string {
   if (trigger === "post_refresh") return "Account update";
   if (trigger === "post_import") return "Manual import";
-  if (trigger === "post_payroll") return "Payroll rebuild";
-  if (trigger === "load_backfill") return "Eligible load backfill";
-  return "Synthetic validation";
+  if (trigger === "post_payroll") return "Paycheck update";
+  if (trigger === "load_backfill") return "Saved when opened";
+  return "Sample data check";
 }
 
 export function verdictSentence(state: GoalComparisonState | null, failure?: string): string {
@@ -141,7 +142,7 @@ export function verdictSentence(state: GoalComparisonState | null, failure?: str
   if (!state) return "Comparison unavailable: the comparison could not load.";
   if (state.state === "no_previous_check_in") return "No saved comparison exists yet.";
   if (state.state !== "available") {
-    return `Comparison unavailable: ${briefReason(state.reason, "the evidence is incomplete")}.`;
+    return `Comparison unavailable: ${briefReason(displayMessage(state.reason), "the evidence is incomplete")}.`;
   }
   const accessible = state.comparison.components.find(
     (component) => component.component === "accessible_now",
@@ -399,7 +400,7 @@ function GoalEditDialog({
             />
             {errors.reservedForGoal && <span className="field-error" id="goal-reserved-error">{errors.reservedForGoal}</span>}
           </label>
-          {submitError && <div className="goal-form-error" id="goal-edit-error" role="alert">{submitError}</div>}
+          {submitError && <div className="goal-form-error" id="goal-edit-error" role="alert">{displayMessage(submitError)}</div>}
           {conflict && (
             <button
               className="secondary-button conflict-reload"
@@ -543,7 +544,7 @@ export default function GoalsView({
       setProvenance(nextProvenance.value);
       setProvenanceError("");
     } else if (nextProvenance.status === "rejected") {
-      setProvenanceError(errorMessage(nextProvenance.reason, "Source provenance could not load."));
+      setProvenanceError(errorMessage(nextProvenance.reason, "Where these numbers come from could not load."));
     }
     if (nextCandidates.status === "fulfilled" && nextCandidates.value) {
       setCandidates(nextCandidates.value);
@@ -633,7 +634,7 @@ export default function GoalsView({
     try {
       setProvenance(await loadGoalProvenance());
     } catch (reason) {
-      setProvenanceError(errorMessage(reason, "Source provenance could not load."));
+      setProvenanceError(errorMessage(reason, "Where these numbers come from could not load."));
     } finally {
       setProvenanceBusy(false);
     }
@@ -764,7 +765,7 @@ export default function GoalsView({
           data-observation-status={observationError ? "unavailable" : observationState?.status}
         >
           {observationError
-            ? `${observationError} No new goal observation was saved. Use Update data to retry.`
+            ? `${displayMessage(observationError)} No new goal observation was saved. Use Update data to retry.`
             : observationState?.status === "created"
               ? "Financial change saved."
               : observationState?.message}
@@ -789,10 +790,10 @@ export default function GoalsView({
           <GoalMetric label="Required monthly pace" value={formatMoney(pace)} />
         </div>
         <div className="goal-milestone">
-          <span>Binding milestone</span>
+          <span>Next funding step</span>
           <strong data-prose>{milestoneSentence(milestoneState, detailErrors.milestone)}</strong>
         </div>
-        <code className="print-only" aria-hidden="true">Source fingerprint: {positionState?.source_fingerprint ?? "Unavailable"}</code>
+        <code className="print-only" aria-hidden="true">Source reference: {positionState?.source_fingerprint ?? "Unavailable"}</code>
       </section>
 
       <section className="goals-disclosures" aria-label="Goal details and actions">
@@ -800,22 +801,22 @@ export default function GoalsView({
           Edit goal
         </button>
         <button className="secondary-button goal-print-button print-hidden" onClick={() => void printEvidence()}>
-          Print evidence
+          Print summary
         </button>
         <details className="goal-detail panel" data-print-ready="true">
-          <summary>Position and formulas</summary>
+          <summary>Amounts and calculations</summary>
           {detailErrors.position && <p className="goal-detail-error">{detailErrors.position}</p>}
           <PositionDetails position={position} />
         </details>
         <details className="goal-detail panel" data-print-ready="true">
-          <summary>Comparison evidence</summary>
+          <summary>Comparison details</summary>
           <div className="goal-detail-body">
             {detailErrors.comparison && <p className="goal-detail-error">{detailErrors.comparison}</p>}
             {comparisonState?.state === "available" ? (
               <dl className="goal-component-list">
                 {comparisonState.comparison.components.map((component) => (
                   <div key={component.component}>
-                    <dt>{component.component.replaceAll("_", " ")}</dt>
+                    <dt>{displayLabel(component.component)}</dt>
                     <dd>{formatMoney(component.change.amount)}</dd>
                   </div>
                 ))}
@@ -875,7 +876,7 @@ export default function GoalsView({
                             <dl className="goal-component-list" aria-label={`Comparison components for ${formatDate(checkIn.effective_observation_date)}`}>
                               {comparison.components.map((component) => (
                                 <div key={component.component}>
-                                  <dt>{component.component.replaceAll("_", " ")}</dt>
+                                  <dt>{displayLabel(component.component)}</dt>
                                   <dd>{formatMovement(component.change.amount)}</dd>
                                 </div>
                               ))}
@@ -890,12 +891,12 @@ export default function GoalsView({
             )}
             {!historyExpanded && history && (history.check_ins.length > 3 || history.next_cursor) && (
               <button className="secondary-button print-hidden" onClick={() => setHistoryExpanded(true)}>
-                Show older evidence
+                Show older records
               </button>
             )}
             {historyExpanded && history?.next_cursor && history.check_ins.length < 25 && (
               <button className="secondary-button print-hidden" disabled={historyBusy} onClick={() => void loadHistory(history.next_cursor ?? undefined)}>
-                {historyBusy ? "Loading…" : "Load older evidence"}
+                {historyBusy ? "Loading…" : "Load older records"}
               </button>
             )}
             {historyBusy && !history && <p className="goal-detail-message">Loading check-ins…</p>}
@@ -909,21 +910,21 @@ export default function GoalsView({
             if (event.currentTarget.open) void loadProvenance();
           }}
         >
-          <summary>Source provenance</summary>
+          <summary>Where these numbers come from</summary>
           <div className="goal-detail-body">
-            {provenanceError && <p className="goal-detail-error">{provenanceError}</p>}
-            {provenanceBusy && !provenance && <p className="goal-detail-message">Loading source evidence…</p>}
+            {provenanceError && <p className="goal-detail-error">{displayMessage(provenanceError)}</p>}
+            {provenanceBusy && !provenance && <p className="goal-detail-message">Loading source records…</p>}
             {provenance?.state === "available" && (
               <>
-                <div className="goal-fingerprint"><span>Source fingerprint</span><code>{provenance.source_fingerprint}</code></div>
+                <details className="goal-fingerprint"><summary>Technical reference</summary><code>{provenance.source_fingerprint}</code></details>
                 <ul className="goal-source-records">
                   {provenance.source_material.source_records.map((record, index) => (
                     <li key={`${record.kind}-${record.effective_date}-${index}`}>
-                      <strong>{record.kind.replaceAll("_", " ")}</strong>
+                      <strong>{displayLabel(record.kind)}</strong>
                       <span>{formatDate(record.effective_date)}</span>
                       <ul>
                         {record.money_facts.map((fact) => (
-                          <li key={`${fact.field}-${fact.amount}`}>{fact.field.replaceAll("_", " ")}: {formatMoney(fact.amount)}</li>
+                          <li key={`${fact.field}-${fact.amount}`}>{displayLabel(fact.field)}: {formatMoney(fact.amount)}</li>
                         ))}
                       </ul>
                     </li>

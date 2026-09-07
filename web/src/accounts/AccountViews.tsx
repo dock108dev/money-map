@@ -1,3 +1,4 @@
+import { displayLabel, displayMessage } from "../presentation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { addAccountValue, loadAccountDetail } from "../api";
@@ -75,7 +76,7 @@ export function AccountsView({ data }: { data: AccountsDashboard }) {
                     </span>
                     <span>
                       <strong>{account.name}</strong>
-                      <small>{account.institution} · {account.type}</small>
+                      <small>{account.institution} · {displayLabel(account.type)}</small>
                     </span>
                     <span className="account-meta">
                       <strong>{currency(account.current_balance)}</strong>
@@ -93,7 +94,7 @@ export function AccountsView({ data }: { data: AccountsDashboard }) {
         <div className="simple-empty" role="status">No accounts are connected. Add an account to build this view.</div>
       )}
       {detailBusy && <div className="simple-empty">Loading account…</div>}
-      {detailError && <div className="error-banner">{detailError}</div>}
+      {detailError && <div className="error-banner">{displayMessage(detailError)}</div>}
       {selected && detail && (
         <AccountDetailPanel
           account={selected}
@@ -140,7 +141,7 @@ function AccountDetailPanel({
         <div>
           <span className="eyebrow">{account.institution}</span>
           <h2>{account.name}</h2>
-          <small>{account.type} · {account.source}</small>
+          <small>{displayLabel(account.type)} · {displayLabel(account.source)}</small>
         </div>
         <div>
           <strong>{currency(account.current_balance)}</strong>
@@ -225,7 +226,7 @@ function AccountDetailPanel({
           <input name="value" type="number" min="0" step="0.01" placeholder="Market value" required />
           <input name="source_note" defaultValue="Fidelity statement" maxLength={200} required />
           <button className="secondary-button" disabled={addingValue}>{addingValue ? "Saving…" : "Save value"}</button>
-          {valueMessage && <small>{valueMessage}</small>}
+          {valueMessage && <small>{displayMessage(valueMessage)}</small>}
         </form>
       )}
       {account.holdings.length > 0 && (
@@ -274,7 +275,7 @@ function AccountDetailPanel({
         </div>
       )}
       <footer className="source-line">
-        {account.source}{account.last_synced_at ? ` · synced ${new Date(account.last_synced_at).toLocaleString()}` : ""}
+        {displayLabel(account.source)}{account.last_synced_at ? ` · synced ${new Date(account.last_synced_at).toLocaleString()}` : ""}
       </footer>
     </section>
   );

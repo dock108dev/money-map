@@ -1,3 +1,5 @@
+import { displayMessage } from "./presentation";
+import DiagnosticsPreview from "./DiagnosticsPreview";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   type ApplicationData,
@@ -420,7 +422,7 @@ export default function App() {
       const preview = await window.__MONEY_MAP_DESKTOP__?.diagnosticsPreview?.();
       if (preview) setDiagnostics(preview);
     } catch {
-      setMessage("Sanitized diagnostics are unavailable.");
+      setMessage("Diagnostics are unavailable.");
     } finally {
       setBusy(false);
     }
@@ -466,7 +468,7 @@ export default function App() {
     return (
       <main className="loading-state" aria-live="polite">
         <div className="loading-mark">M</div>
-        <p>{desktopRuntime?.state === "restarting" ? "Restarting safely…" : "Starting local service…"}</p>
+        <p>{desktopRuntime?.state === "restarting" ? "Restarting safely…" : "Starting Money Map…"}</p>
       </main>
     );
   }
@@ -511,7 +513,7 @@ export default function App() {
       <main className="fatal-state">
         <span>Local connection issue</span>
         <h1>Money Map could not load.</h1>
-        <p>{error}</p>
+        <p>{displayMessage(error)}</p>
         <button className="primary-button" onClick={() => void refresh()}>
           Try again
         </button>
@@ -692,7 +694,7 @@ export default function App() {
                 navigateTo("activity");
               }}
             >
-              Show older evidence
+              Show older records
             </button>
           </div>
         )}
@@ -701,7 +703,7 @@ export default function App() {
             No imported account evidence is available yet. Use Add account to begin.
           </div>
         )}
-        {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner">{displayMessage(error)}</div>}
         <div className="content-wrap">
           {view === "cash-flow" && (
             <CashFlowView
@@ -797,22 +799,18 @@ export default function App() {
       )}
       {diagnostics && (
         <FocusedDialog
-          title="Sanitized diagnostics"
-          description="Review the support-safe categories before choosing where to save. Financial records, paths, credentials, ports, and filenames are excluded."
+          title="Diagnostics"
+          description="Review what is included, then choose where to save the report. Financial records, file locations, passwords, and connection details are excluded."
           onClose={() => setDiagnostics(null)}
         >
-          <dl className="diagnostics-preview">
-            {Object.entries(diagnostics).map(([key, value]) => (
-              <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{typeof value === "object" ? "Included safe status" : String(value)}</dd></div>
-            ))}
-          </dl>
+          <DiagnosticsPreview diagnostics={diagnostics} />
           <div className="dialog-actions">
             <button type="button" onClick={() => setDiagnostics(null)}>Cancel</button>
             <button className="primary-button" type="button" onClick={async () => {
               const saved = await window.__MONEY_MAP_DESKTOP__?.exportDiagnostics?.();
               if (saved) {
                 setDiagnostics(null);
-                setMessage("Sanitized diagnostics exported.");
+                setMessage("Diagnostics exported.");
               }
             }}>Export Diagnostics</button>
           </div>

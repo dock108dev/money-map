@@ -62,9 +62,9 @@
         "expected_api_endpoints": ["GET /api/v2/cash-flow?period_kind=all_imported_history", "GET /api/v2/cash-flow/recurring-outflow-candidates"],
         "expected_http_status": ["200", "200"],
         "expected_stable_response_fields": {"route": "cash-flow", "period_kind": "all_imported_history"},
-        "expected_primary_result": "Cash Flow evidence for the declared imported period.",
+        "expected_primary_result": "Cash Flow details for the declared imported period.",
         "expected_next_action": "Open the binding goal milestone or supporting money detail.",
-        "expected_safe_state_language": ["Cash Flow", "Evidence"],
+        "expected_safe_state_language": ["Cash Flow", "Records"],
         "expected_accessible_role": "heading",
         "expected_accessible_status": "settled",
         "expected_enabled_operations": ["reload", "print"],
@@ -262,7 +262,7 @@
         "expected_stable_response_fields": {"route": "add-account", "manual_import_available": true},
         "expected_primary_result": "Read-only connection status with manual import available.",
         "expected_next_action": "Choose manual import or explicitly start a supported connection.",
-        "expected_safe_state_language": ["Add account", "Manual import stays first-class."],
+        "expected_safe_state_language": ["Add account", "You can always import files yourself."],
         "expected_accessible_role": "heading",
         "expected_accessible_status": "settled",
         "expected_enabled_operations": ["manual_import", "reload"],
@@ -306,7 +306,7 @@
         "expected_stable_response_fields": {"contract": "money-map-sanitized-diagnostics-v1", "financial_values_excluded": true},
         "expected_primary_result": "Support-safe diagnostic categories only.",
         "expected_next_action": "Cancel without a write or explicitly export sanitized diagnostics.",
-        "expected_safe_state_language": ["Sanitized diagnostics", "Financial records, paths, credentials, ports, and filenames are excluded."],
+        "expected_safe_state_language": ["Diagnostics", "Financial records, file locations, passwords, and connection details are excluded."],
         "expected_accessible_role": "dialog",
         "expected_accessible_status": "settled",
         "expected_enabled_operations": ["cancel", "export_diagnostics"],
@@ -352,7 +352,7 @@
       "expected_provenance": ["schema_only", "no_financial_evidence"],
       "authority_refs": ["AUTH-EMPTY-TEST", "AUTH-INCOME-EMPTY", "AUTH-WEALTH-EMPTY", "AUTH-CASHFLOW-UNAVAILABLE"],
       "combination_defaults": {"expected_evidence_classification": "unavailable", "expected_currentness": "unavailable", "expected_primary_result": "No supported financial evidence is available for this route.", "expected_next_action": "Use Add account or manual import to add evidence.", "expected_safe_state_language": ["unavailable", "Use Add account"], "expected_accessible_status": "status", "expected_enabled_operations": ["add_account", "manual_import", "reload"], "expected_disabled_operations": ["financial_mutations"], "authority_refs": ["AUTH-EMPTY-TEST"]},
-      "route_overrides": {"cash-flow": {"expected_http_status": ["409", "200"], "expected_primary_result": "Cash Flow is unavailable without imported bank coverage.", "expected_next_action": "Retry after adding bank transaction coverage.", "expected_safe_state_language": ["Cash Flow unavailable", "Retry"]}, "goals": {"expected_primary_result": "No goal is ready to select.", "expected_next_action": "Create a goal before selecting a primary.", "expected_safe_state_language": ["No goal is ready to select."]}, "activity": {"expected_primary_result": "No imported activity exists.", "expected_safe_state_language": ["No activity yet."]}, "accounts": {"expected_primary_result": "No accounts are connected; net worth is unavailable.", "expected_safe_state_language": ["No accounts are connected", "Net worth unavailable"]}, "income": {"expected_primary_result": "Income is unavailable without paycheck evidence.", "expected_safe_state_language": ["Income unavailable", "Use Add account to import a payroll statement"]}, "wealth": {"expected_primary_result": "Wealth is unavailable without account-value evidence.", "expected_safe_state_language": ["Wealth unavailable", "Use Add account to add a supported account or value"]}, "retirement": {"expected_primary_result": "Retirement is unavailable without a durable profile.", "expected_safe_state_language": ["Retirement is unavailable.", "The durable Retirement profile has not been created."]}, "lab": {"expected_primary_result": "Life Lab is ready for a new experiment with no saved profile.", "expected_safe_state_language": ["Life Lab", "Start an experiment"]}, "add-account": {"expected_primary_result": "No provider connection exists; manual import remains available.", "expected_safe_state_language": ["Add account", "Manual import stays first-class."]}, "data-home": {"expected_evidence_classification": "verified-local", "expected_currentness": "current", "expected_primary_result": "Fresh 0009 data home is ready.", "expected_next_action": "Close without writing or create a verified backup."}, "diagnostics": {"expected_evidence_classification": "sanitized-health", "expected_currentness": "current"}}
+      "route_overrides": {"cash-flow": {"expected_http_status": ["409", "200"], "expected_primary_result": "Cash Flow is unavailable without imported bank coverage.", "expected_next_action": "Retry after adding bank transaction coverage.", "expected_safe_state_language": ["Cash Flow unavailable", "Retry"]}, "goals": {"expected_primary_result": "No goal is ready to select.", "expected_next_action": "Create a goal before selecting a primary.", "expected_safe_state_language": ["No goal is ready to select."]}, "activity": {"expected_primary_result": "No imported activity exists.", "expected_safe_state_language": ["No activity yet."]}, "accounts": {"expected_primary_result": "No accounts are connected; net worth is unavailable.", "expected_safe_state_language": ["No accounts are connected", "Net worth unavailable"]}, "income": {"expected_primary_result": "Income is unavailable without paycheck evidence.", "expected_safe_state_language": ["Income unavailable", "Use Add account to import a payroll statement"]}, "wealth": {"expected_primary_result": "Wealth is unavailable without account-value evidence.", "expected_safe_state_language": ["Wealth unavailable", "Use Add account to add a supported account or value"]}, "retirement": {"expected_primary_result": "Retirement is unavailable without a durable profile.", "expected_safe_state_language": ["Retirement is unavailable.", "The durable Retirement profile has not been created."]}, "lab": {"expected_primary_result": "Life Lab is ready for a new experiment with no saved profile.", "expected_safe_state_language": ["Life Lab", "Start an experiment"]}, "add-account": {"expected_primary_result": "No provider connection exists; manual import remains available.", "expected_safe_state_language": ["Add account", "You can always import files yourself."]}, "data-home": {"expected_evidence_classification": "verified-local", "expected_currentness": "current", "expected_primary_result": "Fresh 0009 data home is ready.", "expected_next_action": "Close without writing or create a verified backup."}, "diagnostics": {"expected_evidence_classification": "sanitized-health", "expected_currentness": "current"}}
     },
     "loading": {
       "id": "loading",
@@ -435,7 +435,7 @@
       "reconciliations": [{"id": "large-cash-flow", "result": "net_cash_flow", "terms": ["money_in", "money_out"], "operators": ["-"]}, {"id": "large-net-worth", "result": "net_worth", "terms": ["assets", "debts"], "operators": ["-"]}],
       "expected_provenance": ["large-history-generator-v1", "fixed-month-index"],
       "authority_refs": ["AUTH-LARGE-HISTORY", "AUTH-RELEASE-MATRIX"],
-      "combination_defaults": {"expected_evidence_classification": "observed", "expected_currentness": "current", "expected_primary_result": "The bounded large history remains ordered, disclosed progressively, and fully local.", "expected_next_action": "Inspect default summary rows, then deliberately reveal older evidence.", "expected_safe_state_language": ["Show older evidence"], "expected_accessible_status": "settled", "authority_refs": ["AUTH-LARGE-HISTORY"]},
+      "combination_defaults": {"expected_evidence_classification": "observed", "expected_currentness": "current", "expected_primary_result": "The bounded large history remains ordered, disclosed progressively, and fully local.", "expected_next_action": "Inspect default summary rows, then deliberately reveal older evidence.", "expected_safe_state_language": ["Show older records"], "expected_accessible_status": "settled", "authority_refs": ["AUTH-LARGE-HISTORY"]},
       "route_overrides": {"activity": {"expected_stable_response_fields": {"transaction_count": 960, "default_visible_rows": 5, "ordering": "date-descending-then-id-descending"}}, "income": {"expected_stable_response_fields": {"payroll_count": 68}}, "overview": {"expected_stable_response_fields": {"chart_point_count": 32, "default_visible_rows": 5}}, "reports": {"expected_stable_response_fields": {"expected_page_count": 4, "generation_requires_explicit_action": true}}}
     },
     "negative_recurring_cash_flow": {

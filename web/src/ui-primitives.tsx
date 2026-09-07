@@ -1,10 +1,11 @@
+import { displayLabel } from "./presentation";
 import type { ReactNode } from "react";
 
 import { currencyExact, shortDate } from "./format";
 import type { AccountActivity, AccountsDashboard } from "./types";
 
 export function StatusPill({ status }: { status: string }) {
-  return <span className={`status status-${status}`}>{status.replaceAll("_", " ")}</span>;
+  return <span className={`status status-${status}`}>{displayLabel(status)}</span>;
 }
 
 export function EmptyState({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
@@ -16,7 +17,7 @@ export function MetricCard({ label, value, note, tone }: { label: string; value:
 }
 
 export const roleLabel = (role: string) =>
-  role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  displayLabel(role);
 
 export const activityPeriod = (data: AccountsDashboard) => {
   if (!data.activity_period.start || !data.activity_period.end) return "Imported activity";

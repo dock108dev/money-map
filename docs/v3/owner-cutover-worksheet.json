@@ -13,7 +13,46 @@
   },
   "engineering": {
     "schema": "0009_goal_persistence",
-    "bounded_owner_beta_qualification": null,
+    "bounded_owner_beta_qualification": {
+      "source_commit": "997a42c6c92e18d292c80e05a62eb759c685e54b",
+      "candidate": "owner-beta-997a42c-20260906a",
+      "dmg_sha256": "bda0a4026db6b2c5eee027766960266fa888034ee109999a6e2cb89347f118af",
+      "signed_app_sha256": "6b102cc5b149c57e1eac8414103dedd9fdfb39a428d6e8161514f77c3c714c1d",
+      "date": "2026-09-06",
+      "release_state": "candidate_not_accepted",
+      "synthetic_beta_verdict": "PASS",
+      "reason": "Required engineering checks, owner synthetic walkthrough and cleanup passed for this exact candidate.",
+      "headless": "PASS; reused byte-identical tracked source and locks: 557 Python, 225 web, 44 native tests; 7 fresh timeout tests passed",
+      "hosted_ci": "PASS",
+      "hosted_codeql": "PASS",
+      "signed_build": "PASS",
+      "two_cycle_installed_smoke": "PASS",
+      "owner_walkthrough": "PASS",
+      "owner_verdict": "pass",
+      "coaching_provided": [],
+      "setup_assistance": "Engineer prepared disposable synthetic fixture and launched the verified installed artifact.",
+      "cleanup": "PASS",
+      "ready_state_launches": 3,
+      "known_defects": [
+        {
+          "class": "diagnostics_internal_terminology_in_owner_ui",
+          "severity": "nonblocking_usability",
+          "owner_feedback": "all fine. Little too many variable names and like direct copies of db data or names or whatever instead of plain english though",
+          "follow_up": "Use plain-English diagnostic labels and status descriptions; retain detailed identifiers in exported diagnostics or optional technical details."
+        }
+      ],
+      "not_run": [
+        "optional restored-copy drill",
+        "second-build reproducibility comparison",
+        "optional native matrices and soak campaigns",
+        "real-data cutover",
+        "final release acceptance"
+      ],
+      "unrun_required_synthetic_checks": [],
+      "scope": "real-data cutover deferred by owner for another night",
+      "final_acceptance_pending": true,
+      "evidence_directory": ".slice8-evidence/owner-beta-997a42c-20260906a-session"
+    },
     "short_owner_synthetic_walkthrough": {
       "result": "pass",
       "owner_result": "pass",

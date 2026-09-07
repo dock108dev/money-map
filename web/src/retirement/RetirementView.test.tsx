@@ -53,11 +53,11 @@ describe("Retirement", () => {
     expect(await screen.findByRole("heading", { name: "Retirement" })).toBeInTheDocument();
     expect(screen.getByText("Test when work can become optional.")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Funded through the plan" })).toBeInTheDocument();
-    expect(screen.getAllByText("Operational goals excluded")).toHaveLength(1);
+    expect(screen.getAllByText("Everyday goals not included")).toHaveLength(1);
     expect(screen.getByRole("option", { name: "Do not include a goal" })).toBeInTheDocument();
     expect(screen.getByText("Accessible at work stop")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /three deterministic paths/ })).toBeInTheDocument();
-    const assumptions = screen.getByText("Assumptions and starting evidence").closest("details");
+    const assumptions = screen.getByText("Assumptions and starting amounts").closest("details");
     expect(assumptions).not.toHaveAttribute("open");
     expect(screen.queryByText("See when work can become optional under explicit assumptions.")).not.toBeInTheDocument();
     expect(screen.queryByText(/Compound sprint/)).not.toBeInTheDocument();
@@ -94,7 +94,7 @@ describe("Retirement", () => {
     await screen.findByRole("heading", { name: "Funded through the plan" });
     fireEvent.change(screen.getByLabelText("Operational goal inclusion"), { target: { value: goalProgram.goal_program_id } });
     fireEvent.click(screen.getByRole("button", { name: "Run projection" }));
-    expect(await screen.findByText(`${goalProgram.name} · immutable goal snapshot`)).toBeInTheDocument();
+    expect(await screen.findByText(`${goalProgram.name} · saved copy of this goal`)).toBeInTheDocument();
     const projectCall = [...fetch.mock.calls].reverse().find(([input]) => String(input) === "/api/v2/retirement/project");
     expect(projectCall?.[1]?.body).toContain(goalProgram.goal_program_id);
     fireEvent.click(screen.getByRole("button", { name: "Table" }));
@@ -109,15 +109,15 @@ describe("Retirement", () => {
     await screen.findByRole("heading", { name: "Funded through the plan" });
     const before = fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/retirement/project").length;
     fireEvent.click(screen.getByRole("button", { name: "Save snapshot" }));
-    fireEvent.change(screen.getByLabelText("Snapshot name"), { target: { value: "Owner run" } });
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Save Retirement snapshot" })).getByRole("button", { name: "Save snapshot" }));
+    fireEvent.change(screen.getByLabelText("Saved result name"), { target: { value: "Owner run" } });
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Save retirement result" })).getByRole("button", { name: "Save snapshot" }));
     expect(await screen.findByText("Retirement snapshot saved.")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Retirement snapshot evidence"));
+    fireEvent.click(screen.getByText("Saved retirement results"));
     fireEvent.click(screen.getByRole("button", { name: /Age 43 middle/ }));
     expect(await screen.findByRole("heading", { name: "Age 43 middle" })).toBeInTheDocument();
-    expect(screen.getByText(/Stored snapshot · original result/)).toBeInTheDocument();
+    expect(screen.getByText(/Saved result · original calculation/)).toBeInTheDocument();
     expect(document.querySelector(".retirement-stored-evidence")).toHaveTextContent("Funded through the plan");
-    expect(document.querySelector(".retirement-stored-evidence")).toHaveTextContent("End spendable assets$410,000");
+    expect(document.querySelector(".retirement-stored-evidence")).toHaveTextContent("Money remaining at plan end$410,000");
     expect(fetch.mock.calls.filter(([input]) => String(input) === "/api/v2/retirement/project")).toHaveLength(before);
   });
 
@@ -131,7 +131,7 @@ describe("Retirement", () => {
     const error = await within(dialog).findByRole("alert");
     expect(error).toHaveTextContent("Retirement profile changed");
     expect(within(dialog).getByRole("form", { name: "Retirement profile assumptions" })).toHaveAttribute("aria-describedby", error.id);
-    fireEvent.click(screen.getByText("Assumptions and starting evidence"));
+    fireEvent.click(screen.getByText("Assumptions and starting amounts"));
     await waitFor(() => expect(screen.getAllByText("Unavailable").length).toBeGreaterThanOrEqual(2));
   });
 
@@ -145,12 +145,12 @@ describe("Retirement", () => {
     vi.stubGlobal("fetch", retirementFetch({ snapshots }));
     render(<RetirementView />);
     await screen.findByRole("heading", { name: "Funded through the plan" });
-    fireEvent.click(screen.getByText("Retirement snapshot evidence"));
+    fireEvent.click(screen.getByText("Saved retirement results"));
     expect(document.querySelectorAll(".retirement-snapshot-list > button")).toHaveLength(3);
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved Retirement evidence" }), { target: { value: "Far future" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved retirement results" }), { target: { value: "Far future" } });
     expect(screen.getByRole("button", { name: /Far future owner case/ })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved Retirement evidence" }), { target: { value: "missing" } });
-    expect(screen.getByText("No saved Retirement evidence matches this search.")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved retirement results" }), { target: { value: "missing" } });
+    expect(screen.getByText("No saved retirement results match this search.")).toBeInTheDocument();
   });
 
   it("enters the assumptions sheet, traps focus, closes on Escape, and returns focus", async () => {
@@ -172,12 +172,12 @@ describe("Retirement", () => {
     vi.stubGlobal("fetch", retirementFetch());
     render(<RetirementView />);
     await screen.findByRole("heading", { name: "Funded through the plan" });
-    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print summary" }));
     expect(print).toHaveBeenCalledOnce();
     expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Retirement evidence · 2026-08-10");
     expect(document.querySelector(".retirement-verdict .print-only")).toHaveTextContent(`Run fingerprint: ${"d".repeat(64)}`);
     expect(document.querySelector(".retirement-snapshot-list .print-only")).toHaveTextContent(`Fingerprint: ${retirementSnapshot.source_fingerprint}`);
-    expect(screen.getByText("Assumptions and starting evidence").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("Assumptions and starting amounts").closest("details")).not.toHaveAttribute("open");
   });
 
   it("keeps the exposed earlier gap and $1.17M late-life balance together", async () => {

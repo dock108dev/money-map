@@ -330,7 +330,7 @@ describe("Cash Flow default surface", () => {
   it("keeps exact totals, exclusions, coverage, freshness, warnings, and rows in one disclosure", async () => {
     vi.stubGlobal("fetch", workingFetch());
     renderView();
-    const evidence = await screen.findByText("Cash Flow evidence");
+    const evidence = await screen.findByText("Cash Flow details");
     const details = evidence.closest("details")!;
     expect(details).toHaveTextContent("2026-06-15 through 2026-08-11, inclusive");
     expect(details).toHaveTextContent("$7,200.00");
@@ -343,7 +343,7 @@ describe("Cash Flow default surface", () => {
     const current = workingFetch();
     vi.stubGlobal("fetch", current);
     const view = renderView();
-    expect(await screen.findByText(/Evidence current as of/)).toHaveTextContent("complete coverage");
+    expect(await screen.findByText(/Records: Up to date as of/)).toHaveTextContent("Complete coverage");
     view.unmount();
     const stale = cashFlowWith((value) => {
       value.freshness.state = "stale";
@@ -351,7 +351,7 @@ describe("Cash Flow default surface", () => {
     });
     vi.stubGlobal("fetch", workingFetch(stale));
     const staleView = renderView();
-    expect(await screen.findByText(/Evidence stale as of/)).toBeInTheDocument();
+    expect(await screen.findByText(/Records: Needs an update as of/)).toBeInTheDocument();
     staleView.unmount();
     const incomplete = cashFlowWith((value) => {
       value.coverage.completeness = "incomplete";
@@ -360,7 +360,7 @@ describe("Cash Flow default surface", () => {
     });
     vi.stubGlobal("fetch", workingFetch(incomplete));
     renderView();
-    expect(await screen.findByText(/incomplete coverage/)).toBeInTheDocument();
+    expect(await screen.findByText(/Some records are missing/)).toBeInTheDocument();
     expect(document.querySelector(".cash-flow-evidence")).toHaveTextContent("Synthetic opening boundary is incomplete");
   });
 
@@ -391,7 +391,7 @@ describe("Cash Flow default surface", () => {
     expect(document.querySelector('[data-responsive-surface="cash-flow"]')).toBeInTheDocument();
     expect(document.querySelector('[data-print-evidence="cash-flow"]')).toBeInTheDocument();
     expect(document.querySelector(".print-evidence-header")).toHaveTextContent("2026-06-15 through 2026-08-11");
-    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print summary" }));
     expect(print).toHaveBeenCalledOnce();
   });
 

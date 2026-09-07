@@ -1,3 +1,4 @@
+import { displayLabel, displayMessage } from "../presentation";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react";
 
 import { loadPrimaryGoal } from "../goals/api";
@@ -66,31 +67,31 @@ function LabSnapshotEvidence({
 
   return (
     <details className="panel lab-snapshot-evidence evidence-disclosure">
-      <summary>Experiment and legacy evidence</summary>
+      <summary>Saved experiments and earlier plans</summary>
       <div className="snapshot-tools print-hidden">
-        <label htmlFor="lab-snapshot-search">Search saved Lab evidence</label>
+        <label htmlFor="lab-snapshot-search">Search saved experiments</label>
         <input id="lab-snapshot-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search names or context" />
       </div>
       <div className="scenario-list" data-default-visible-count="3">
-        {rows.length === 0 ? <p>{normalized ? "No saved Lab evidence matches this search." : "No stored Lab evidence yet."}</p> : visible.map((snapshot) => (
+        {rows.length === 0 ? <p>{normalized ? "No saved experiments match this search." : "No saved experiments yet."}</p> : visible.map((snapshot) => (
           <button key={snapshot.id} onClick={() => void openLabSnapshot(snapshot.id).then(onOpen)}>
             <span>
               <strong>{snapshot.name}</strong>
               <small>{snapshot.context_label} · {new Date(snapshot.created_at).toLocaleDateString()}</small>
               <code className="print-only" aria-hidden="true">Fingerprint: {snapshot.source_fingerprint}</code>
             </span>
-            <em>{snapshot.legacy ? "Legacy combined scenario" : snapshot.stale ? "Inputs changed" : "Open stored evidence"}</em>
+            <em>{snapshot.legacy ? "Earlier combined plan" : snapshot.stale ? "Inputs changed" : "Open saved result"}</em>
           </button>
         ))}
       </div>
-      {!showOlder && !normalized && rows.length > 3 && <button className="secondary-button show-older-button print-hidden" onClick={() => setShowOlder(true)}>Show older evidence</button>}
+      {!showOlder && !normalized && rows.length > 3 && <button className="secondary-button show-older-button print-hidden" onClick={() => setShowOlder(true)}>Show older records</button>}
       {openedSnapshot && (
         <article className="lab-stored-evidence">
           <h3>{openedSnapshot.name}</h3>
-          <p>Stored snapshot · original evidence with {openedSnapshot.periods.length} monthly rows.</p>
-          <dl><div><dt>Context</dt><dd>{openedSnapshot.context_label}</dd></div><div><dt>Status</dt><dd>{openedSnapshot.status}</dd></div></dl>
+          <p>Stored snapshot · original evidence with {openedSnapshot.periods.length} months.</p>
+          <dl><div><dt>Context</dt><dd>{openedSnapshot.context_label}</dd></div><div><dt>Status</dt><dd>{displayLabel(openedSnapshot.status)}</dd></div></dl>
           {openedSnapshot.warnings.length > 0 && <ul>{openedSnapshot.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-          <code>{openedSnapshot.source_fingerprint}</code>
+          <details><summary>Technical reference</summary><code>{openedSnapshot.source_fingerprint}</code></details>
         </article>
       )}
     </details>
@@ -126,8 +127,8 @@ function MissionDialog({
         <label>Mission capital<input data-autofocus aria-label="Mission capital" type="number" min="0" step="0.01" value={String(mission.target_amount)} onChange={(event) => update("target_amount", event.target.value)} /></label>
         <label>Mission deadline<input aria-label="Mission deadline" type="date" value={String(mission.target_date).slice(0, 10)} onChange={(event) => update("target_date", event.target.value)} /></label>
         <label>Work-optional age<input aria-label="Work-optional age" type="number" min="18" max="110" value={Number(mission.selected_age)} onChange={(event) => update("selected_age", Number(event.target.value))} /></label>
-        <label>Deterministic path<select aria-label="Deterministic path" value={String(mission.path)} onChange={(event) => update("path", event.target.value)}><option value="middle">Middle</option><option value="rough">Rough</option><option value="early_crash">Early crash</option></select></label>
-        {error && <p id="lab-mission-error" className="lab-promotion-error" role="alert">{error}</p>}
+        <label>Market scenario<select aria-label="Market scenario" value={String(mission.path)} onChange={(event) => update("path", event.target.value)}><option value="middle">Middle</option><option value="rough">Rough</option><option value="early_crash">Early crash</option></select></label>
+        {error && <p id="lab-mission-error" className="lab-promotion-error" role="alert">{displayMessage(error)}</p>}
         <div className="focused-form-actions"><button type="button" className="secondary-button" onClick={onCancel}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? "Recalculating…" : "Save experiment"}</button></div>
       </form>
     </FocusedDialog>
@@ -167,18 +168,18 @@ function PromotionWorkflowDialog({
     ? [["goal_target", "Goal target"], ["reserved_for_goal", "Reserved for goal"], ["protected_cash_floor", "Protected cash floor"]] as const
     : [["retirement_essential_monthly_spend", "Essential monthly spend"], ["retirement_flexible_monthly_spend", "Flexible monthly spend"]] as const;
   return (
-    <FocusedDialog title="Promote a value" description="Preview one supported value before it crosses into Goals or Retirement." returnFocusRef={returnFocusRef} onClose={onCancel} tone="boundary" className="lab-promotion-dialog">
+    <FocusedDialog title="Apply a value" description="Review a change before applying it to Goals or Retirement." returnFocusRef={returnFocusRef} onClose={onCancel} tone="boundary" className="lab-promotion-dialog">
       <div className="lab-focused-form" aria-describedby={error ? "lab-promotion-workflow-error" : undefined}>
-        <label>Target surface<select data-autofocus aria-label="Promotion target surface" value={promotionSurface} onChange={(event) => onSurfaceChange(event.target.value as PromotionTarget)}><option value="goals">Goals</option><option value="retirement">Retirement</option></select></label>
-        <label>Stored value<select aria-label="Promotion stored field" value={promotionField} onChange={(event) => onFieldChange(event.target.value as PromotionField)}>{fields.map(([field, label]) => <option key={field} value={field}>{label}</option>)}</select></label>
-        <label>New value<input aria-label="Promotion exact value" type="number" min="0" step="0.01" value={promotionValue} onChange={(event) => onValueChange(event.target.value)} /></label>
+        <label>Update in<select data-autofocus aria-label="Update in" value={promotionSurface} onChange={(event) => onSurfaceChange(event.target.value as PromotionTarget)}><option value="goals">Goals</option><option value="retirement">Retirement</option></select></label>
+        <label>Value to change<select aria-label="Value to change" value={promotionField} onChange={(event) => onFieldChange(event.target.value as PromotionField)}>{fields.map(([field, label]) => <option key={field} value={field}>{label}</option>)}</select></label>
+        <label>New value<input aria-label="New amount" type="number" min="0" step="0.01" value={promotionValue} onChange={(event) => onValueChange(event.target.value)} /></label>
         {!preview && <button className="secondary-button preview-button" disabled={busy} onClick={onPreview}>{busy ? "Preparing…" : "Preview change"}</button>}
-        {error && <p id="lab-promotion-workflow-error" className="lab-promotion-error" role="alert">{error}</p>}
+        {error && <p id="lab-promotion-workflow-error" className="lab-promotion-error" role="alert">{displayMessage(error)}</p>}
         {preview && (
           <div className="lab-preview">
             <strong>Review the exact change</strong>
-            <table><thead><tr><th>Stored field</th><th>Before</th><th>After</th></tr></thead><tbody>{preview.changes.map((change) => <tr key={change.field}><td><code>{change.stored_target_field}</code></td><td>{currency(change.before.amount)}</td><td>{currency(change.after.amount)}</td></tr>)}</tbody></table>
-            <details><summary>Preview evidence</summary><code>{preview.target_stale_write_token}</code></details>
+            <table><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>{preview.changes.map((change) => <tr key={change.field}><td>{displayLabel(change.field)}</td><td>{currency(change.before.amount)}</td><td>{currency(change.after.amount)}</td></tr>)}</tbody></table>
+            <details><summary>Technical reference</summary><code>{preview.target_stale_write_token}</code></details>
             <div className="boundary-confirmation"><p>This confirmation changes only the value shown above.</p><button className="primary-button" disabled={busy} onClick={onConfirm}>{busy ? "Confirming…" : "Confirm promotion"}</button></div>
           </div>
         )}
@@ -269,7 +270,7 @@ export default function LifeLabView({ requiresProfile = false }: { requiresProfi
     setBusy(true);
     setSnapshotError("");
     try {
-      const name = snapshotName.trim() || `${result.seed_kind.replace("_", " ")} experiment`;
+      const name = snapshotName.trim() || `${displayLabel(result.seed_kind)} experiment`;
       await saveLabSnapshot(name, result);
       setSnapshots(recentFirst(await loadLabSnapshots()));
       setSnapshotName("");
@@ -345,9 +346,9 @@ export default function LifeLabView({ requiresProfile = false }: { requiresProfi
   if (!seed || !result || !mission) {
     return (
       <div className="view-stack life-lab isolated-lab" data-copy-budget="lab-seed-chooser">
-        <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1 data-prose>Life Lab</h1><p data-prose>Reverse-solve an extreme or alternative path.</p></div><button className="secondary-button print-hidden" onClick={() => window.print()}>Print evidence</button></header>
+        <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1 data-prose>Life Lab</h1><p data-prose>Reverse-solve an extreme or alternative path.</p></div><button className="secondary-button print-hidden" onClick={() => window.print()}>Print summary</button></header>
         <p className="print-only print-evidence-header" aria-hidden="true">Life Lab seed evidence · {new Date().toLocaleDateString()}</p>
-        {error && <div className="error-banner" role="alert">{error}</div>}
+        {error && <div className="error-banner" role="alert">{displayMessage(error)}</div>}
         <section className="panel lab-seed-chooser" aria-labelledby="lab-seed-heading">
           <span className="eyebrow">Choose a source</span>
           <h2 id="lab-seed-heading" data-prose>Start an experiment</h2>
@@ -370,30 +371,30 @@ export default function LifeLabView({ requiresProfile = false }: { requiresProfi
 
   return (
     <div className="view-stack life-lab isolated-lab" data-copy-budget="lab-active-summary">
-      <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1 data-prose>Life Lab</h1><p data-prose>Reverse-solve one alternative path.</p></div><div className="surface-actions print-hidden"><button className="secondary-button" onClick={() => { setSeed(null); setResult(null); setPreview(null); }}>Choose another seed</button><button className="secondary-button" onClick={() => window.print()}>Print evidence</button></div></header>
+      <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1 data-prose>Life Lab</h1><p data-prose>Reverse-solve one alternative path.</p></div><div className="surface-actions print-hidden"><button className="secondary-button" onClick={() => { setSeed(null); setResult(null); setPreview(null); }}>Choose another seed</button><button className="secondary-button" onClick={() => window.print()}>Print summary</button></div></header>
       <p className="print-only print-evidence-header" aria-hidden="true">Life Lab evidence · {projection?.as_of ?? "Date unavailable"}</p>
-      {error && <div className="error-banner" role="alert">{error}</div>}
+      {error && <div className="error-banner" role="alert">{displayMessage(error)}</div>}
       {message && <div className="life-message" role="status">{message}</div>}
 
       <section className="panel lab-source-evidence" aria-labelledby="lab-source-heading">
         <div><span className="lab-isolation-status" data-prose>Isolated experiment</span><h2 id="lab-source-heading">{seed.source_label ?? "Blank experiment"}</h2></div>
-        <details><summary>Source evidence</summary><p>{seed.seed_kind === "blank" ? "No Goal or Retirement money was copied." : "The source was copied once; later edits do not alter this experiment."}</p><dl><div><dt>Source fingerprint</dt><dd><code>{seed.source_fingerprint ?? "No copied source"}</code></dd></div><div><dt>Experiment fingerprint</dt><dd><code>{result.experiment_fingerprint}</code></dd></div></dl></details>
+        <details><summary>Source details</summary><p>{seed.seed_kind === "blank" ? "No Goal or Retirement money was copied." : "The source was copied once; later edits do not alter this experiment."}</p><dl><div><dt>Source reference</dt><dd><code>{seed.source_fingerprint ?? "No copied source"}</code></dd></div><div><dt>Experiment reference</dt><dd><code>{result.experiment_fingerprint}</code></dd></div></dl></details>
       </section>
 
       {selected && projection && (
         <>
           <section className="panel lab-mission-summary lab-primary-result" aria-labelledby="lab-mission-heading">
-            <header><div><span className="eyebrow">Experiment result</span><h2 id="lab-mission-heading">{currency(mission.target_amount)} by {missionTargetDate}</h2><p data-prose>{selected.status.replaceAll("_", " ")}. Deterministic arithmetic, not a probability or recommendation.</p>{Number(mission.target_amount) > 0 && missionMonths > 0 && <p className="lab-summary-convention">Life Lab route convention · {missionMonths} whole-month intervals</p>}</div><button ref={missionButtonRef} className="secondary-button print-hidden" onClick={() => setMissionOpen(true)}>Edit experiment</button></header>
-            <dl><div><dt>Work-optional age</dt><dd>{mission.selected_age}</dd></div><div><dt>Path</dt><dd>{String(mission.path).replaceAll("_", " ")}</dd></div></dl>
+            <header><div><span className="eyebrow">Experiment result</span><h2 id="lab-mission-heading">{currency(mission.target_amount)} by {missionTargetDate}</h2><p data-prose>{displayLabel(selected.status)}. A calculation using your assumptions, not a prediction or recommendation.</p>{Number(mission.target_amount) > 0 && missionMonths > 0 && <p className="lab-summary-convention">Calculation period · {missionMonths} whole-month intervals</p>}</div><button ref={missionButtonRef} className="secondary-button print-hidden" onClick={() => setMissionOpen(true)}>Edit experiment</button></header>
+            <dl><div><dt>Work-optional age</dt><dd>{mission.selected_age}</dd></div><div><dt>Path</dt><dd>{displayLabel(mission.path)}</dd></div></dl>
           </section>
-          <details className="panel lab-paths evidence-disclosure"><summary>Route formulas and time convention</summary><DriveCalculator projection={projection} path={selected} goals={projection.goals} startingPoint={projection.starting_point} seedKind={seed.seed_kind} seededGoalLabel={seed.source_label} selectionContext={routeSelectionContext} /></details>
+          <details className="panel lab-paths evidence-disclosure"><summary>How this is calculated</summary><DriveCalculator projection={projection} path={selected} goals={projection.goals} startingPoint={projection.starting_point} seedKind={seed.seed_kind} seededGoalLabel={seed.source_label} selectionContext={routeSelectionContext} /></details>
         </>
       )}
 
-      <details className="panel income-context-panel evidence-disclosure"><summary>{projection?.benchmarks.state_name ?? "State"} income context and formulas</summary>{projection?.benchmarks.available ? <div className="benchmark-list">{benchmarkRows.map(([key, row]) => <div key={key}><span>{key.replaceAll("_", " ")}</span><strong>{currency(row.normalized_amount)}</strong></div>)}</div> : <div className="life-empty">Benchmark unavailable for this experiment.</div>}<p className="benchmark-note">Income thresholds are context only. Speculative outputs remain Lab-only.</p></details>
+      <details className="panel income-context-panel evidence-disclosure"><summary>{projection?.benchmarks.state_name ?? "State"} income context and formulas</summary>{projection?.benchmarks.available ? <div className="benchmark-list">{benchmarkRows.map(([key, row]) => <div key={key}><span>{displayLabel(key)}</span><strong>{currency(row.normalized_amount)}</strong></div>)}</div> : <div className="life-empty">Benchmark unavailable for this experiment.</div>}<p className="benchmark-note">Income thresholds are context only. Speculative outputs remain Lab-only.</p></details>
 
       <div className="lab-primary-actions print-hidden">
-        <button ref={promotionButtonRef} className="primary-button boundary-action" onClick={() => { setPromotionOpen(true); setPromotionError(""); }}>Promote a value</button>
+        <button ref={promotionButtonRef} className="primary-button boundary-action" onClick={() => { setPromotionOpen(true); setPromotionError(""); }}>Apply a value</button>
         <button ref={snapshotButtonRef} className="secondary-button" onClick={() => setSnapshotOpen(true)}>Save experiment</button>
       </div>
       {applied && <p className="lab-applied" role="status">Promotion confirmed. Observation: {applied.goal_observation?.status ?? "not required"}.</p>}
@@ -401,7 +402,7 @@ export default function LifeLabView({ requiresProfile = false }: { requiresProfi
 
       {missionOpen && <MissionDialog result={result} busy={busy} error={missionError} returnFocusRef={missionButtonRef} onSave={(draft) => void saveMission(draft)} onCancel={() => { setMissionOpen(false); setMissionError(""); }} />}
       {promotionOpen && <PromotionWorkflowDialog promotionSurface={promotionSurface} promotionField={promotionField} promotionValue={promotionValue} preview={preview} busy={busy} error={promotionError} returnFocusRef={promotionButtonRef} onSurfaceChange={(surface) => { setPromotionSurface(surface); setPromotionField(surface === "goals" ? "goal_target" : "retirement_essential_monthly_spend"); setPreview(null); }} onFieldChange={(field) => { setPromotionField(field); setPreview(null); }} onValueChange={(value) => { setPromotionValue(value); setPreview(null); }} onPreview={() => void preparePreview()} onConfirm={() => void confirmPromotion()} onCancel={() => { setPromotionOpen(false); setPromotionError(""); setPreview(null); }} />}
-      {snapshotOpen && <FocusedDialog title="Save experiment" description="Name this result for later evidence review." returnFocusRef={snapshotButtonRef} onClose={() => { setSnapshotOpen(false); setSnapshotError(""); }} className="snapshot-dialog"><form onSubmit={(event) => { event.preventDefault(); void saveExperiment(); }} aria-describedby={snapshotError ? "lab-snapshot-error" : undefined}><label htmlFor="lab-snapshot-name">Snapshot name</label><input data-autofocus id="lab-snapshot-name" value={snapshotName} onChange={(event) => setSnapshotName(event.target.value)} placeholder={`${result.seed_kind.replace("_", " ")} experiment`} maxLength={120} />{snapshotError && <p id="lab-snapshot-error" className="lab-promotion-error" role="alert">{snapshotError}</p>}<div className="focused-form-actions"><button type="button" className="secondary-button" onClick={() => setSnapshotOpen(false)}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save experiment"}</button></div></form></FocusedDialog>}
+      {snapshotOpen && <FocusedDialog title="Save experiment" description="Name this result so you can review it later." returnFocusRef={snapshotButtonRef} onClose={() => { setSnapshotOpen(false); setSnapshotError(""); }} className="snapshot-dialog"><form onSubmit={(event) => { event.preventDefault(); void saveExperiment(); }} aria-describedby={snapshotError ? "lab-snapshot-error" : undefined}><label htmlFor="lab-snapshot-name">Saved result name</label><input data-autofocus id="lab-snapshot-name" value={snapshotName} onChange={(event) => setSnapshotName(event.target.value)} placeholder={`${displayLabel(result.seed_kind)} experiment`} maxLength={120} />{snapshotError && <p id="lab-snapshot-error" className="lab-promotion-error" role="alert">{displayMessage(snapshotError)}</p>}<div className="focused-form-actions"><button type="button" className="secondary-button" onClick={() => setSnapshotOpen(false)}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save experiment"}</button></div></form></FocusedDialog>}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { displayLabel, displayMessage } from "../presentation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -205,7 +206,7 @@ function CashFlowChart({ result }: { result: CashFlowPeriodResult }) {
         preserveAspectRatio="none"
       >
         <title id="cash-flow-chart-title">Monthly money in compared with money out</title>
-        <desc id="cash-flow-chart-description">{description} Exact monthly values follow in the Cash Flow evidence table.</desc>
+        <desc id="cash-flow-chart-description">{description} Exact monthly values follow in the Cash Flow details table.</desc>
         <defs>
           <pattern id="cash-flow-out-pattern" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width="7" height="7" fill="#d9b18e" />
@@ -376,7 +377,7 @@ export default function CashFlowView({
           <div className="cash-flow-title-actions">
             {loading && <span className="cash-flow-busy" role="status">Updating Cash Flow…</span>}
             <button type="button" className="cash-flow-print" onClick={() => window.print()}>
-              Print evidence
+              Print summary
             </button>
           </div>
         </header>
@@ -407,7 +408,7 @@ export default function CashFlowView({
 
         {error && (
           <div className="cash-flow-error" role="alert">
-            <span>{error}</span>
+            <span>{displayMessage(error)}</span>
             <button type="button" onClick={() => void requestPeriod(lastAttempt)}>Retry</button>
           </div>
         )}
@@ -432,13 +433,13 @@ export default function CashFlowView({
                   : "Current monthly pattern unavailable"}
               </strong>
               <span className={`freshness freshness-${result.freshness.state}`}>
-                Evidence {result.freshness.state} as of {freshnessTime(result.freshness.observed_at)} · {result.coverage.completeness} coverage
+                Records: {displayLabel(result.freshness.state)} as of {freshnessTime(result.freshness.observed_at)} · {result.coverage.completeness === "complete" ? "Complete coverage" : "Some records are missing"}
               </span>
             </div>
             <GoalGapCard result={goalGap} error={goalGapError} onOpenGoals={onShowGoals} />
           </>
         ) : !loading ? (
-          <div className="cash-flow-empty" role="status">No Cash Flow result is available. Use Retry after activity evidence is imported.</div>
+          <div className="cash-flow-empty" role="status">No Cash Flow result is available. Use Retry after transactions are imported.</div>
         ) : null}
         <span className="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</span>
       </section>
@@ -453,10 +454,10 @@ export default function CashFlowView({
           </section>
 
           <p className="print-only print-evidence-header" aria-hidden="true">
-            Cash Flow evidence · {result.period.start_date} through {result.period.end_date} · observed {result.freshness.observed_at}
+            Cash Flow details · {result.period.start_date} through {result.period.end_date} · observed {result.freshness.observed_at}
           </p>
           <details className="cash-flow-evidence" data-print-evidence="cash-flow">
-            <summary>Cash Flow evidence</summary>
+            <summary>Cash Flow details</summary>
             <div className="cash-flow-evidence-body">
               <dl className="cash-flow-evidence-grid">
                 <div><dt>Selected boundaries</dt><dd>{result.period.start_date} through {result.period.end_date}, inclusive</dd></div>
@@ -468,15 +469,15 @@ export default function CashFlowView({
                 <div><dt>Matched owned transfers</dt><dd>{formatExactMoney(availableAmount(result.transfers_excluded.matched_owned_account_amount, "matched transfers"))} · {result.transfers_excluded.matched_owned_account_count} transactions</dd></div>
                 <div><dt>Internal transfers</dt><dd>{formatExactMoney(availableAmount(result.transfers_excluded.internal_transfer_amount, "internal transfers"))} · {result.transfers_excluded.internal_transfer_count} transactions</dd></div>
                 <div><dt>Coverage</dt><dd>{result.coverage.completeness} · {result.coverage.coverage_start} through {result.coverage.coverage_end}</dd></div>
-                <div><dt>Incomplete reasons</dt><dd>{result.coverage.incomplete_reasons.length ? result.coverage.incomplete_reasons.join("; ") : "None"}</dd></div>
+                <div><dt>Missing data</dt><dd>{result.coverage.incomplete_reasons.length ? result.coverage.incomplete_reasons.map(displayMessage).join("; ") : "None"}</dd></div>
                 <div><dt>Freshness time</dt><dd>{result.freshness.observed_at}</dd></div>
-                <div><dt>Stale sources</dt><dd>{result.freshness.stale_sources.length ? result.freshness.stale_sources.join("; ") : "None"}</dd></div>
+                <div><dt>Records needing an update</dt><dd>{result.freshness.stale_sources.length ? result.freshness.stale_sources.map(displayLabel).join("; ") : "None"}</dd></div>
                 <div><dt>Warnings</dt><dd>{[...result.freshness.warnings, ...result.warnings].length ? [...result.freshness.warnings, ...result.warnings].join("; ") : "None"}</dd></div>
                 {pattern.state === "unavailable" && <div><dt>Recurring pattern</dt><dd>{pattern.reason}</dd></div>}
               </dl>
               <div className="cash-flow-table-wrap">
                 <table aria-label="Exact monthly Cash Flow values">
-                  <caption>Exact month-by-month evidence</caption>
+                  <caption>Monthly breakdown</caption>
                   <thead><tr><th>Month</th><th>Coverage</th><th>Transactions</th><th>Money in</th><th>Money out</th><th>Net</th></tr></thead>
                   <tbody>
                     {result.monthly_points.map((point) => (

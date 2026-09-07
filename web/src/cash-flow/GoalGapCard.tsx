@@ -1,3 +1,4 @@
+import { displayMessage } from "../presentation";
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { FocusedDialog } from "../FocusedDialog";
@@ -324,7 +325,7 @@ function GoalGapDialog({
           <p className="goal-gap-draft-total">
             Explicit candidate reductions: {enteredCandidateTotal === null ? "Check entries" : formatCents(enteredCandidateTotal)}
           </p>
-          {error && <p className="goal-gap-preview-error" role="alert">{error}</p>}
+          {error && <p className="goal-gap-preview-error" role="alert">{displayMessage(error)}</p>}
           <div className="goal-gap-dialog-actions">
             <button type="button" className="primary-button" disabled={busy} onClick={() => void recalculate()}>
               {busy ? "Recalculating…" : "Recalculate"}
@@ -357,7 +358,7 @@ function RepeatedOutflowCandidates({
     <details className="repeated-outflow-candidates">
       <summary>Repeated outflow candidates</summary>
       <p>Evidence only—not savings recommendations. Expanding a candidate changes nothing.</p>
-      {error && <p role="status">{error}</p>}
+      {error && <p role="status">{displayMessage(error)}</p>}
       {!result && !error && <p>Loading repeated-outflow evidence…</p>}
       {result?.state === "unavailable" && <p>{result.reason}</p>}
       {result?.state === "empty" && <p>No high-confidence repeated outflows were found.</p>}

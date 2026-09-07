@@ -44,7 +44,7 @@ export function ConnectionsView({
         <div>
           <span className="eyebrow">Plaid</span>
           <h1 data-prose aria-describedby="add-account-promise">Add account</h1>
-          <p id="add-account-promise" data-prose>Manual import stays first-class.</p>
+          <p id="add-account-promise" data-prose>You can always import files yourself.</p>
         </div>
         <strong>{plaid.connections.length} connected</strong>
       </section>
@@ -124,14 +124,14 @@ export function ConnectionsView({
               <div key={batch.id}><span>Batch {batch.id}</span><strong>{batch.imported} imported</strong><small>{batch.duplicates} already current</small></div>
             ))}
           </div>
-          {!showOlderImports && imports.length > 5 && <button className="secondary-button show-older-button" onClick={() => setShowOlderImports(true)}>Show older evidence</button>}
+          {!showOlderImports && imports.length > 5 && <button className="secondary-button show-older-button" onClick={() => setShowOlderImports(true)}>Show older records</button>}
         </section>
       )}
       {!liveReady && (
         <section className="panel plaid-setup" id="plaid-live-setup">
           <div>
             <span className="eyebrow">Plaid setup</span>
-            <h2>Set up production access</h2>
+            <h2>Connect real accounts</h2>
             <p>Your credentials are entered in a private macOS prompt, not this page.</p>
             <a
               className="secondary-button dashboard-link"

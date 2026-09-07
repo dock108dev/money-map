@@ -281,7 +281,7 @@ describe("application states", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Show older evidence" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Show older records" }));
     expect(await screen.findByRole("heading", { name: "Activity" })).toBeVisible();
     expect(screen.getByText("Invented activity 6")).toBeVisible();
   });
@@ -379,7 +379,7 @@ describe("application states", () => {
 
     expect(await screen.findByRole("heading", { name: "The operation paused safely." })).toBeVisible();
     expect(screen.getByRole("button", { name: "Resume" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Roll back" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Return to previous data" })).toBeEnabled();
   });
 
   it("fails closed when private-data readiness is unavailable and retries explicitly", async () => {
@@ -504,7 +504,7 @@ describe("application states", () => {
     );
     render(<App />);
     await waitFor(() => expect(screen.getByText("Money Map could not load.")).toBeInTheDocument());
-    expect(screen.getByText("Database unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Saved data unavailable")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
@@ -639,7 +639,7 @@ describe("application states", () => {
     vi.stubGlobal("fetch", workingFetch(false, 2));
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Add account" })).toBeInTheDocument();
-    expect(screen.getByText("Manual import stays first-class.")).toBeVisible();
+    expect(screen.getByText("You can always import files yourself.")).toBeVisible();
   });
 
   it("preserves sealed Add account copy and zero side effects across installed deep-route reload", async () => {
@@ -650,14 +650,14 @@ describe("application states", () => {
     vi.stubGlobal("fetch", fetch);
     const first = render(<App />);
     const heading = await screen.findByRole("heading", { name: "Add account" });
-    expect(heading).toHaveAccessibleDescription("Manual import stays first-class.");
-    expect(screen.getByText("Manual import stays first-class.")).toBeVisible();
+    expect(heading).toHaveAccessibleDescription("You can always import files yourself.");
+    expect(screen.getByText("You can always import files yourself.")).toBeVisible();
     expect(window.location.hash).toBe("#view=connections");
     first.unmount();
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Add account" })).toHaveAccessibleDescription(
-      "Manual import stays first-class.",
+      "You can always import files yourself.",
     );
     expect(window.location.hash).toBe("#view=connections");
     const applicationCalls = base.mock.calls.map(([input, init]) => ({ url: String(input), method: init?.method ?? "GET" }));
@@ -831,7 +831,7 @@ describe("application states", () => {
     vi.stubGlobal("fetch", workingFetch(false, 2));
     render(<App />);
     await screen.findByRole("heading", { name: "Cash Flow" });
-    const evidence = (await screen.findByText("Cash Flow evidence")).closest("details")!;
+    const evidence = (await screen.findByText("Cash Flow details")).closest("details")!;
     expect(evidence).not.toHaveAttribute("open");
     window.dispatchEvent(new Event("beforeprint"));
     expect(evidence).toHaveAttribute("open");
@@ -958,10 +958,10 @@ describe("application states", () => {
     expect(reportAction).toHaveBeenCalledWith("trailing-12-month", "open");
 
     window.dispatchEvent(new CustomEvent("money-map-menu", { detail: "export-diagnostics" }));
-    expect(await screen.findByRole("dialog", { name: "Sanitized diagnostics" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Diagnostics" })).toBeInTheDocument();
     expect(diagnosticsPreview).toHaveBeenCalledOnce();
-    expect(screen.getByText(/candidate \/ not accepted/)).toBeInTheDocument();
-    expect(screen.getByText(/Financial records, paths, credentials, ports, and filenames are excluded\./)).toBeInTheDocument();
+    expect(screen.getByText("Beta testing · final approval pending")).toBeInTheDocument();
+    expect(screen.getByText(/Financial records, file locations, passwords, and connection details are excluded\./)).toBeInTheDocument();
     expect(setOperationsEnabled).toHaveBeenCalledWith(true);
   });
 });

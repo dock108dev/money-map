@@ -676,16 +676,16 @@ describe("account-first views", () => {
   it("prints dated Overview and Wealth evidence with collapsed detail still present", () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
     const view = render(<OverviewView overview={overview} accounts={accounts} timeline={[]} busy={false} onPeriodChange={vi.fn()} onShowAccounts={vi.fn()} onShowActivity={vi.fn()} onShowIncome={vi.fn()} onShowWealth={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print summary" }));
     expect(print).toHaveBeenCalledOnce();
     expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Overview evidence · Jul 29");
     expect(screen.getByText("Detailed period evidence").closest("details")).not.toHaveAttribute("open");
     view.unmount();
     render(<WealthView data={wealth} />);
-    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print summary" }));
     expect(print).toHaveBeenCalledTimes(2);
     expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Wealth evidence · Aug 3");
-    expect(screen.getByText("Fidelity evidence and methodology").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("Fidelity records and calculations").closest("details")).not.toHaveAttribute("open");
   });
 
   it("shows two SoFi payroll destinations with an exact gross reconciliation", () => {
@@ -790,11 +790,11 @@ describe("account-first views", () => {
         ]}
       />,
     );
-    expect(screen.getByText("account balance")).toBeInTheDocument();
+    expect(screen.getByText("Account balance")).toBeInTheDocument();
     expect(screen.getByText("Account balance does not match its activity.")).toBeInTheDocument();
     expect(screen.getByText("SoFi Personal Loan")).toBeInTheDocument();
     expect(screen.getByText("$2,153.51")).toBeInTheDocument();
-    expect(screen.getByText("account balance").closest(".review-card")).toHaveTextContent("Unexplained difference$2,153.51");
+    expect(screen.getByText("Account balance").closest(".review-card")).toHaveTextContent("Unexplained difference$2,153.51");
     expect(screen.getByText("Compare the statement.")).toBeInTheDocument();
     expect(proseWordCount(document.querySelector('[data-copy-budget="utility-page-heading"]')!)).toBeLessThanOrEqual(COPY_BUDGETS["utility-page-heading"]);
     fireEvent.click(screen.getByRole("button", { name: "Update data" }));
@@ -852,12 +852,12 @@ describe("account-first views", () => {
         onAutoRefreshChange={vi.fn()}
       />,
     );
-    const promise = screen.getByText("Manual import stays first-class.");
+    const promise = screen.getByText("You can always import files yourself.");
     expect(promise).toBeVisible();
     expect(screen.getByRole("heading", { name: "Add account" })).toHaveAccessibleDescription(
-      "Manual import stays first-class.",
+      "You can always import files yourself.",
     );
-    expect(screen.getAllByText("Manual import stays first-class.")).toHaveLength(1);
+    expect(screen.getAllByText("You can always import files yourself.")).toHaveLength(1);
   });
 
   it("keeps manual import enabled without Plaid configuration while provider actions stay gated", () => {
@@ -887,7 +887,7 @@ describe("account-first views", () => {
       />,
     );
     expect(screen.getByRole("heading", { name: "Add account" })).toHaveAccessibleDescription(
-      "Manual import stays first-class.",
+      "You can always import files yourself.",
     );
     expect(screen.getByText("0 connected")).toBeVisible();
     expect(screen.getByRole("button", { name: /Bank, credit or loan/ })).toBeDisabled();
@@ -910,7 +910,7 @@ describe("account-first views", () => {
     }));
     render(<ConnectionsView plaid={plaid} busy={false} message="" onConfigure={vi.fn()} onConnect={vi.fn()} onSync={vi.fn()} onRepair={vi.fn()} onDisconnect={vi.fn()} imports={imports} onImport={vi.fn()} onReport={vi.fn()} onAutoRefreshChange={vi.fn()} />);
     expect(document.querySelectorAll(".import-history-compact > div")).toHaveLength(5);
-    fireEvent.click(screen.getByRole("button", { name: "Show older evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show older records" }));
     expect(document.querySelectorAll(".import-history-compact > div")).toHaveLength(7);
   });
 

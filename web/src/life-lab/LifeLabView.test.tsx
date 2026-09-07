@@ -94,9 +94,9 @@ describe("isolated Life Lab", () => {
     expect(screen.getByRole("button", { name: /Start blank/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Start from current goal/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Start from retirement result/ })).toBeDisabled();
-    fireEvent.click(screen.getByText("Experiment and legacy evidence"));
+    fireEvent.click(screen.getByText("Saved experiments and earlier plans"));
     expect(screen.getByText(/Legacy combined plan · v1.2.1 inputs/)).toBeInTheDocument();
-    expect(screen.getByText("Legacy combined scenario")).toBeInTheDocument();
+    expect(screen.getByText("Earlier combined plan")).toBeInTheDocument();
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/lab/experiments")).toBe(false);
     const budget = document.querySelector('[data-copy-budget="lab-seed-chooser"]');
     expect(budget).not.toBeNull();
@@ -117,9 +117,9 @@ describe("isolated Life Lab", () => {
     expect(screen.getByRole("heading", { name: source })).toBeInTheDocument();
     expect(screen.getByText("Isolated experiment")).toBeInTheDocument();
     if (kind === "current goal") {
-      expect(screen.getByText("Life Lab route convention · 51 whole-month intervals")).toBeInTheDocument();
+      expect(screen.getByText("Calculation period · 51 whole-month intervals")).toBeInTheDocument();
     }
-    fireEvent.click(screen.getByText("Source evidence"));
+    fireEvent.click(screen.getByText("Source details"));
     expect(screen.getByText(copyText)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("goal_mutation=false");
     expect(document.body).not.toHaveTextContent("retirement_mutation=false");
@@ -142,7 +142,7 @@ describe("isolated Life Lab", () => {
     fireEvent.change(within(missionDialog).getByLabelText("Mission capital"), { target: { value: "2000000.00" } });
     fireEvent.click(within(missionDialog).getByRole("button", { name: "Save experiment" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit experiment" })).not.toBeInTheDocument());
-    fireEvent.click(screen.getByText("Route formulas and time convention"));
+    fireEvent.click(screen.getByText("How this is calculated"));
     fireEvent.change(screen.getByLabelText("Mission"), { target: { value: "freedom" } });
     expect(await screen.findByText(/01 · Earn it linearly/)).toBeInTheDocument();
     expect(screen.getByText(/02 · Compound sprint/)).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe("isolated Life Lab", () => {
     expect(screen.getByText(/Arithmetic only; this is not approval, eligibility, advice, or a borrowing action/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Save experiment" }));
-    fireEvent.change(screen.getByLabelText("Snapshot name"), { target: { value: "Extreme path" } });
+    fireEvent.change(screen.getByLabelText("Saved result name"), { target: { value: "Extreme path" } });
     fireEvent.click(within(screen.getByRole("dialog", { name: "Save experiment" })).getByRole("button", { name: "Save experiment" }));
     await screen.findByText("Experiment snapshot saved.");
     expect(fetch.mock.calls.some(([input, init]) => String(input).includes("/goals/") && init?.method === "PUT")).toBe(false);
@@ -163,25 +163,25 @@ describe("isolated Life Lab", () => {
     vi.stubGlobal("fetch", fetch);
     render(<LifeLabView />);
     await start("current goal");
-    fireEvent.click(screen.getByRole("button", { name: "Promote a value" }));
-    fireEvent.change(screen.getByLabelText("Promotion exact value"), { target: { value: "15000.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply a value" }));
+    fireEvent.change(screen.getByLabelText("New amount"), { target: { value: "15000.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview change" }));
 
     const table = await screen.findByRole("table");
-    expect(within(table).getByText("goal_programs.target_amount")).toBeInTheDocument();
+    expect(within(table).getByText("Goal amount")).toBeInTheDocument();
     expect(within(table).getByText("$14,000")).toBeInTheDocument();
     expect(within(table).getByText("$15,000")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent("applied=false");
     expect(fetch.mock.calls.some(([input]) => String(input).endsWith("/confirm"))).toBe(false);
 
-    const dialog = screen.getByRole("dialog", { name: "Promote a value" });
+    const dialog = screen.getByRole("dialog", { name: "Apply a value" });
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    const trigger = screen.getByRole("button", { name: "Promote a value" });
+    const trigger = screen.getByRole("button", { name: "Apply a value" });
     expect(trigger).toHaveFocus();
 
     fireEvent.click(trigger);
-    fireEvent.change(screen.getByLabelText("Promotion exact value"), { target: { value: "15000.00" } });
+    fireEvent.change(screen.getByLabelText("New amount"), { target: { value: "15000.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview change" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirm promotion" }));
     expect(await screen.findByText("Promotion confirmed for Goals.")).toBeInTheDocument();
@@ -196,7 +196,7 @@ describe("isolated Life Lab", () => {
     fireEvent.change(screen.getByLabelText("Mission capital"), { target: { value: "1750000.00" } });
     fireEvent.click(within(screen.getByRole("dialog", { name: "Edit experiment" })).getByRole("button", { name: "Save experiment" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit experiment" })).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Promote a value" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply a value" }));
     fireEvent.click(screen.getByRole("button", { name: "Preview change" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirm promotion" }));
     expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("target changed after preview");
@@ -214,12 +214,12 @@ describe("isolated Life Lab", () => {
     vi.stubGlobal("fetch", labFetch({ snapshots }));
     render(<LifeLabView />);
     await screen.findByRole("heading", { name: "Start an experiment" });
-    fireEvent.click(screen.getByText("Experiment and legacy evidence"));
+    fireEvent.click(screen.getByText("Saved experiments and earlier plans"));
     expect(document.querySelectorAll(".scenario-list > button")).toHaveLength(3);
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved Lab evidence" }), { target: { value: "Older combined" } });
-    expect(screen.getByText("Legacy combined scenario")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved Lab evidence" }), { target: { value: "missing" } });
-    expect(screen.getByText("No saved Lab evidence matches this search.")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved experiments" }), { target: { value: "Older combined" } });
+    expect(screen.getByText("Earlier combined plan")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search saved experiments" }), { target: { value: "missing" } });
+    expect(screen.getByText("No saved experiments match this search.")).toBeInTheDocument();
   });
 
   it("prints dated Lab evidence while source details stay collapsed on screen", async () => {
@@ -227,10 +227,10 @@ describe("isolated Life Lab", () => {
     vi.stubGlobal("fetch", labFetch());
     render(<LifeLabView />);
     await start("blank");
-    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print summary" }));
     expect(print).toHaveBeenCalledOnce();
     expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Life Lab evidence · 2026-08-10");
-    expect(screen.getByText("Source evidence").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("Source details").closest("details")).not.toHaveAttribute("open");
     expect(Array.from(document.querySelectorAll(".lab-source-evidence code")).some((node) => node.textContent === "e".repeat(64))).toBe(true);
   });
 });

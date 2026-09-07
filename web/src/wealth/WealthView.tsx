@@ -1,3 +1,4 @@
+import { displayLabel } from "../presentation";
 import { useState } from "react";
 
 import { currencyExact, shortDate, signedCurrencyExact } from "../format";
@@ -5,7 +6,7 @@ import type { WealthDashboard } from "../types";
 import "./wealth.css";
 
 function roleLabel(role: string) {
-  return role.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return displayLabel(role);
 }
 
 function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -31,7 +32,7 @@ export default function WealthView({ data }: { data: WealthDashboard }) {
         <section className="simple-page-heading"><div><span className="eyebrow">Money you can use and investments you can measure</span><h1>Wealth</h1></div></section>
         <section className="panel compact-panel empty-state" role="status">
           <h2>Wealth unavailable</h2>
-          <p>No account value evidence has been imported. Use Add account to add a supported account or value, then return to Wealth.</p>
+          <p>No account values have been imported. Use Add account to add a supported account or value, then return to Wealth.</p>
         </section>
       </div>
     );
@@ -73,7 +74,7 @@ export default function WealthView({ data }: { data: WealthDashboard }) {
       </section>
 
       <details className="panel wealth-evidence evidence-disclosure">
-        <summary>Fidelity evidence and methodology</summary>
+        <summary>Fidelity records and calculations</summary>
         <div className="wealth-evidence-stack">
           {data.paycheck && (
             <section>
@@ -92,8 +93,8 @@ export default function WealthView({ data }: { data: WealthDashboard }) {
             {selectedPeriod && <div className="performance-equation"><div><span>Opening</span><strong>{currencyExact(selectedPeriod.opening_value)}</strong></div><b>+</b><div><span>Deposits</span><strong>{currencyExact(selectedPeriod.deposits)}</strong></div><b>−</b><div><span>Withdrawals</span><strong>{currencyExact(selectedPeriod.withdrawals)}</strong></div><b>+</b><div><span>Market result</span><strong>{selectedPeriod.investment_result ? signedCurrencyExact(selectedPeriod.investment_result) : "Unavailable"}</strong></div><b>=</b><div><span>Current</span><strong>{currencyExact(selectedPeriod.closing_value)}</strong></div></div>}
           </section>
           <section className="fidelity-observation-grid">
-            <div className="recent-observation-card"><span className="eyebrow">Latest observed movement</span>{observation ? <><strong>{signedCurrencyExact(observation.change)}</strong><small>{Number(observation.change_pct ?? 0).toFixed(2)}% · {shortDate(observation.period_start)}–{shortDate(observation.period_end)}</small><p>{observation.message}</p></> : <p>Missing source evidence: a second synchronized value is required.</p>}</div>
-            <div className="fidelity-history-card"><span className="eyebrow">Observed Fidelity value</span><div className="wealth-history-chart" aria-label="Observed Fidelity value history">{data.fidelity.history.map((point) => { const height = 22 + ((Number(point.value ?? 0) - historyMin) / historyRange) * 78; return <div key={point.date}><i style={{ height: `${height}%` }} /><small>{shortDate(point.date)}</small></div>; })}</div></div>
+            <div className="recent-observation-card"><span className="eyebrow">Latest recorded change</span>{observation ? <><strong>{signedCurrencyExact(observation.change)}</strong><small>{Number(observation.change_pct ?? 0).toFixed(2)}% · {shortDate(observation.period_start)}–{shortDate(observation.period_end)}</small><p>{observation.message}</p></> : <p>Update accounts again to compare two recorded values.</p>}</div>
+            <div className="fidelity-history-card"><span className="eyebrow">Recorded Fidelity value</span><div className="wealth-history-chart" aria-label="Recorded Fidelity value history">{data.fidelity.history.map((point) => { const height = 22 + ((Number(point.value ?? 0) - historyMin) / historyRange) * 78; return <div key={point.date}><i style={{ height: `${height}%` }} /><small>{shortDate(point.date)}</small></div>; })}</div></div>
           </section>
           <section>
             <h2>Fidelity accounts</h2>
@@ -102,7 +103,7 @@ export default function WealthView({ data }: { data: WealthDashboard }) {
           <section className="wealth-funding-evidence"><h2>Payroll funding</h2><p>{currencyExact(data.fidelity.funding.total_payroll_funding)} total · {currencyExact(data.fidelity.funding.you_contributed)} you · {currencyExact(data.fidelity.funding.employer_contributed)} employer</p></section>
         </div>
       </details>
-      <button className="secondary-button wealth-print-button print-hidden" onClick={() => window.print()}>Print evidence</button>
+      <button className="secondary-button wealth-print-button print-hidden" onClick={() => window.print()}>Print summary</button>
     </div>
   );
 }

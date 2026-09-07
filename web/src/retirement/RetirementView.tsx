@@ -1,3 +1,4 @@
+import { displayLabel, displayMessage } from "../presentation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FocusedDialog } from "../FocusedDialog";
@@ -173,18 +174,18 @@ export default function RetirementView() {
         <div><span className="eyebrow">Solvency planning</span><h1 data-prose>Retirement</h1><p data-prose>Test when work can become optional.</p></div>
         <div className="surface-actions print-hidden">
           <button ref={editButtonRef} className="secondary-button" onClick={() => setEditing(true)}>Edit assumptions</button>
-          <button className="secondary-button" onClick={() => window.print()}>Print evidence</button>
+          <button className="secondary-button" onClick={() => window.print()}>Print summary</button>
         </div>
       </header>
       <p className="print-only print-evidence-header" aria-hidden="true">Retirement evidence · {projection?.as_of ?? "Date unavailable"}</p>
-      {error && <div className="error-banner" role="alert">{error}</div>}
+      {error && <div className="error-banner" role="alert">{displayMessage(error)}</div>}
       {message && <div className="retirement-message" role="status">{message}</div>}
 
       <section className="panel retirement-control-panel" aria-labelledby="retirement-run-heading">
         <h2 id="retirement-run-heading" className="sr-only">Retirement run</h2>
         <div className="retirement-controls print-hidden">
           <label>Work becomes optional at<select aria-label="Work-optional age" value={selectedAge} onChange={(event) => setSelectedAge(Number(event.target.value))}>{profile.work_optional_ages.map((age) => <option key={age} value={age}>Age {age}</option>)}</select></label>
-          <label>Deterministic path<select aria-label="Retirement path" value={selectedPath} onChange={(event) => setSelectedPath(event.target.value as RetirementPath)}><option value="middle">Middle path</option><option value="rough">Rough path</option><option value="early_crash">Early-crash path</option></select></label>
+          <label>Market scenario<select aria-label="Retirement path" value={selectedPath} onChange={(event) => setSelectedPath(event.target.value as RetirementPath)}><option value="middle">Middle path</option><option value="rough">Rough path</option><option value="early_crash">Early-crash path</option></select></label>
           <label>Goal snapshot<select aria-label="Operational goal inclusion" value={goalId} onChange={(event) => setGoalId(event.target.value)}><option value="">Do not include a goal</option>{goals.map((goal) => <option key={goal.goal_program_id} value={goal.goal_program_id}>Include {goal.name}</option>)}</select></label>
           <button className="primary-button" disabled={busy} onClick={() => void rerun()}>{busy ? "Running…" : "Run projection"}</button>
         </div>
@@ -194,16 +195,16 @@ export default function RetirementView() {
               <span className="eyebrow">Age {run.run_selection.work_optional_age} · {run.run_selection.path.replace("_", " ")}</span>
               <h2 data-prose>{status.title}</h2>
               <p data-prose>{status.detail}</p>
-              <strong className="retirement-goal-state" data-prose>{run.run_selection.included_goal ? `${run.run_selection.included_goal.name} · immutable goal snapshot` : "Operational goals excluded"}</strong>
+              <strong className="retirement-goal-state" data-prose>{run.run_selection.included_goal ? `${run.run_selection.included_goal.name} · saved copy of this goal` : "Everyday goals not included"}</strong>
               <p className="retirement-next" data-prose><strong>Next:</strong> {status.next}</p>
               <code className="print-only" aria-hidden="true">Run fingerprint: {run.run_fingerprint}</code>
             </div>
             <dl>
               <div><dt>Accessible at work stop</dt><dd>{currency(run.accessible_assets_at_work_stop)}</dd></div>
               <div><dt>Retirement at work stop</dt><dd>{currency(run.retirement_assets_at_work_stop)}</dd></div>
-              <div><dt>First unsupported month</dt><dd>{readableDate(status.firstUnsupportedMonth)}</dd></div>
-              <div><dt>End spendable assets</dt><dd>{currency(run.end_spendable_assets)}</dd></div>
-              <div><dt>Required-money runway</dt><dd>{run.required_money_runway_months === null ? "Through plan" : `${run.required_money_runway_months} month${run.required_money_runway_months === 1 ? "" : "s"}`}</dd></div>
+              <div><dt>First month with a shortfall</dt><dd>{readableDate(status.firstUnsupportedMonth)}</dd></div>
+              <div><dt>Money remaining at plan end</dt><dd>{currency(run.end_spendable_assets)}</dd></div>
+              <div><dt>How long essential spending is covered</dt><dd>{run.required_money_runway_months === null ? "Through plan" : `${run.required_money_runway_months} month${run.required_money_runway_months === 1 ? "" : "s"}`}</dd></div>
             </dl>
           </div>
         )}
@@ -222,7 +223,7 @@ export default function RetirementView() {
       </div>
 
       <details className="panel retirement-assumptions evidence-disclosure">
-        <summary>Assumptions and starting evidence</summary>
+        <summary>Assumptions and starting amounts</summary>
         <div className="retirement-assumption-grid">
           <p><strong>Essential life</strong>{currency(profile.retirement_essential_monthly_spend.amount)}/month</p>
           <p><strong>Flexible life</strong>{currency(profile.retirement_flexible_monthly_spend.amount)}/month</p>
@@ -235,44 +236,44 @@ export default function RetirementView() {
       </details>
 
       <details className="panel retirement-snapshots evidence-disclosure">
-        <summary>Retirement snapshot evidence</summary>
+        <summary>Saved retirement results</summary>
         <div className="snapshot-tools print-hidden">
-          <label htmlFor="retirement-snapshot-search">Search saved Retirement evidence</label>
+          <label htmlFor="retirement-snapshot-search">Search saved retirement results</label>
           <input id="retirement-snapshot-search" type="search" value={snapshotSearch} onChange={(event) => setSnapshotSearch(event.target.value)} placeholder="Search names or context" />
         </div>
         <div className="retirement-snapshot-list" data-default-visible-count="3">
-          {filteredSnapshots.length === 0 ? <p>{search ? "No saved Retirement evidence matches this search." : "No Retirement snapshots yet."}</p> : visibleSnapshots.map((snapshot) => (
+          {filteredSnapshots.length === 0 ? <p>{search ? "No saved retirement results match this search." : "No saved retirement results yet."}</p> : visibleSnapshots.map((snapshot) => (
             <button key={snapshot.id} onClick={() => void openRetirementSnapshot(snapshot.id).then(setOpenedSnapshot)}>
-              <span><strong>{snapshot.name}</strong><small>{snapshot.context_label} · age {snapshot.target_age} · {snapshot.path_key.replace("_", " ")}</small><code className="print-only" aria-hidden="true">Fingerprint: {snapshot.source_fingerprint}</code></span>
-              <em>{snapshot.stale ? "Source changed · open stored evidence" : "Open stored evidence"}</em>
+              <span><strong>{snapshot.name}</strong><small>{snapshot.context_label} · age {snapshot.target_age} · {displayLabel(snapshot.path_key)}</small><code className="print-only" aria-hidden="true">Fingerprint: {snapshot.source_fingerprint}</code></span>
+              <em>{snapshot.stale ? "Source changed · open saved result" : "Open saved result"}</em>
             </button>
           ))}
         </div>
-        {!showOlderSnapshots && !search && filteredSnapshots.length > 3 && <button className="secondary-button show-older-button print-hidden" onClick={() => setShowOlderSnapshots(true)}>Show older evidence</button>}
+        {!showOlderSnapshots && !search && filteredSnapshots.length > 3 && <button className="secondary-button show-older-button print-hidden" onClick={() => setShowOlderSnapshots(true)}>Show older records</button>}
         {openedSnapshot && (
           <article className="retirement-stored-evidence">
             <h3>{openedSnapshot.name}</h3>
-            <p>Stored snapshot · original result with {openedSnapshot.periods.length} monthly rows.</p>
+            <p>Saved result · original calculation with {openedSnapshot.periods.length} months.</p>
             {storedStatus && <div className={`stored-retirement-outcome ${storedStatus.tone}`}><strong>{storedStatus.title}</strong><p>{storedStatus.detail}</p></div>}
             <dl>
               <div><dt>Context</dt><dd>{openedSnapshot.context_label}</dd></div>
-              <div><dt>First unsupported month</dt><dd>{readableDate(storedStatus?.firstUnsupportedMonth ?? null)}</dd></div>
-              <div><dt>Required-money runway</dt><dd>{storedStatus?.requiredMoneyRunwayMonths === null || storedStatus?.requiredMoneyRunwayMonths === undefined ? "Through plan or unavailable" : `${storedStatus.requiredMoneyRunwayMonths} months`}</dd></div>
-              <div><dt>End spendable assets</dt><dd>{currency(storedStatus?.endSpendableAssets)}</dd></div>
+              <div><dt>First month with a shortfall</dt><dd>{readableDate(storedStatus?.firstUnsupportedMonth ?? null)}</dd></div>
+              <div><dt>How long essential spending is covered</dt><dd>{storedStatus?.requiredMoneyRunwayMonths === null || storedStatus?.requiredMoneyRunwayMonths === undefined ? "Through plan or unavailable" : `${storedStatus.requiredMoneyRunwayMonths} months`}</dd></div>
+              <div><dt>Money remaining at plan end</dt><dd>{currency(storedStatus?.endSpendableAssets)}</dd></div>
             </dl>
             {openedSnapshot.warnings.length > 0 && <ul>{openedSnapshot.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-            <code>{openedSnapshot.source_fingerprint}</code>
+            <details><summary>Technical reference</summary><code>{openedSnapshot.source_fingerprint}</code></details>
           </article>
         )}
       </details>
 
       {editing && <RetirementProfileForm profile={profile} busy={busy} error={editError} returnFocusRef={editButtonRef} onSave={(payload) => void saveProfile(payload)} onCancel={() => { setEditing(false); setEditError(""); }} />}
       {snapshotDialogOpen && run && (
-        <FocusedDialog title="Save Retirement snapshot" description="Name this immutable run for later evidence review." returnFocusRef={snapshotButtonRef} onClose={() => { setSnapshotDialogOpen(false); setSnapshotError(""); }} className="snapshot-dialog">
+        <FocusedDialog title="Save retirement result" description="Save a named copy of this result to review later." returnFocusRef={snapshotButtonRef} onClose={() => { setSnapshotDialogOpen(false); setSnapshotError(""); }} className="snapshot-dialog">
           <form onSubmit={(event) => { event.preventDefault(); void saveSnapshot(); }} aria-describedby={snapshotError ? "retirement-snapshot-error" : undefined}>
-            <label htmlFor="retirement-snapshot-name">Snapshot name</label>
+            <label htmlFor="retirement-snapshot-name">Saved result name</label>
             <input data-autofocus id="retirement-snapshot-name" value={snapshotName} onChange={(event) => setSnapshotName(event.target.value)} placeholder={`Age ${run.run_selection.work_optional_age} · ${run.run_selection.path.replace("_", " ")}`} maxLength={120} />
-            {snapshotError && <p id="retirement-snapshot-error" className="retirement-form-error" role="alert">{snapshotError}</p>}
+            {snapshotError && <p id="retirement-snapshot-error" className="retirement-form-error" role="alert">{displayMessage(snapshotError)}</p>}
             <div className="focused-form-actions"><button type="button" className="secondary-button" onClick={() => setSnapshotDialogOpen(false)}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save snapshot"}</button></div>
           </form>
         </FocusedDialog>

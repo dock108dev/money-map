@@ -12,9 +12,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 ORACLE_PATH = ROOT / "scripts/materialize_release_state_contract.py"
-# September 6 SSOT revision: Lab entry reads the current v2 endpoints.
+# September 6 plain-English revision: display copy matches the updated app.
 # This pins the revised source oracle; historical installed evidence is not transferable.
-EXPECTED_DIGEST = "d37af0d41807b5f0b05eb8f0f874cedadc0be4e18f334d5973cdc178159fe1df"
+EXPECTED_DIGEST = "9d3925863acafa7b9c89466796cf4f7c1e31fde5757d3b0130d252fca4a39b1e"
 
 ROUTE_SOURCES = {
     "cash-flow": ("web/src/App.tsx", "web/src/cash-flow/CashFlowView.tsx"),
@@ -36,7 +36,7 @@ ROUTE_SOURCES = {
     ),
     "add-account": ("web/src/App.tsx", "web/src/connections/ConnectionsView.tsx"),
     "data-home": ("web/src/App.tsx", "web/src/data-home.tsx"),
-    "diagnostics": ("web/src/App.tsx",),
+    "diagnostics": ("web/src/App.tsx", "web/src/DiagnosticsPreview.tsx"),
     "reports": ("web/src/App.tsx",),
 }
 
@@ -149,7 +149,7 @@ def materialize_diagnostic() -> dict[str, Any]:
 
     connections = source_text("add-account")
     exact_add_account_checks = {
-        "manual_import_copy": "Manual import stays first-class." in connections,
+        "manual_import_copy": "You can always import files yourself." in connections,
         "manual_import_busy_only": "disabled={busy} onClick={onImport}" in connections,
         "provider_configuration_gate": "disabled={busy || !liveReady}" in connections,
         "provider_action_is_explicit": "onClick={() => onConnect(" in connections,

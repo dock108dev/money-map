@@ -150,7 +150,7 @@ describe("Goals first answer", () => {
     ["negative", comparisonState("-345.67"), "Accessible capital decreased by $345.67 since Jul 10."],
     ["zero", comparisonState("0.00"), "Observed accessible capital is unchanged since Jul 10."],
     ["no previous", noComparisonState, "No saved comparison exists yet."],
-    ["unavailable", unavailableComparisonState, "Comparison unavailable: Source fingerprints do not support a comparison."],
+    ["unavailable", unavailableComparisonState, "Comparison unavailable: Source records do not support a comparison."],
   ])("writes an honest %s verdict", (_label, state, expected) => {
     expect(verdictSentence(state)).toBe(expected);
   });
@@ -192,16 +192,16 @@ describe("Goals first answer", () => {
     await renderOrdinary({ position: partial });
     expect(screen.getByRole("heading", { name: goalProgram.name })).toBeInTheDocument();
     expect(screen.getByLabelText("Above protected floor: Unavailable")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Position and formulas"));
+    fireEvent.click(screen.getByText("Amounts and calculations"));
     expect(screen.getByText("Sellable investments").parentElement).toHaveTextContent("Unavailable");
   });
 
   it("isolates a comparison detail failure from the valid position", async () => {
     await renderOrdinary({
-      failures: { "/api/v2/goals/comparison": { status: 503, detail: "Comparison evidence is offline" } },
+      failures: { "/api/v2/goals/comparison": { status: 503, detail: "Comparison details is offline" } },
     });
     expect(screen.getByLabelText("Above protected floor: $4,500.00")).toBeInTheDocument();
-    expect(screen.getAllByText("Comparison unavailable: Comparison evidence is offline.")).not.toHaveLength(0);
+    expect(screen.getAllByText("Comparison unavailable: Comparison details is offline.")).not.toHaveLength(0);
   });
 
   it("uses only the expected GET endpoints on ordinary mount", async () => {
@@ -443,8 +443,8 @@ describe("Progressive evidence", () => {
     expect(screen.queryByText("Accessible first saved observation")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Financial change timeline"));
     expect(await screen.findByText("Accessible first saved observation")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show older evidence" }));
-    fireEvent.click(screen.getByRole("button", { name: "Load older evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show older records" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load older records" }));
     expect(await screen.findByText("Jul 10, 2026")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       "/api/v2/goals/check-ins?limit=5&cursor=older-cursor",
@@ -465,17 +465,17 @@ describe("Progressive evidence", () => {
     fireEvent.click(screen.getByText("Financial change timeline"));
     await screen.findAllByText("Accessible first saved observation");
     expect(document.querySelectorAll(".goal-timeline > li")).toHaveLength(3);
-    fireEvent.click(screen.getByRole("button", { name: "Show older evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show older records" }));
     expect(document.querySelectorAll(".goal-timeline > li")).toHaveLength(25);
   });
 
   it("keeps provenance closed by default and displays only sanitized source evidence", async () => {
     const fetch = await renderOrdinary();
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/goals/provenance")).toBe(false);
-    fireEvent.click(screen.getByText("Source provenance"));
+    fireEvent.click(screen.getByText("Where these numbers come from"));
     expect(await screen.findByText(provenanceState.source_fingerprint ?? "")).toBeInTheDocument();
     expect(screen.queryByText(goalProgram.goal_program_id, { exact: false })).not.toBeInTheDocument();
-    expect(screen.getByText("accessible cash: $6,000.00")).toBeInTheDocument();
+    expect(screen.getByText("Accessible cash: $6,000.00")).toBeInTheDocument();
     expect(screen.queryByText("balance:synthetic:1")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(".sqlite3");
     expect(writeCalls(fetch)).toEqual([]);
@@ -483,10 +483,10 @@ describe("Progressive evidence", () => {
 
   it("keeps a provenance failure inside its opened detail", async () => {
     await renderOrdinary({
-      failures: { "/api/v2/goals/provenance": { status: 500, detail: "Source evidence is unavailable" } },
+      failures: { "/api/v2/goals/provenance": { status: 500, detail: "Source details is unavailable" } },
     });
-    fireEvent.click(screen.getByText("Source provenance"));
-    expect(await screen.findByText("Source evidence is unavailable")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Where these numbers come from"));
+    expect(await screen.findByText("Source details is unavailable")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: goalProgram.name })).toBeInTheDocument();
   });
 
@@ -512,16 +512,16 @@ describe("Progressive evidence", () => {
     expect(screen.getByRole("heading", { level: 2, name: goalProgram.name })).toBeInTheDocument();
     expect(screen.getByLabelText("Primary goal metrics")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit goal" })).toBeInTheDocument();
-    expect(screen.getByText("Binding milestone").parentElement).toHaveTextContent("Fund this goal");
+    expect(screen.getByText("Next funding step").parentElement).toHaveTextContent("Fund this goal");
   });
 
   it("prints dated Goals evidence with bounded history and provenance", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
     const fetch = await renderOrdinary();
-    fireEvent.click(screen.getByRole("button", { name: "Print evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print summary" }));
     await waitFor(() => expect(print).toHaveBeenCalledOnce());
     expect(document.querySelector(".print-evidence-header")).toHaveTextContent("Goals evidence · Observed Aug 10, 2026");
-    expect(document.querySelector(".goal-primary-card .print-only")).toHaveTextContent(`Source fingerprint: ${goalHash}`);
+    expect(document.querySelector(".goal-primary-card .print-only")).toHaveTextContent(`Source reference: ${goalHash}`);
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/goals/provenance")).toBe(true);
     expect(fetch.mock.calls.some(([input]) => String(input).startsWith("/api/v2/goals/check-ins?"))).toBe(true);
     expect(writeCalls(fetch)).toEqual([]);

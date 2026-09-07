@@ -61,7 +61,7 @@ describe("desktop data-home workflow", () => {
     expect(onStatus).toHaveBeenCalledWith(expect.objectContaining({
       state: "eligible_legacy_source",
     }));
-    expect(screen.getByText("Cutover readiness")).toBeVisible();
+    expect(screen.getByText("Review existing data")).toBeVisible();
     expect(screen.queryByText(/\/Users\//)).not.toBeInTheDocument();
   });
 
@@ -143,9 +143,9 @@ describe("desktop data-home workflow", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Run rehearsal and review confirmation" }));
-    expect(await screen.findByRole("heading", { name: "Confirm cutover" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Activate reviewed data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test a copy and review confirmation" }));
+    expect(await screen.findByRole("heading", { name: "Confirm switching data" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Use reviewed data" }));
     await waitFor(() => expect(window.__MONEY_MAP_DESKTOP__?.restart).toHaveBeenCalledOnce());
     expect(window.__MONEY_MAP_DESKTOP__?.reload).toHaveBeenCalledOnce();
   });
@@ -225,7 +225,7 @@ describe("desktop data-home workflow", () => {
     expect(window.__MONEY_MAP_DESKTOP__?.revealBackup).toHaveBeenCalledWith(backup.backup_id);
     fireEvent.click(within(item).getByRole("button", { name: "Preview restore" }));
     expect(await screen.findByRole("alertdialog")).toHaveTextContent(
-      "Restore replaces the current Money Map database.",
+      "Restore replaces the current Money Map saved data.",
     );
     fireEvent.click(screen.getByRole("button", { name: "Replace with verified backup" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
@@ -252,7 +252,7 @@ describe("desktop data-home workflow", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("The operation paused safely.");
     expect(within(alert).getByRole("button", { name: "Resume" })).toBeEnabled();
-    expect(within(alert).getByRole("button", { name: "Roll back" })).toBeEnabled();
+    expect(within(alert).getByRole("button", { name: "Return to previous data" })).toBeEnabled();
     expect(alert).not.toHaveTextContent("Traceback");
   });
 

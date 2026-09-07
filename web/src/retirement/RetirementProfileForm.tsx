@@ -1,3 +1,4 @@
+import { displayMessage } from "../presentation";
 import type { FormEvent, RefObject } from "react";
 
 import { FocusedDialog } from "../FocusedDialog";
@@ -56,7 +57,7 @@ export function RetirementProfileForm({
       onClose={onCancel}
       className="retirement-sheet"
     >
-        {error && <p id="retirement-form-error" className="retirement-form-error" role="alert">{error}</p>}
+        {error && <p id="retirement-form-error" className="retirement-form-error" role="alert">{displayMessage(error)}</p>}
         <form aria-label="Retirement profile assumptions" aria-describedby={error ? "retirement-form-error" : undefined} onSubmit={submit} className="retirement-profile-form">
           <label>Date of birth<input data-autofocus name="birth_date" type="date" defaultValue={profile.birth_date} required /></label>
           <label>State<input name="state" maxLength={2} defaultValue={profile.state} required /></label>
