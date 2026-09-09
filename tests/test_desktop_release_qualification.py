@@ -26,14 +26,12 @@ def module() -> Any:
 def test_contract_is_frozen_to_v3_candidate_identity() -> None:
     loaded = module()
     assert loaded.VERSION == "3.0.0-beta.1"
-    assert loaded.SCHEMA == "0009_goal_persistence"
+    assert loaded.SCHEMA == "0010_housing_plans"
     assert loaded.TEAM == "E3G5D247ZN"
     assert loaded.BUNDLE_ID == "com.moneymap.desktop"
     assert loaded.DMG_NAME == "Money Map-3.0.0-beta.1-arm64.dmg"
     assert loaded.CONTRACT == "money-map-v3-bounded-installed-smoke-v1"
-    assert not any(
-        path.name.startswith("0010") for path in (PROJECT_ROOT / "alembic/versions").iterdir()
-    )
+    assert (PROJECT_ROOT / "alembic/versions/0010_housing_plans.py").is_file()
 
 
 @pytest.mark.parametrize(
@@ -180,7 +178,7 @@ def test_deadline_expiry_fails_sanitized_invokes_cleanup_and_never_retries(
     dmg.write_bytes(b"synthetic candidate")
     expected_hash = "a" * 64
     (tmp_path / "manifest.json").write_text(json.dumps({"dmg": {"sha256": expected_hash}}))
-    (tmp_path / "release-manifest.json").write_text("{}")
+    (tmp_path / "release-manifest.json").write_text('{"build_mode":"qualification"}')
     monkeypatch.setattr(loaded, "validate_artifact_path", lambda _path: None)
     monkeypatch.setattr(loaded, "sha256", lambda _path: expected_hash)
     monkeypatch.setattr(loaded, "require_no_existing_runtime", lambda: None)

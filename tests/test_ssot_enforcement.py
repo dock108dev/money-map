@@ -129,7 +129,7 @@ def test_unsupported_and_disposable_modes_do_not_enter_managed_data_home() -> No
 def test_product_identity_is_derived_from_authoritative_metadata() -> None:
     assert PUBLIC_VERSION == "3.0.0-beta.1"
     assert PYTHON_PACKAGE_VERSION == "3.0.0b1"
-    assert SCHEMA_HEAD == "0009_goal_persistence"
+    assert SCHEMA_HEAD == "0010_housing_plans"
     assert desktop_artifact_name() == f"Money Map-{PUBLIC_VERSION}-arm64.dmg"
 
 

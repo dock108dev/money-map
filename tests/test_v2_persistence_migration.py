@@ -115,14 +115,14 @@ def test_all_synthetic_states_upgrade_downgrade_reupgrade_losslessly(
     before = build_logical_manifest(database)
     pre_v2_tables = set(before["tables"])
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "0009_goal_persistence")
     assert database_revision(database) == "0009_goal_persistence"
     after_upgrade = build_logical_manifest(database, include_tables=pre_v2_tables)
     assert logical_tables(after_upgrade) == logical_tables(before)
     _assert_expected_mapping(database, state)
     first_v2 = stable_v2_manifest(database)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "0009_goal_persistence")
     assert stable_v2_manifest(database) == first_v2
     _assert_expected_mapping(database, state)
 
@@ -132,7 +132,7 @@ def test_all_synthetic_states_upgrade_downgrade_reupgrade_losslessly(
     assert after_downgrade == before
     assert V2_TABLES.isdisjoint(after_downgrade["tables"])
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "0009_goal_persistence")
     assert database_revision(database) == "0009_goal_persistence"
     assert stable_v2_manifest(database) == first_v2
     _assert_expected_mapping(database, state)
@@ -145,12 +145,12 @@ def test_empty_database_upgrade_downgrade_reupgrade(tmp_path: Path) -> None:
     _upgrade_to_v1(database)
     before = build_logical_manifest(database)
 
-    command.upgrade(config, "head")
+    command.upgrade(config, "0009_goal_persistence")
     assert _programs(database) == []
     first_v2 = stable_v2_manifest(database)
     command.downgrade(config, "0008_life_lab_v01")
     assert build_logical_manifest(database) == before
-    command.upgrade(config, "head")
+    command.upgrade(config, "0009_goal_persistence")
     assert stable_v2_manifest(database) == first_v2
     assert_sqlite_health(database)
 
@@ -382,12 +382,12 @@ def test_failure_injection_never_reports_partial_mapping_at_0009_and_recovers_fr
     monkeypatch.setenv("PAYCHECK_MAP_MIGRATION_0009_FAIL_AT", failure_stage)
 
     with pytest.raises(RuntimeError, match="Injected 0009 failure"):
-        command.upgrade(migration_config(failed), "head")
+        command.upgrade(migration_config(failed), "0009_goal_persistence")
 
     assert database_revision(failed) == "0008_life_lab_v01"
     monkeypatch.delenv("PAYCHECK_MAP_MIGRATION_0009_FAIL_AT")
     online_copy(verified_restore, recovered)
-    command.upgrade(migration_config(recovered), "head")
+    command.upgrade(migration_config(recovered), "0009_goal_persistence")
     assert database_revision(recovered) == "0009_goal_persistence"
     assert len(_programs(recovered)) == 2
     assert database_revision(failed) == "0008_life_lab_v01"

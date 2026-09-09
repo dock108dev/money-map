@@ -26,8 +26,8 @@ def test_runtime_inventory_is_complete_through_schema_head() -> None:
     root = Path(__file__).resolve().parents[1]
     inventory = json.loads((root / "desktop" / "runtime-resources.json").read_text())
     revisions = inventory["database"]["revisions"]
-    assert revisions[-1] == "0009_goal_persistence"
-    assert len(revisions) == 9
+    assert revisions[-1] == "0010_housing_plans"
+    assert len(revisions) == 10
     assert {path.stem for path in (root / "alembic" / "versions").glob("*.py")} == set(revisions)
     modules = {
         ".".join(path.relative_to(root / "src").with_suffix("").parts)
@@ -265,7 +265,7 @@ def test_cross_process_runtime_auth_writer_schema_and_cleanup(tmp_path: Path) ->
         assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0009_goal_persistence",
+            "0010_housing_plans",
         )
 
 
@@ -418,7 +418,7 @@ def test_sidecar_prepares_and_attests_the_actual_financial_engine_before_ready(
     ready_line = process.stdout.readline().strip()
     assert attestation_line.startswith("MONEY_MAP_ATTEST ")
     record = json.loads(attestation_line.removeprefix("MONEY_MAP_ATTEST "))
-    assert record["schema_revision"] == "0009_goal_persistence"
+    assert record["schema_revision"] == "0010_housing_plans"
     assert record["integrity"] is True
     assert record["foreign_keys"] is True
     assert record["database_identity_stable"] is True
@@ -430,7 +430,7 @@ def test_sidecar_prepares_and_attests_the_actual_financial_engine_before_ready(
     assert not (application / ".money-map-writer.lock").exists()
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0009_goal_persistence",
+            "0010_housing_plans",
         )
 
 

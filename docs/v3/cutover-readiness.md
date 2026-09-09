@@ -1,5 +1,9 @@
 # Money Map cutover readiness
 
+Current owner-local mode and artifact-specific qualification are defined in
+[Owner-local delivery](owner-local-delivery.md). This supersedes any synthetic-to-owner reuse sequence below;
+historical records remain bound to their original artifact.
+
 Status: Slice 7 implementation proof only. Live owner rehearsal, owner data, owner decisions, the
 bounded installed smoke and final acceptance are deferred until after Slice 8. The former
 Campaigns A-J matrix is optional dedicated-runner soak coverage, not a cutover prerequisite.

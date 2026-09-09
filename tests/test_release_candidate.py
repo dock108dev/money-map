@@ -45,7 +45,7 @@ def test_candidate_is_explicitly_not_accepted_and_every_result_is_blank() -> Non
         "public": PUBLIC_VERSION,
         "python": PYTHON_PACKAGE_VERSION,
     }
-    assert value["schema_revision"] == "0009_goal_persistence"
+    assert value["schema_revision"] == "0010_housing_plans"
     assert value["qualification_gates"] == dict.fromkeys(QUALIFICATION_GATES)
     assert value["optional_soak"] == dict.fromkeys(OPTIONAL_SOAK_FIELDS)
     assert value["owner"] == dict.fromkeys(OWNER_FIELDS)
@@ -222,7 +222,9 @@ def test_release_notes_and_campaign_manifest_keep_final_and_owner_fields_pending
 
 
 def test_schema_and_private_data_boundaries_remain_frozen() -> None:
-    assert not list((PROJECT_ROOT / "alembic/versions").glob("0010*.py"))
+    assert [p.name for p in (PROJECT_ROOT / "alembic/versions").glob("0010*.py")] == [
+        "0010_housing_plans.py"
+    ]
     for path in (
         PROJECT_ROOT / "docs/releases/v3.0.0-beta.1-final-campaign.json",
         PROJECT_ROOT / "docs/releases/v3.0.0-beta.1.md",
@@ -230,3 +232,22 @@ def test_schema_and_private_data_boundaries_remain_frozen() -> None:
         content = path.read_text(encoding="utf-8")
         assert "/Users/" not in content
         assert "owner source identity: pending" in content.lower() or path.suffix == ".json"
+
+
+def test_owner_local_qualification_cannot_reuse_synthetic_gates() -> None:
+    from paycheck_map.release_candidate import OWNER_LOCAL_GATES, candidate_manifest
+
+    local = candidate_manifest(
+        source_commit="a" * 40,
+        clean_tree=True,
+        bundle_identifier="com.moneymap.desktop",
+        architecture="aarch64-apple-darwin",
+        signing_identity="Apple Development",
+        entitlements=[],
+        oracle_digest="b" * 64,
+        build_mode="production",
+    )
+    assert set(local["qualification_gates"]) == set(OWNER_LOCAL_GATES)
+    local["qualification_gates"] = dict.fromkeys(QUALIFICATION_GATES)
+    with pytest.raises(ReleaseContractError, match="gate"):
+        validate_candidate(local)

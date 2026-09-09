@@ -47,6 +47,9 @@ a mutation.
 7. `0007_refresh_timestamp_integrity`: timestamp ordering repair/enforcement.
 8. `0008_life_lab_v01`: life profiles, goals and projections.
 9. `0009_goal_persistence`: independent operational goals.
+10. `0010_housing_plans`: editable housing goals and named alternatives; no backfill.
+
+See [Housing Move](housing-move.md) for the migration design and financial contract.
 
 `product_metadata.SCHEMA_HEAD` binds the supported revision. Repository initialization upgrades to
 head; it also recognizes the original unversioned payroll schema before upgrading. Packaged startup

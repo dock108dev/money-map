@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::menu::AboutMetadataBuilder;
 
 pub const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const SCHEMA_REVISION: &str = "0009_goal_persistence";
+pub const SCHEMA_REVISION: &str = "0010_housing_plans";
 pub const RELEASE_STATE: &str = "candidate / not accepted";
 pub const BUILD_COMMIT: &str = match option_env!("MONEY_MAP_BUILD_COMMIT") {
     Some(value) => value,
@@ -76,7 +76,7 @@ mod tests {
         assert_eq!(about.schema_revision, SCHEMA_REVISION);
         assert_eq!(about.release_state, "candidate / not accepted");
         assert_eq!(RUNTIME_VERSION, "3.0.0-beta.1");
-        assert_eq!(SCHEMA_REVISION, "0009_goal_persistence");
+        assert_eq!(SCHEMA_REVISION, "0010_housing_plans");
         assert_eq!(about.data_mode, "disposable synthetic");
         assert!(about.boundary.contains("read-only"));
         assert!(!about.data_location.contains('/'));

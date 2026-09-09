@@ -51,6 +51,7 @@ SUPPORTED_REVISIONS = frozenset(
         "0006_daily_data_refresh",
         "0007_refresh_timestamp_integrity",
         "0008_life_lab_v01",
+        "0009_goal_persistence",
         SCHEMA_HEAD,
     }
 )

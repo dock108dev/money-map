@@ -51,7 +51,7 @@ OWNER_FIELDS = (
 class ReadinessState(StrEnum):
     FRESH_SETUP = "fresh_setup"
     ELIGIBLE_LEGACY_SOURCE = "eligible_legacy_source"
-    CURRENT_SOURCE = "current_0009_source"
+    CURRENT_SOURCE = "current_0010_source"
     UNSUPPORTED_NEWER_SOURCE = "unsupported_newer_source"
     UNKNOWN_REVISION = "missing_or_unknown_revision"
     INTEGRITY_FAILURE = "integrity_failure"
@@ -149,7 +149,7 @@ class CutoverReadinessManager:
         return self._summary(
             ReadinessState.FRESH_SETUP if writable else ReadinessState.DESTINATION_UNWRITABLE,
             source="No existing data selected",
-            schema="Fresh database through 0009",
+            schema="Fresh database through 0010",
             size="empty",
             integrity="not applicable",
             foreign_keys="not applicable",
@@ -201,7 +201,7 @@ class CutoverReadinessManager:
                 else "Current Money Map data",
                 schema="Eligible legacy schema"
                 if verification.revision != SCHEMA_HEAD
-                else "Current 0009 schema",
+                else "Current 0010 schema",
                 size=_size_class(verification.size),
                 integrity="passed",
                 foreign_keys="passed",
@@ -275,7 +275,7 @@ class CutoverReadinessManager:
         return self._summary(
             ReadinessState.REHEARSAL_PASSED,
             source="Reviewed Money Map data",
-            schema="Rehearsed through current 0009 schema",
+            schema="Rehearsed through current 0010 schema",
             size=_size_class(candidate.verification.size),
             integrity="passed",
             foreign_keys="passed",
@@ -357,7 +357,7 @@ class CutoverReadinessManager:
         return self._summary(
             ReadinessState.CONFIRMATION_REQUIRED,
             source="Reviewed Money Map data",
-            schema="Current 0009 candidate after rehearsal",
+            schema="Current 0010 candidate after rehearsal",
             size=_size_class(candidate.verification.size),
             integrity="passed",
             foreign_keys="passed",
@@ -463,7 +463,7 @@ class CutoverReadinessManager:
         return self._summary(
             state,
             source="Reviewed Money Map data",
-            schema="Current 0009 schema",
+            schema="Current 0010 schema",
             size="reviewed",
             integrity="passed",
             foreign_keys="passed",

@@ -840,6 +840,8 @@ def _qualification(args: argparse.Namespace) -> Path:
     if not release_manifest_path.is_file():
         raise QualificationFailure("candidate release manifest is missing")
     release_manifest = json.loads(release_manifest_path.read_text())
+    if release_manifest.get("build_mode") != "qualification":
+        raise QualificationFailure("synthetic qualification requires a qualification-mode artifact")
     try:
         validate_candidate(release_manifest)
     except RuntimeError as error:

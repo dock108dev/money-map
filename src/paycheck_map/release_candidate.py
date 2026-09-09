@@ -18,6 +18,18 @@ QUALIFICATION_GATES = (
     "two_cycle_installed_smoke",
     "short_owner_synthetic_walkthrough",
 )
+OWNER_LOCAL_GATES = (
+    "complete_headless_gate",
+    "exact_candidate_build",
+    "two_cycle_owner_local_installed_smoke",
+    "short_owner_local_synthetic_walkthrough",
+)
+
+
+def gates_for_mode(mode: object) -> tuple[str, ...]:
+    return OWNER_LOCAL_GATES if mode == "production" else QUALIFICATION_GATES
+
+
 OPTIONAL_SOAK_FIELDS = (
     "state_route_221_matrix",
     "retired_campaigns_c_through_j",
@@ -78,7 +90,7 @@ def candidate_manifest(
         "app_identity": app_identity,
         "dmg_identity": dmg_identity,
         "oracle_digest": oracle_digest,
-        "qualification_gates": {gate: None for gate in QUALIFICATION_GATES},
+        "qualification_gates": {gate: None for gate in gates_for_mode(build_mode)},
         "optional_soak": {field: None for field in OPTIONAL_SOAK_FIELDS},
         "owner": {field: None for field in OWNER_FIELDS},
         "cutover_result": None,
@@ -132,7 +144,7 @@ def validate_candidate(manifest: Mapping[str, Any]) -> None:
     owner = manifest.get("owner")
     final = manifest.get("final")
     if not isinstance(qualification_gates, Mapping) or qualification_gates != dict.fromkeys(
-        QUALIFICATION_GATES
+        gates_for_mode(manifest.get("build_mode"))
     ):
         raise ReleaseContractError("bounded qualification gate results must remain blank")
     if not isinstance(optional_soak, Mapping) or optional_soak != dict.fromkeys(
@@ -175,9 +187,9 @@ def validate_promotion(manifest: Mapping[str, Any]) -> None:
     ):
         if not HEX_64.fullmatch(str(manifest.get(identity, ""))):
             raise ReleaseContractError(f"final {identity} is missing")
-    if set(manifest.get("qualification_gates", {})) != set(QUALIFICATION_GATES) or any(
-        value != "passed" for value in manifest["qualification_gates"].values()
-    ):
+    if set(manifest.get("qualification_gates", {})) != set(
+        gates_for_mode(manifest.get("build_mode"))
+    ) or any(value != "passed" for value in manifest["qualification_gates"].values()):
         raise ReleaseContractError("bounded owner-beta qualification gates are incomplete")
     optional_soak = manifest.get("optional_soak")
     if not isinstance(optional_soak, Mapping) or set(optional_soak) != set(OPTIONAL_SOAK_FIELDS):
