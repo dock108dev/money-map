@@ -26,7 +26,7 @@ export type DataHomePhase =
 export type CutoverState =
   | "fresh_setup"
   | "eligible_legacy_source"
-  | "current_0009_source"
+  | "current_0010_source"
   | "unsupported_newer_source"
   | "missing_or_unknown_revision"
   | "integrity_failure"

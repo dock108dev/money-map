@@ -1,5 +1,9 @@
 # Money Map v3 release contract
 
+Current owner-local mode and artifact-specific qualification are defined in
+[Owner-local delivery](owner-local-delivery.md). This supersedes any synthetic-to-owner reuse sequence below;
+historical records remain bound to their original artifact.
+
 This contract defines the mandatory gates for `Money Map 3.0.0-beta.1` and later distributable
 macOS builds. Slice 0 freezes the gates; it does not claim the beta release is complete.
 

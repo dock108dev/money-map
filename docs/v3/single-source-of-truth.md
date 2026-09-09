@@ -164,3 +164,10 @@ backwards clocks. Existing v2 profile/goal/experiment/promotion tests protect ac
 legacy snapshot read/staleness coverage remains in `test_retirement_lab.py`. The full source gate,
 native checks and package inventory validation remain required. Run totals are in the Desktop
 `savings_next_steps.md` tracker.
+
+## Housing Move
+
+`housing.py` owns typed assumption validation and Decimal calculations. `api_housing.py` owns
+HTTP transactions and optimistic revisions; `models.HousingPlan` stores the document.
+`web/src/housing/HousingView.tsx` is the ordinary editor. Existing Accounts, Income and Cash Flow
+remain baseline evidence authorities. See [the housing contract](../housing-move.md).

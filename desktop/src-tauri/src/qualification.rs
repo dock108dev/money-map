@@ -524,10 +524,34 @@ struct NativeResult<'a> {
     first_unmet_requirement: Option<&'a str>,
 }
 
+fn validate_build_mode(
+    mode: Option<&str>,
+    required: Option<&str>,
+    synthetic_input: bool,
+) -> Result<(), String> {
+    match mode {
+        Some("owner-local") if required == Some("1") || synthetic_input => {
+            Err("Owner-local builds reject synthetic qualification overrides.".to_string())
+        }
+        Some("qualification") if required != Some("1") => {
+            Err("Synthetic build requirements are inconsistent.".to_string())
+        }
+        Some(value) if value != "qualification" && value != "owner-local" => {
+            Err("Unknown desktop build mode.".to_string())
+        }
+        _ => Ok(()),
+    }
+}
+
 impl QualificationContract {
     pub fn from_environment() -> Result<Option<Self>, String> {
         let raw = std::env::var("MONEY_MAP_QUALIFICATION_CONTRACT").ok();
         let fake_home = std::env::var_os("MONEY_MAP_ACCEPTANCE_FAKE_HOME");
+        validate_build_mode(
+            option_env!("MONEY_MAP_BUILD_MODE"),
+            option_env!("MONEY_MAP_REQUIRE_QUALIFICATION"),
+            raw.is_some() || fake_home.is_some(),
+        )?;
         if raw.is_none() && fake_home.is_none() {
             if option_env!("MONEY_MAP_REQUIRE_QUALIFICATION") == Some("1") {
                 return Err("Synthetic qualification contract is required.".to_string());
@@ -933,7 +957,7 @@ impl QualificationContract {
             || attestation.session != session
             || attestation.mode != "acceptance-synthetic-v1"
             || attestation.sequence != 1
-            || attestation.schema_revision != "0009_goal_persistence"
+            || attestation.schema_revision != crate::metadata::SCHEMA_REVISION
             || !attestation.integrity
             || !attestation.foreign_keys
             || !attestation.database_identity_stable
@@ -1369,7 +1393,7 @@ mod tests {
             },
             cache: directory.clone(),
             logs: directory,
-            schema_revision: "0009_goal_persistence".into(),
+            schema_revision: crate::metadata::SCHEMA_REVISION.into(),
             integrity: true,
             foreign_keys: true,
             database_identity_stable: true,
@@ -2097,7 +2121,7 @@ mod tests {
             "writer_lock": {"exists":true,"kind":"file","symlink_free":true,"contained":true,"active":true},
             "cache": {"exists":true,"kind":"directory","symlink_free":true,"contained":true,"active":null},
             "logs": {"exists":true,"kind":"directory","symlink_free":true,"contained":true,"active":null,"mode":448,"owned_by_current_user":true,"single_link":false},
-            "schema_revision":"0009_goal_persistence","integrity":true,"foreign_keys":true,
+            "schema_revision":"0010_housing_plans","integrity":true,"foreign_keys":true,
             "database_identity_stable":true,"engine_database_identity":true,"sequence": 1
         })).unwrap();
         raw = raw.replacen("{", "{\"nonce\":\"f\",", 1);
@@ -2115,5 +2139,19 @@ mod tests {
         assert!(!retained.contains("writer_lock_path"));
         assert!(!retained.contains("cache_root"));
         assert!(!retained.contains("log_root"));
+    }
+}
+
+#[cfg(test)]
+mod build_mode_tests {
+    use super::validate_build_mode;
+    #[test]
+    fn owner_local_and_synthetic_modes_cannot_be_crossed() {
+        assert!(validate_build_mode(Some("owner-local"), None, false).is_ok());
+        assert!(validate_build_mode(Some("owner-local"), None, true).is_err());
+        assert!(validate_build_mode(Some("owner-local"), Some("1"), false).is_err());
+        assert!(validate_build_mode(Some("qualification"), None, true).is_err());
+        assert!(validate_build_mode(Some("qualification"), Some("1"), true).is_ok());
+        assert!(validate_build_mode(Some("unexpected"), None, false).is_err());
     }
 }

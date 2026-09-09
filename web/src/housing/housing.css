@@ -1,0 +1,18 @@
+.housing-workspace { max-width: 1120px; margin: auto; }
+.housing-workspace details { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border, #ccd5d1); border-radius: 12px; }
+.housing-workspace summary { cursor: pointer; font-size: 1.1rem; font-weight: 650; }
+.housing-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.housing-workspace label { display: flex; flex-direction: column; gap: .4rem; margin: .6rem 0; }
+.housing-workspace label:has(input[type=checkbox]) { flex-direction: row; align-items: start; }
+.housing-workspace input, .housing-workspace select, .housing-workspace textarea { padding: .65rem; border: 1px solid #80958a; border-radius: 6px; max-width: 100%; }
+.housing-workspace textarea { min-height: 80px; }
+.housing-actions { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
+.housing-workspace button { padding: .65rem 1rem; cursor: pointer; }
+.housing-workspace button:disabled { cursor: default; opacity: .5; }
+.housing-workspace small { display: block; font-weight: normal; }
+.housing-workspace table { width: 100%; margin: 1.2rem 0; border-collapse: collapse; }
+.housing-workspace caption { text-align: left; font-weight: 650; padding: .5rem 0; }
+.housing-workspace td, .housing-workspace th { padding: .65rem; text-align: left; border-bottom: 1px solid #ccd5d1; }
+.housing-workspace fieldset { border: 1px solid #ccd5d1; margin: 1rem 0; }
+
+.housing-workspace fieldset.housing-editor { border: 0; padding: 0; margin: 0; min-width: 0; }

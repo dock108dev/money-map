@@ -111,8 +111,19 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def sanitized_env(identity: str, build_id: str) -> dict[str, str]:
-    env = {key: value for key, value in os.environ.items() if not SECRET_ENV.search(key)}
+def sanitized_env(
+    identity: str, build_id: str, build_mode: str = "qualification"
+) -> dict[str, str]:
+    if build_mode not in {"qualification", "owner-local"}:
+        raise ValueError("Unsupported build mode")
+    for key in ("MONEY_MAP_ALLOW_ACCEPTANCE_HOME", "MONEY_MAP_REQUIRE_QUALIFICATION"):
+        if key in os.environ and os.environ[key] != ("1" if build_mode == "qualification" else "0"):
+            raise ValueError("Conflicting inherited build mode flags")
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not SECRET_ENV.search(key) and not key.startswith(("MONEY_MAP_", "PAYCHECK_MAP_"))
+    }
     env.update(
         {
             "APPLE_SIGNING_IDENTITY": identity,
@@ -123,10 +134,11 @@ def sanitized_env(identity: str, build_id: str) -> dict[str, str]:
             "LC_ALL": "C",
             "LANG": "C",
             "PYTHONHASHSEED": "0",
-            "MONEY_MAP_ALLOW_ACCEPTANCE_HOME": "1",
-            "MONEY_MAP_REQUIRE_QUALIFICATION": "1",
         }
     )
+    if build_mode == "qualification":
+        env.update({"MONEY_MAP_ALLOW_ACCEPTANCE_HOME": "1", "MONEY_MAP_REQUIRE_QUALIFICATION": "1"})
+    env["MONEY_MAP_BUILD_MODE"] = build_mode
     return env
 
 
@@ -165,9 +177,9 @@ def preflight(commit: str, identity: str) -> dict[str, object]:
     if (
         not migrations
         or migrations[-1].name != f"{SCHEMA}.py"
-        or any(p.name.startswith("0010") for p in migrations)
+        or sum(p.name.startswith(SCHEMA.split("_", 1)[0]) for p in migrations) != 1
     ):
-        raise SystemExit("schema mismatch or forbidden migration 0010")
+        raise SystemExit("schema mismatch or duplicate current migration")
     identities = run(["security", "find-identity", "-v", "-p", "codesigning"], capture=True)
     if identity not in identities:
         raise SystemExit("selected Apple Development identity is unavailable")
@@ -410,8 +422,8 @@ def build(args: argparse.Namespace) -> Path:
     evidence.mkdir(parents=True, mode=0o700)
     build_root = Path(tempfile.mkdtemp(prefix=f"money-map-{args.build_id}.", dir="/private/tmp"))
     build_root.chmod(0o700)
-    deterministic_build_id = f"v3-candidate-{args.commit[:12]}"
-    env = sanitized_env(args.identity, deterministic_build_id)
+    deterministic_build_id = f"v3-candidate-{args.commit[:12]}-{args.build_mode}"
+    env = sanitized_env(args.identity, deterministic_build_id, args.build_mode)
     env["MONEY_MAP_BUILD_COMMIT"] = args.commit
     try:
         source = fresh_source(args.commit, build_root)
@@ -528,7 +540,7 @@ def build(args: argparse.Namespace) -> Path:
             normalized_payload_identity=normalized_identity,
             app_identity=app_identity,
             dmg_identity=dmg_identity,
-            build_mode="qualification",
+            build_mode="production" if args.build_mode == "owner-local" else "qualification",
         )
         release_manifest_path = evidence / "release-manifest.json"
         release_manifest_path.write_text(
@@ -546,12 +558,14 @@ def build(args: argparse.Namespace) -> Path:
             "target_architecture": TARGET,
             "minimum_macos": MINIMUM_MACOS,
             "build_id": deterministic_build_id,
+            "build_mode": args.build_mode,
             "evidence_id": args.build_id,
             "build_time_policy": "SOURCE_DATE_EPOCH=0; evidence recording UTC only",
             "recorded_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
             "packaging_command": (
                 "uv run --frozen python scripts/package_desktop_release.py "
-                f"{args.commit} --identity <Apple Development> --build-id {args.build_id}"
+                f"{args.commit} --identity <Apple Development> --build-id {args.build_id} "
+                f"--build-mode {args.build_mode}"
             ),
             "tools": tool_versions(source, env),
             "lockfile_hashes": pre["lockfile_hashes"],
@@ -715,6 +729,7 @@ def compare(build_a: Path, build_b: Path, output: Path) -> None:
     b = json.loads((build_b / "manifest.json").read_text())
     functional_fields = (
         "source_commit",
+        "build_mode",
         "runtime_version",
         "python_package_version",
         "release_state",
@@ -778,6 +793,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("commit", nargs="?")
     parser.add_argument("--identity")
+    parser.add_argument(
+        "--build-mode", choices=("qualification", "owner-local"), default="qualification"
+    )
     parser.add_argument("--build-id")
     parser.add_argument("--canary", action="append", default=[])
     parser.add_argument("--compare", nargs=2, metavar=("BUILD_A", "BUILD_B"), type=Path)

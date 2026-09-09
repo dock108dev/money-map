@@ -32,12 +32,12 @@ def test_release_contract_is_frozen_to_v3_candidate_identity() -> None:
     module = load_packaging_module()
     assert module.VERSION == "3.0.0-beta.1"
     assert module.PYTHON_VERSION == "3.0.0b1"
-    assert module.SCHEMA == "0009_goal_persistence"
+    assert module.SCHEMA == "0010_housing_plans"
     assert module.TARGET == "aarch64-apple-darwin"
     assert module.TEAM == "E3G5D247ZN"
     assert module.IDENTIFIER == "com.moneymap.desktop"
     assert module.ARTIFACT_NAME == "Money Map-3.0.0-beta.1-arm64.dmg"
-    assert "0010" not in {path.name for path in (PROJECT_ROOT / "alembic/versions").iterdir()}
+    assert (PROJECT_ROOT / f"alembic/versions/{module.SCHEMA}.py").is_file()
 
 
 def test_native_exit_request_owns_runtime_shutdown_before_process_exit() -> None:
@@ -125,6 +125,7 @@ def test_manifest_comparison_accepts_only_equal_functional_payloads(tmp_path: Pa
     module = load_packaging_module()
     fields: dict[str, Any] = {
         "source_commit": "a" * 40,
+        "build_mode": "qualification",
         "runtime_version": "3.0.0-beta.1",
         "python_package_version": "3.0.0b1",
         "release_state": "candidate_not_accepted",
@@ -161,6 +162,7 @@ def test_manifest_comparison_fails_on_payload_difference(tmp_path: Path) -> None
     module = load_packaging_module()
     base: dict[str, Any] = {
         "source_commit": "a" * 40,
+        "build_mode": "qualification",
         "runtime_version": "3.0.0-beta.1",
         "python_package_version": "3.0.0b1",
         "release_state": "candidate_not_accepted",
@@ -182,3 +184,69 @@ def test_manifest_comparison_fails_on_payload_difference(tmp_path: Path) -> None
     (b / "manifest.json").write_text(json.dumps(base))
     with pytest.raises(SystemExit, match="reproducibility comparison failed"):
         module.compare(a, b, tmp_path / "comparison.json")
+
+
+def test_owner_local_mode_has_no_synthetic_compile_gates(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = load_packaging_module()
+    monkeypatch.setenv("MONEY_MAP_ACCEPTANCE_FAKE_HOME", "/synthetic-only")
+    monkeypatch.setenv("PAYCHECK_MAP_LOCAL_DIR", "/synthetic-only")
+    env = module.sanitized_env("Apple Development: Test", "build-b", "owner-local")
+    assert env["MONEY_MAP_BUILD_MODE"] == "owner-local"
+    assert "MONEY_MAP_REQUIRE_QUALIFICATION" not in env
+    assert "MONEY_MAP_ALLOW_ACCEPTANCE_HOME" not in env
+    assert "MONEY_MAP_ACCEPTANCE_FAKE_HOME" not in env
+    assert "PAYCHECK_MAP_LOCAL_DIR" not in env
+    monkeypatch.setenv("MONEY_MAP_REQUIRE_QUALIFICATION", "1")
+    with pytest.raises(ValueError, match="Conflicting"):
+        module.sanitized_env("Apple Development: Test", "build-b", "owner-local")
+    synthetic = module.sanitized_env("Apple Development: Test", "build-a", "qualification")
+    assert synthetic["MONEY_MAP_REQUIRE_QUALIFICATION"] == "1"
+    assert synthetic["MONEY_MAP_ALLOW_ACCEPTANCE_HOME"] == "1"
+    with pytest.raises(ValueError, match="Unsupported"):
+        module.sanitized_env("Apple Development: Test", "build-b", "unknown")
+
+
+@pytest.mark.parametrize("migration_case", ["current", "missing", "future", "duplicate"])
+def test_preflight_accepts_only_the_current_migration_before_signing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, migration_case: str
+) -> None:
+    module = load_packaging_module()
+    for name in module.REQUIRED_INPUTS:
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((PROJECT_ROOT / name).read_bytes())
+    migrations = tmp_path / "alembic/versions"
+    migrations.mkdir(parents=True)
+    (migrations / "0009_goal_persistence.py").touch()
+    if migration_case != "missing":
+        (migrations / f"{module.SCHEMA}.py").touch()
+    if migration_case == "future":
+        (migrations / "0011_unapproved.py").touch()
+    if migration_case == "duplicate":
+        (migrations / "0010_duplicate.py").touch()
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    calls: list[list[str]] = []
+
+    class SigningBoundaryReached(Exception):
+        pass
+
+    def fake_run(command: list[str], **_kwargs: Any) -> str:
+        calls.append(command)
+        if command[0] == "security":
+            raise SigningBoundaryReached
+        responses: dict[tuple[str, ...], str] = {
+            ("git", "branch", "--show-current"): "main",
+            ("git", "rev-parse", "HEAD"): "a" * 40,
+            ("git", "ls-files"): "\n".join(module.REQUIRED_INPUTS),
+            ("rustc", "--print", "host-tuple"): module.TARGET,
+        }
+        return responses.get(tuple(command), "")
+
+    monkeypatch.setattr(module, "run", fake_run)
+    if migration_case == "current":
+        with pytest.raises(SigningBoundaryReached):
+            module.preflight("a" * 40, "Synthetic identity; never accessed")
+    else:
+        with pytest.raises(SystemExit, match="schema mismatch"):
+            module.preflight("a" * 40, "Synthetic identity; never accessed")
+        assert not any(command[0] == "security" for command in calls)

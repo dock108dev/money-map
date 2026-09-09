@@ -68,7 +68,7 @@ def test_preflight_state_contract_is_complete_and_summary_is_allowlisted(tmp_pat
     assert {state.value for state in ReadinessState} == {
         "fresh_setup",
         "eligible_legacy_source",
-        "current_0009_source",
+        "current_0010_source",
         "unsupported_newer_source",
         "missing_or_unknown_revision",
         "integrity_failure",
@@ -297,9 +297,11 @@ def test_recorded_owner_worksheet_preserves_contract_shape() -> None:
     assert recorded["contract"] == blank["contract"]
     assert set(recorded["owner_responses"]) == set(OWNER_FIELDS)
     assert set(recorded["engineering"]) == set(blank["engineering"])
-    assert recorded["engineering"]["schema"] == SCHEMA_HEAD
+    assert recorded["engineering"]["schema"] == "0009_goal_persistence"  # Historical owner record.
 
 
-def test_schema_remains_0009_and_no_0010_exists() -> None:
-    assert SCHEMA_HEAD == "0009_goal_persistence"
-    assert not list((PROJECT_ROOT / "alembic/versions").glob("0010*.py"))
+def test_schema_advances_only_to_authorized_housing_migration() -> None:
+    assert SCHEMA_HEAD == "0010_housing_plans"
+    assert [p.name for p in (PROJECT_ROOT / "alembic/versions").glob("0010*.py")] == [
+        "0010_housing_plans.py"
+    ]

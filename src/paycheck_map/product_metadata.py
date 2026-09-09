@@ -2,7 +2,7 @@
 
 PUBLIC_VERSION = "3.0.0-beta.1"
 PYTHON_PACKAGE_VERSION = "3.0.0b1"
-SCHEMA_HEAD = "0009_goal_persistence"
+SCHEMA_HEAD = "0010_housing_plans"
 
 
 def desktop_artifact_name() -> str:

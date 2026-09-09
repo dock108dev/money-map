@@ -27,6 +27,7 @@ import CashFlowView from "./cash-flow/CashFlowView";
 import { openPlaidLink } from "./plaid-link";
 import DataHomePanel, { loadDataHomeStatus, type DataHomeStatus } from "./data-home";
 import { FocusedDialog } from "./FocusedDialog";
+const HousingView = lazy(() => import("./housing/HousingView"));
 const LifeLabView = lazy(() => import("./life-lab/LifeLabView"));
 const RetirementView = lazy(() => import("./retirement/RetirementView"));
 const GoalsView = lazy(() => import("./goals/GoalsView"));
@@ -84,12 +85,12 @@ interface DesktopAboutInfo {
   boundary: string;
 }
 
-type View = "cash-flow" | "goals" | "overview" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
+type View = "housing" | "cash-flow" | "goals" | "overview" | "accounts" | "income" | "activity" | "wealth" | "retirement" | "lab" | "connections" | "review";
 
 const routeByName: Readonly<Record<string, View>> = {
   "cash-flow": "cash-flow", goals: "goals", overview: "overview", accounts: "accounts",
   income: "income", activity: "activity", wealth: "wealth", retirement: "retirement",
-  lab: "lab", connections: "connections", review: "review",
+  housing: "housing", lab: "lab", connections: "connections", review: "review",
 };
 
 function initialView(_desktopMode: boolean): View {
@@ -111,6 +112,7 @@ const navGroups: Array<{ id: string; label: string; items: Array<{ id: View; lab
     { id: "wealth", label: "Wealth", glyph: "◇" },
   ] },
   { id: "planning", label: "Planning", items: [
+    { id: "housing", label: "Housing Move", glyph: "⌂" },
     { id: "retirement", label: "Retirement", glyph: "◎" },
     { id: "lab", label: "Lab", glyph: "⌁" },
   ] },
@@ -145,11 +147,13 @@ export default function App() {
   const autoRefreshStarted = useRef(false);
   const activeNavButtonRef = useRef<HTMLButtonElement>(null);
 
+  const [housingDirty, setHousingDirty] = useState(false);
   const navigateTo = useCallback((next: View) => {
+    if (housingDirty && next !== "housing") { setError("Save or discard your Housing Move changes before leaving."); return; }
     if (next === "activity") setActivityPeriod(null);
     if (desktopMode) window.history.replaceState(null, "", `#view=${next}`);
     setView(next);
-  }, [desktopMode]);
+  }, [desktopMode, housingDirty]);
 
   const refresh = useCallback(async () => {
     try {
@@ -720,6 +724,7 @@ export default function App() {
               onShowGoals={() => navigateTo("goals")}
             />
           )}
+          {view === "housing" && <Suspense fallback={<p>Opening Housing Move…</p>}><HousingView accounts={data.accounts} navigate={navigateTo} onDirty={setHousingDirty} /></Suspense>}
           {view === "goals" && (
             <Suspense fallback={<div className="loading-state"><div className="loading-mark">M</div><p>Opening Goals…</p></div>}>
               <GoalsView

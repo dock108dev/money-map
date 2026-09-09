@@ -842,3 +842,13 @@ class ManualCorrection(Base):
     new_value: Mapped[str] = mapped_column(Text)
     reason: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class HousingPlan(Base):
+    """Editable housing goal and named alternatives; no imported source writes."""
+
+    __tablename__ = "housing_plans"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

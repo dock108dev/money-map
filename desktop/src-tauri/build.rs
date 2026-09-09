@@ -4,6 +4,8 @@ fn main() {
     println!("cargo:rerun-if-env-changed=MONEY_MAP_ACCEPTANCE_FAKE_HOME");
     println!("cargo:rerun-if-env-changed=MONEY_MAP_KEYCHAIN_ACCEPTANCE");
     println!("cargo:rerun-if-env-changed=MONEY_MAP_REQUIRE_QUALIFICATION");
+    println!("cargo:rerun-if-env-changed=MONEY_MAP_ALLOW_ACCEPTANCE_HOME");
+    println!("cargo:rerun-if-env-changed=MONEY_MAP_BUILD_MODE");
     const COMMANDS: &[&str] = &[
         "desktop_fetch",
         "desktop_reload",

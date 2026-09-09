@@ -1,5 +1,9 @@
 # Money Map bounded owner-beta qualification
 
+Current owner-local mode and artifact-specific qualification are defined in
+[Owner-local delivery](owner-local-delivery.md). This supersedes any synthetic-to-owner reuse sequence below;
+historical records remain bound to their original artifact.
+
 This contract replaces the former Campaigns A-J release qualification as the active owner-beta
 plan. Money Map is being qualified for one owner on one daily-use Mac, not for broad external
 distribution. Validation must therefore be bounded, interruptible, and headless wherever the

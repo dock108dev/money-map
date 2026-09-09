@@ -1,5 +1,9 @@
 # Money Map 3.0.0-beta.1 candidate packaging
 
+Current owner-local mode and artifact-specific qualification are defined in
+[Owner-local delivery](owner-local-delivery.md). This supersedes any synthetic-to-owner reuse sequence below;
+historical records remain bound to their original artifact.
+
 Slice 8 assembles an owner-machine candidate at public version `3.0.0-beta.1` (PEP 440 package
 version `3.0.0b1`) and schema `0009_goal_persistence`. Its state is `candidate / not accepted`;
 it is not notarized, stapled, tagged, accepted, or approved for external distribution.
