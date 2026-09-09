@@ -45,3 +45,16 @@ it("clears stale results and keeps a rejected save editable", async () => {
   expect(screen.getByLabelText("Saved plans")).toBeDisabled();
   expect(screen.getByText("Discard unsaved changes")).toBeEnabled();
 });
+
+it("can replace a draft alternative with the Long Branch brief", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("[]")));
+  render(<HousingView accounts={accounts} navigate={vi.fn()} />);
+  fireEvent.click(screen.getByText("Copy as alternative"));
+  expect(screen.getByLabelText("Alternative")).toHaveValue("1");
+  fireEvent.click(screen.getByText("Use Long Branch starting brief"));
+  expect(screen.getByLabelText("Alternative")).toHaveValue("0");
+  expect(screen.getByLabelText("Destination")).toHaveValue("Long Branch");
+  expect(screen.getByLabelText("Monthly rent target")).toHaveValue(4000);
+  expect(screen.queryByRole("option", { name: "Alternative 2" })).not.toBeInTheDocument();
+  await waitFor(() => expect(fetch).toHaveBeenCalled());
+});
