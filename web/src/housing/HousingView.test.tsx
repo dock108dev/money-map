@@ -58,3 +58,20 @@ it("can replace a draft alternative with the Long Branch brief", async () => {
   expect(screen.queryByRole("option", { name: "Alternative 2" })).not.toBeInTheDocument();
   await waitFor(() => expect(fetch).toHaveBeenCalled());
 });
+
+it("holds the draft steady while a save is pending and re-enables editing on failure", async () => {
+  let finishSave!: (response: Response) => void;
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => init?.method
+    ? new Promise<Response>(resolve => { finishSave = resolve; })
+    : new Response("[]")));
+  render(<HousingView accounts={accounts} navigate={vi.fn()} />);
+  fireEvent.click(screen.getByText("Use Long Branch starting brief"));
+  fireEvent.click(screen.getByText("Save housing goal"));
+  expect(screen.getByLabelText("Destination")).toBeDisabled();
+  expect(screen.getByText("Copy as alternative")).toBeDisabled();
+  expect(screen.getByText("Discard unsaved changes")).toBeDisabled();
+  finishSave(new Response(JSON.stringify({ detail: "Save failed" }), { status: 409 }));
+  await screen.findByText("Save failed");
+  expect(screen.getByLabelText("Destination")).toBeEnabled();
+  expect(screen.getByLabelText("Destination")).toHaveValue("Long Branch");
+});

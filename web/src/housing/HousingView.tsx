@@ -58,6 +58,7 @@ export default function HousingView({ accounts, navigate, onDirty }: { onDirty?:
   const current = result?.scenarios[active];
   return <section className="housing-workspace">
     <header><p className="eyebrow">Planning</p><h1>Housing Move</h1><p>Understand today, plan the sale and compare the life you want. Blank amounts stay unknown; enter zero only when you mean none.</p></header>
+    <fieldset className="housing-editor" disabled={busy}>
     <div className="housing-actions"><button disabled={dirty || busy} onClick={() => { setPlan(emptyPlan()); setIdentity(null); setActive(0); setResult(null); setStatus("New housing goal"); }}>New housing goal</button>
       <label>Saved plans<select value={identity?.id ?? ""} disabled={dirty || busy} onChange={e => { const saved = plans.find(p => p.id === Number(e.target.value)); if (saved) select(saved); }}><option value="">Choose a saved plan</option>{plans.map(p => <option value={p.id} key={p.id}>{p.plan.name}</option>)}</select></label>
       {dirty && <button onClick={() => { const saved = plans.find(p => p.id === identity?.id); if (saved) select(saved); else { setPlan(emptyPlan()); setActive(0); setDirty(false); setResult(null); setStatus("Draft discarded"); } }}>Discard unsaved changes</button>}
@@ -93,6 +94,7 @@ export default function HousingView({ accounts, navigate, onDirty }: { onDirty?:
       <label><input type="checkbox" checked={scenario.costs_complete} onChange={e => scenarioField("costs_complete", e.target.checked)} />I have reviewed the transition cost list, including any zero costs.</label>
     </details>
     <div className="housing-actions"><button disabled={busy} onClick={() => void run(false)}>Calculate comparison</button><button disabled={busy} onClick={() => void run(true)}>Save housing goal</button></div><p role="status">{status}</p>
+    </fieldset>
     {current && <section aria-label="Housing results"><h2>Your conditional comparison</h2><p>{plan.as_of} through {plan.end_date}. These are estimates based on entered assumptions, not an affordability verdict.</p>
       {current.unknown.length > 0 && <p>Still unknown: {current.unknown.map(k => labels[k as MoneyKey] ?? k.replaceAll("_", " ")).join(", ")}. Complete projections are withheld.</p>}
       <ul>{current.warnings.map(w => <li key={w}>{w}</li>)}</ul><h3>Sale cash: {dollar(current.proceeds)}</h3><p>Sale price − mortgage payoff − selling expenses. This includes returned equity and is not profit. Negative sale cash is needed at closing.</p>
