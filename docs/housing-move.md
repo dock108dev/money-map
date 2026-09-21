@@ -1,6 +1,6 @@
 # Housing Move: implementation and owner evaluation
 
-Planning update, September 21: the [beta path](/Users/michaelfuscoletti/Desktop/savings_next_steps.md) requires an explicit comparison of saved versus refreshed plans after new financial inputs. The implementation contract below still describes today's dated/manual baseline; it does not claim automatic refresh exists. B1 must define how account category participation, source dates and preserved assumptions feed a reviewed new baseline without mutating imported evidence or silently reserving money.
+Planning update, September 21: the owner-local beta path (`savings_next_steps.md` on the owner’s Desktop; not included in this repository) requires an explicit comparison of saved versus refreshed plans after new financial inputs. The implementation contract below still describes today's dated/manual baseline; it does not claim automatic refresh exists. B1 must define how account category participation, source dates and preserved assumptions feed a reviewed new baseline without mutating imported evidence or silently reserving money.
 
 Housing Move is a separate planning workspace in the ordinary navigation. It creates a housing
 goal without requiring an existing operational goal or importing accounts. A saved document contains

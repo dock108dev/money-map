@@ -4,7 +4,7 @@ Updated September 21, 2026. Shared Glass UI Starter 01; presentation-only adopti
 
 ## For future contributors
 
-Start with [local design requirements](ui-design-requirements.md), then review the shared [UI Templates gallery](../../UI%20Templates/index.html) and [template guide](../../UI%20Templates/README.md). The source folder on the owner's Mac is `/Users/michaelfuscoletti/Desktop/UI Templates`. It contains dashboard, list/table, form/setup, settings, detail, state/dialog, and native Godot starters.
+Start with [local design requirements](ui-design-requirements.md), then review the shared UI Templates gallery (`index.html`) and template guide (`README.md`), if available locally. The source folder on the owner's Mac is `/Users/michaelfuscoletti/Desktop/UI Templates`. It contains dashboard, list/table, form/setup, settings, detail, state/dialog, and native Godot starters.
 
 Use light cool glass, slate text, blue actions, restrained depth, rounded controls, and system typography as the default. Do not reintroduce the generic beige/green/yellow template. Preserve explicit semantic success, caution, error, unavailable, and unknown states. Readability and the task's layout outrank decoration.
 

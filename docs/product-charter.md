@@ -2,7 +2,7 @@
 
 ## Personal-beta scope update — September 21, 2026
 
-The [Desktop beta path](/Users/michaelfuscoletti/Desktop/savings_next_steps.md) now requires file/manual updates with recurring notes/context, adding all owner accounts with configurable category participation, one primary funded goal and an explicit comparison showing how updated financial inputs change saved plans. Live bank connections are not required. Existing account/import/recurring capabilities must be assessed before declaring these requirements implemented; unsupported file formats need an honest manual path.
+The owner-local Desktop beta path (`savings_next_steps.md`; not included in this repository) now requires file/manual updates with recurring notes/context, adding all owner accounts with configurable category participation, one primary funded goal and an explicit comparison showing how updated financial inputs change saved plans. Live bank connections are not required. Existing account/import/recurring capabilities must be assessed before declaring these requirements implemented; unsupported file formats need an honest manual path.
 
 Retirement/work-optional planning is required for beta, including an ordinary-use scenario and comparison of changed inputs; existing implementation still requires current-candidate and owner validation. Category exclusion must preserve source evidence, transfer identity and accessible-money rules. Refreshed plans must preserve dated prior baselines and assumptions until an explicit save decision. These are product-planning requirements, not owner-data access or a new qualification claim.
 
