@@ -15,14 +15,14 @@
 .retirement-verdict.essentials { background: #fff7e9; border-color: #ead8b7; }
 .retirement-verdict.bridge, .retirement-verdict.shortfall { background: #fff0f1; border-color: #e8c4c8; }
 .retirement-verdict.unavailable { background: #f2f4f3; border-color: #d8ddda; }
-.retirement-verdict h2 { margin: 4px 0; font-family: Georgia, serif; font-size: clamp(28px, 4vw, 43px); font-weight: 500; }
+.retirement-verdict h2 { margin: 4px 0; font-family: var(--glass-font, system-ui); font-size: clamp(28px, 4vw, 43px); font-weight: 500; }
 .retirement-verdict p { margin: 0 0 10px; font-size: 12px; }
 .retirement-goal-state { display: block; font-size: 11px; }
 .retirement-next { margin-top: 12px !important; color: #4d5a54; }
 .retirement-verdict dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .retirement-verdict dl div { padding: 12px; border-radius: 11px; background: rgba(255,255,255,.72); min-width: 0; }
 .retirement-verdict dt { color: #67716b; font-size: 10px; }
-.retirement-verdict dd { margin: 5px 0 0; font-family: Georgia, serif; font-weight: 500; font-size: clamp(18px, 2.3vw, 26px); overflow-wrap: anywhere; }
+.retirement-verdict dd { margin: 5px 0 0; font-family: var(--glass-font, system-ui); font-weight: 500; font-size: clamp(18px, 2.3vw, 26px); overflow-wrap: anywhere; }
 .retirement-projection-panel { padding: 22px; }
 .retirement-projection-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
 .retirement-display-toggle { display: inline-flex; padding: 3px; border-radius: 10px; background: #edf0ee; }
@@ -50,7 +50,7 @@
 .retirement-snapshot-list > button { min-height: 54px; border: 1px solid #dce2de; border-radius: 12px; background: #fafcfb; padding: 10px 12px; display: flex; justify-content: space-between; gap: 14px; text-align: left; color: inherit; }
 .retirement-snapshot-list span { display: grid; gap: 3px; }
 .retirement-snapshot-list small { color: #68716c; }
-.retirement-snapshot-list em { align-self: center; color: #27785d; font-style: normal; font-size: 12px; font-weight: 700; }
+.retirement-snapshot-list em { align-self: center; color: #1768cf; font-style: normal; font-size: 12px; font-weight: 700; }
 .show-older-button { width: fit-content; margin: 12px 22px 0; }
 .retirement-stored-evidence { margin: 14px 22px 0; padding: 14px; border-radius: 12px; background: #f1f4f2; }
 .retirement-stored-evidence p { margin: 5px 0; }

@@ -1,13 +1,13 @@
 :root {
   color: #14241f;
-  background: #f3f1e9;
+  background: #edf3fc;
   font-family:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --ink: #14241f;
   --muted: #65726c;
-  --paper: #fbfaf5;
+  --paper: #f8faff;
   --line: #dce0d8;
   --green: #1f7259;
   --deep-green: #143f33;
@@ -76,7 +76,7 @@ body {
   min-height: 100vh;
   background:
     radial-gradient(circle at 83% 0%, rgba(214, 205, 177, 0.34), transparent 26rem),
-    #f3f1e9;
+    #edf3fc;
 }
 
 button,

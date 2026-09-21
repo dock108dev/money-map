@@ -23,13 +23,13 @@
   color: #6a5220;
   display: grid;
   place-items: center;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 22px;
 }
 
 .review-card h3 {
   margin: 1px 0 7px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-weight: 500;
   text-transform: capitalize;
 }
@@ -128,7 +128,7 @@
 
 .empty-state h3 {
   margin: 13px 0 7px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 25px;
   font-weight: 500;
 }
@@ -177,7 +177,7 @@
 }
 
 .bridge-equation strong {
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 18px;
   font-weight: 500;
 }
@@ -202,7 +202,7 @@
 
 .account-card h2 {
   margin: 0 0 8px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-weight: 500;
 }
 
@@ -224,7 +224,7 @@
 
 .current-value strong {
   margin-top: 4px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 22px;
   font-weight: 500;
 }

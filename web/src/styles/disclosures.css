@@ -11,7 +11,7 @@
 .desktop-admin > summary::-webkit-details-marker { display: none; }
 .desktop-admin > summary::after { content: "⌄"; }
 .desktop-admin[open] > summary::after { content: "⌃"; }
-.desktop-admin-actions { position: absolute; top: calc(100% + 8px); right: 0; width: min(240px, calc(100vw - 32px)); padding: 10px; display: grid; gap: 6px; background: var(--paper, #fbfaf5); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px #18382c24; }
+.desktop-admin-actions { position: absolute; top: calc(100% + 8px); right: 0; width: min(240px, calc(100vw - 32px)); padding: 10px; display: grid; gap: 6px; background: var(--paper, #f8faff); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px #18382c24; }
 .desktop-admin-actions .refresh-button { text-align: left; color: var(--ink); background: transparent; border-color: transparent; }
 .desktop-admin-actions .refresh-button:hover { background: #e5efe7; }
 .desktop-admin > summary:focus-visible { outline: 3px solid #c5a749; outline-offset: 3px; }

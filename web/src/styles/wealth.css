@@ -33,7 +33,7 @@
 
 .wealth-access-total > strong {
   margin-top: 8px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: clamp(44px, 7vw, 68px);
   font-weight: 500;
   letter-spacing: -2px;
@@ -91,7 +91,7 @@
 
 .fidelity-performance-heading h2 {
   margin: 7px 0 0;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: clamp(36px, 5vw, 52px);
   font-weight: 500;
   letter-spacing: -1.4px;
@@ -128,7 +128,7 @@
 
 .performance-funding-summary strong {
   margin: 5px 0 3px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 24px;
   font-weight: 500;
 }
@@ -187,7 +187,7 @@
 
 .performance-result-primary strong {
   margin: 5px 0;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 31px;
   font-weight: 500;
 }
@@ -248,7 +248,7 @@
 
 .recent-observation-card > strong {
   margin-top: 11px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 32px;
   font-weight: 500;
 }
@@ -357,7 +357,7 @@
 
 .wealth-account-value {
   text-align: right;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 18px;
   font-weight: 500;
 }

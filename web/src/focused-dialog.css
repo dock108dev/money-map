@@ -39,7 +39,7 @@
 
 .focused-dialog-heading h2 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 30px;
   font-weight: 500;
 }

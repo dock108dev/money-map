@@ -1,0 +1,18 @@
+/* Shared Glass UI Starter 01, adapted September 21, 2026. See docs/ui-design.md. */
+@media screen {
+:root{color-scheme:light;color:#182338;background:#edf3fc;--ink:#182338;--muted:#54647b;--paper:rgba(255,255,255,.82);--surface:#f4f8ff;--line:rgba(83,108,150,.2);--green:#0969df;--deep-green:#084f9f;--mint:#e5efff;--shadow:0 14px 40px #334d7910;--glass-font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-family:var(--glass-font)}
+body{background:radial-gradient(ellipse at 0 0,#d4e6ff,transparent 55%),radial-gradient(ellipse at 100% 35%,#e3dcfa,transparent 50%),#edf3fc;background-attachment:fixed}
+.sidebar{background:rgba(242,247,255,.8);color:var(--ink);border-right:1px solid white;backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%)}
+.brand{border-color:var(--line)}.brand strong,.brand-mark,.loading-mark,.mobile-brand{font-family:var(--glass-font)}.brand-mark,.loading-mark{border-radius:12px;background:linear-gradient(145deg,white,#bed8ff);color:#0969df;border:1px solid white}.brand small,.nav-group-label,.privacy-card small{color:var(--muted)}.sidebar nav button{color:#46566e;border-radius:14px;min-height:44px}.sidebar nav button:hover{color:#075ac0;background:#ffffffa8}.sidebar nav button.active{background:#fff;color:#075ac0;box-shadow:0 3px 12px #39568014}.privacy-card{background:#ffffff80;border-color:white}.sidebar :is(button,summary,a):focus-visible{outline-color:#0969df}.topbar{background:#ffffffb8;border-color:#ffffffdc;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.panel,.compact-panel,.stat-card,.metric-card,.review-card,.data-home-card,.goal-gap-card,.housing-plan-card,.retirement-panel{border-radius:24px;background:var(--paper);border-color:#ffffffed;box-shadow:var(--shadow),inset 0 1px 0 white;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+h1,h2,h3,.page-heading h1,.section-heading h2{font-family:var(--glass-font);letter-spacing:-.5px}.page-heading h1{font-size:32px}button,input,select,textarea,.primary-button,.secondary-button,.top-import{border-radius:13px}.primary-button{background:linear-gradient(#2588fc,#0969df);border-color:#1472de;color:white}.primary-button:hover{background:#075ac0}.secondary-button,.top-import{background:#ffffffc9;border-color:var(--line);color:var(--ink)}input,select,textarea{background:#ffffffd9;border-color:var(--line);color:var(--ink)}input[type=checkbox]{accent-color:#0969df}:is(button,input,select,textarea,summary,a):focus-visible{outline:3px solid #0969df;outline-offset:3px}.data-home-setup{background:radial-gradient(ellipse at 0 0,#d4e6ff,transparent 55%),#edf3fc}.privacy-dot{background:#08725e;box-shadow:0 0 0 4px #08725e14}
+}
+@media screen and (prefers-reduced-transparency:reduce){.sidebar,.topbar,.panel,.compact-panel,.stat-card,.metric-card,.review-card,.data-home-card,.goal-gap-card,.housing-plan-card,.retirement-panel{background:#f8faff;backdrop-filter:none;-webkit-backdrop-filter:none}}
+@supports not (backdrop-filter:blur(1px)){@media screen{.sidebar,.topbar,.panel,.compact-panel,.data-home-card{background:#f8faff}}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media screen {
+.cash-flow-metrics article,.cash-flow-chart,.cash-flow-links a{border-radius:20px;background:var(--paper);border-color:#ffffffed;box-shadow:0 8px 24px #334d7908}
+.cash-flow-title h1{font-size:clamp(30px,3vw,38px);font-weight:650}
+.cash-flow-net.net-positive{border-bottom-color:#08725e}
+.cash-flow-periods button,.cash-flow-print{min-height:44px}
+}

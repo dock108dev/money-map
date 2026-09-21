@@ -35,3 +35,7 @@ Run `uv run --locked --python 3.12 paycheck-map verify` for the complete source 
 Run `uv run --locked --python 3.12 paycheck-map --help` for supported commands. There is no hosted
 deployment. Signed desktop builds and owner acceptance are separate workflows; passing tests does
 not qualify or release a candidate.
+
+## Shared UI design
+
+See [UI design and templates](docs/ui-design.md) before changing this interface. The shared Desktop `UI Templates` folder defines the glass design baseline for future contributors; this repository keeps its own runtime styles and a portable copy of the requirements.

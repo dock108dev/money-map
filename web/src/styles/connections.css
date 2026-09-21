@@ -48,7 +48,7 @@
 .connection-target h2,
 .keychain-panel h2 {
   margin: 6px 0 8px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 27px;
   font-weight: 500;
 }
@@ -170,7 +170,7 @@
 
 .plaid-setup h2 {
   margin: 6px 0 8px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 27px;
   font-weight: 500;
 }
@@ -380,7 +380,7 @@
 }
 
 .comparison-card > div strong {
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 16px;
   font-weight: 500;
 }
@@ -397,7 +397,7 @@
 
 .import-card h2 {
   margin: 18px 0 8px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 25px;
   font-weight: 500;
 }

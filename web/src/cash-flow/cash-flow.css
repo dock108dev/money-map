@@ -20,7 +20,7 @@
 
 .cash-flow-title h1 {
   margin: 3px 0 2px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--glass-font, system-ui);
   font-size: clamp(34px, 4vw, 48px);
   line-height: 1;
   letter-spacing: -1.4px;
@@ -79,7 +79,7 @@
   border: 1px solid #cbd2cc;
   border-radius: 999px;
   color: #50605a;
-  background: #fbfaf5;
+  background: #f8faff;
   font-size: 11px;
   font-weight: 650;
 }
@@ -177,7 +177,7 @@
   display: block;
   margin-top: 3px;
   overflow-wrap: anywhere;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--glass-font, system-ui);
   font-size: clamp(23px, 2.7vw, 34px);
   line-height: 1.08;
   font-variant-numeric: tabular-nums;
@@ -214,7 +214,7 @@
 
 .cash-flow-chart-heading h2 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 15px;
   font-weight: 500;
 }
@@ -247,7 +247,7 @@
 }
 
 .cash-flow-current-answer > strong {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 18px;
   font-weight: 500;
 }
@@ -280,7 +280,7 @@
 .goal-gap-copy .eyebrow { font-size: 8px; }
 .goal-gap-copy > strong {
   overflow-wrap: anywhere;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--glass-font, system-ui);
   font-size: clamp(15px, 1.6vw, 19px);
   line-height: 1.15;
   font-weight: 500;
@@ -381,7 +381,7 @@
 
 .repeated-outflow-candidates > p { margin: 0; padding: 0 10px 9px; color: var(--muted); font-size: 9px; }
 .repeated-outflow-row { margin: 0 9px 9px; padding: 9px; display: grid; gap: 3px; border: 1px solid #e0e4e1; border-radius: 7px; }
-.repeated-outflow-row > strong { font-family: Georgia, serif; font-size: 13px; font-weight: 500; }
+.repeated-outflow-row > strong { font-family: var(--glass-font, system-ui); font-size: 13px; font-weight: 500; }
 .repeated-outflow-row > span { color: var(--muted); font-size: 8px; line-height: 1.35; }
 .repeated-outflow-row label { margin-top: 5px; }
 .goal-gap-draft-total { margin: -2px 0 0; color: var(--muted); font-size: 9px; font-variant-numeric: tabular-nums; }
@@ -396,8 +396,8 @@
   background: #f7faf6;
 }
 
-.goal-gap-results h3 { margin: 4px 0 0; font-family: Georgia, serif; font-size: 16px; font-weight: 500; }
-.goal-gap-result-headline { display: block; margin: 2px 0 12px; overflow-wrap: anywhere; font-family: Georgia, serif; font-size: clamp(27px, 4vw, 42px); line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums; }
+.goal-gap-results h3 { margin: 4px 0 0; font-family: var(--glass-font, system-ui); font-size: 16px; font-weight: 500; }
+.goal-gap-result-headline { display: block; margin: 2px 0 12px; overflow-wrap: anywhere; font-family: var(--glass-font, system-ui); font-size: clamp(27px, 4vw, 42px); line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums; }
 .goal-gap-results dl { margin: 0; display: grid; gap: 6px; }
 .goal-gap-results dl > div { min-width: 0; padding: 7px 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border-top: 1px solid #dce4de; }
 .goal-gap-results dt { color: var(--muted); font-size: 9px; font-weight: 700; }
@@ -435,7 +435,7 @@
   text-align: left;
 }
 
-.cash-flow-destinations strong { font-family: Georgia, serif; font-size: 14px; font-weight: 500; }
+.cash-flow-destinations strong { font-family: var(--glass-font, system-ui); font-size: 14px; font-weight: 500; }
 .cash-flow-destinations span { overflow-wrap: anywhere; color: var(--muted); font-size: 9px; }
 
 .cash-flow-evidence {
@@ -460,7 +460,7 @@
 .cash-flow-evidence-grid dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 10px; font-variant-numeric: tabular-nums; }
 .cash-flow-table-wrap { max-width: 100%; margin-top: 12px; overflow-x: auto; }
 .cash-flow-table-wrap table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 9px; font-variant-numeric: tabular-nums; }
-.cash-flow-table-wrap caption { padding: 6px 0; text-align: left; font-family: Georgia, serif; font-size: 14px; }
+.cash-flow-table-wrap caption { padding: 6px 0; text-align: left; font-family: var(--glass-font, system-ui); font-size: 14px; }
 .cash-flow-table-wrap th, .cash-flow-table-wrap td { padding: 7px 8px; border-bottom: 1px solid #e3e5e1; text-align: right; white-space: nowrap; }
 .cash-flow-table-wrap th:first-child, .cash-flow-table-wrap td:first-child { text-align: left; }
 

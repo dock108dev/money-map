@@ -74,7 +74,7 @@
 }
 
 .add-account-card strong {
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 19px;
   font-weight: 500;
 }

@@ -13,7 +13,7 @@
   height: 100%;
   padding: 30px;
   overflow-y: auto;
-  background: #fbfaf5;
+  background: #f8faff;
   box-shadow: -15px 0 45px rgba(16, 31, 26, 0.2);
   animation: slide-in 180ms ease-out;
 }
@@ -24,14 +24,14 @@
 
 .drawer h2 {
   margin: 7px 0 0;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 30px;
   font-weight: 500;
 }
 
 .drawer h3 {
   margin: 26px 0 10px;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-weight: 500;
 }
 
@@ -71,7 +71,7 @@
 }
 
 .formula-card strong {
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-size: 15px;
   font-weight: 500;
 }
@@ -189,7 +189,7 @@
 
 .fatal-state h1 {
   margin-bottom: 0;
-  font-family: Georgia, serif;
+  font-family: var(--glass-font, system-ui);
   font-weight: 500;
 }
 
