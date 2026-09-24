@@ -1,6 +1,6 @@
 # Security model
 
-## Slice 4 desktop boundary
+## Desktop boundary
 
 The normative desktop threat/control matrix is `docs/v3/desktop-threat-model.md`; the executed
 gates are `docs/v3/security-acceptance.md`. The signed shell activates two exact Tauri capability

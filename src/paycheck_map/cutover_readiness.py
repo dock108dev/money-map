@@ -1,4 +1,4 @@
-"""Fail-closed owner cutover readiness layered on the Slice 2 data-home authority."""
+"""Fail-closed owner cutover readiness layered on the shared data-home authority."""
 
 from __future__ import annotations
 

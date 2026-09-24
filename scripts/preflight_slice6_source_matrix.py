@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diagnostic source preflight for the sealed Slice 6 state-route matrix."""
+"""Diagnostic source preflight for the sealed release-state route matrix."""
 
 from __future__ import annotations
 

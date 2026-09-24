@@ -1,6 +1,10 @@
 # Money Map v3 desktop architecture
 
-This describes the Apple Silicon desktop runtime, persistent data-home recovery and cutover-readiness boundary. Implementation and qualification history is retained in the [architecture record](../history/desktop-architecture-record.md); current delivery requirements are in [owner-local delivery](owner-local-delivery.md).
+> Historical architecture narrative preserved during documentation cleanup. Statements below describe earlier implementation stages; use [current architecture](../v3/desktop-architecture.md) and [owner-local delivery](../v3/owner-local-delivery.md) for current behavior.
+
+Status: frozen by Slice 0, productionized by Slice 1, extended by Slice 2 data-home recovery, and
+completed at the Slice 3 product-experience boundary for the Apple Silicon owner beta. Slice 7
+adds cutover readiness as a fail-closed layer over the same Slice 2 authority.
 
 ## Decision
 
@@ -12,7 +16,9 @@ Money Map uses one native shell and one sidecar builder:
 - **Authority:** SQLite remains the financial-data authority and macOS Keychain remains the
   secret authority. Rust does not reproduce financial logic and React is not rewritten.
 
-The current application version is `3.0.0-beta.1` (Python `3.0.0b1`) and the schema remains `0009_goal_persistence`. Synthetic acceptance uses isolated data and secret-store policy; production data-home access follows the explicit owner-local delivery procedure.
+The Slice 1 runtime remains deliberately disposable and synthetic. It stays at application version
+`2.1.0` and schema `0009_goal_persistence`; production data-home and migration work begin only in
+Slice 2.
 
 ## Ownership and process lifecycle
 
@@ -120,7 +126,7 @@ also independently rejects non-API and traversal paths, unsupported methods, and
 
 ## Persistent macOS storage contract
 
-Tauri is the sole path provider. It derives the production home from the macOS user
+Slice 2 makes Tauri the one path provider. It derives the production home from the macOS user
 Library and passes only the resolved application, cache, and log roots through the cleared child
 environment. Python validates that trusted boundary again and remains the only SQLite process.
 Production launch accepts no repository or current-working-directory fallback. Signed synthetic
@@ -187,18 +193,27 @@ multi-item configuration restores the prior Keychain state. Credentials must nev
 frontend storage, logs, crash output, artifacts, diagnostics or evidence; manual import remains a
 permanent fallback.
 
-The shell also creates a separately labeled `safe-error` WebView. It contains no financial data and
+Slice 4 also creates a separately labeled `safe-error` WebView. It contains no financial data and
 has only runtime-status, restart and About permissions. Startup integrity failure hides `main` and
 shows this surface; successful deliberate recovery restores the main window. Navigation and new
 windows fail closed on both surfaces.
 
 ## Plaid, printing, and file selection
 
-The Plaid Link loader may load the official script and frames under the bundle CSP, receive the public token only in memory, and send it through native authenticated API transport. API connectivity remains on loopback. Actual sandbox Link execution remains unverified: it requires dedicated sandbox credentials and an observed signed-WebView callback without exposing secrets. This document does not authorize a provider call.
+The existing Plaid Link loader and callback design remain intact: the WebView may load the
+official Plaid Link script and frames under the bundle CSP, receives the public token only in
+memory, and sends it through the native authenticated API transport. The CSP allows the Plaid
+script host and Plaid/Plaidusercontent frames while keeping API connectivity on loopback. No
+safe sandbox client ID and secret were independently available, so Slice 0 did not request a Link
+token or contact Plaid. The exact remaining external proof is: provide dedicated Plaid sandbox
+credentials, obtain a sandbox Link token, open Link in the signed WebView, and observe its callback
+through the native transport without exposing secrets.
 
-`window.print()` maps to the Tauri WebView print API. Desktop file selection uses the native macOS open panel; selection and printing remain explicit user actions.
+`window.print()` is mapped to the Tauri WebView print API and displayed the real macOS print
+sheet. The desktop-only file input displayed the real macOS open panel. No file was selected and
+no print output was created during the proof.
 
-The shell provides the complete native File, View, Window, and application menus; route-synchronized
+Slice 3 adds the complete native File, View, Window, and application menus; route-synchronized
 keyboard navigation; explicit hide-on-close and reopen behavior; resume health validation; approved
 report identities with Quick Look/Finder actions; and native sanitized-diagnostics export. The
 complete interaction, focus, printing, and allowlist contracts are in
@@ -206,22 +221,32 @@ complete interaction, focus, printing, and allowlist contracts are in
 
 ## Signing and distribution
 
-The bundle contains the native executable, the external binary at `Contents/MacOS/money-map-sidecar`, Tauri-embedded React assets and `Info.plist`. Owner-local packaging uses Apple Development signing and strict signature verification; qualification remains specific to the built artifact.
+The bundle contains the native executable, the target-triple external binary copied to the final
+`Contents/MacOS/money-map-sidecar` name, Tauri-embedded React assets, and `Info.plist`. Slice 0's
+extracted app was deep-signed with the installed Apple Development identity, passed strict deep
+signature verification, and executed after being copied outside the repository.
 
 PyInstaller's extracted CPython library receives an ad-hoc runtime signature, so combining this
 one-file layout with hardened runtime produced a Team-ID validation failure during the spike. The
 owner-only proof therefore uses Apple Development signing without hardened runtime. Before any
 external distribution, a separately authorized path must use a Developer ID Application identity,
 hardened runtime, notarization, stapling, and Gatekeeper assessment, and must resolve the nested-
-runtime signing layout (for example by signing a one-folder sidecar's nested code explicitly).
+runtime signing layout (for example by signing a one-folder sidecar's nested code explicitly). A
+DMG is not a Slice 0 artifact.
 
 ## Why this architecture won
 
-The shell preserves the existing React product and Python financial engine while giving one native process ownership of startup, windows, authenticated transport and shutdown. The [architecture record](../history/desktop-architecture-record.md) retains the original tool evaluation and proof results.
+Tauri passed bundled launch outside the repository, visible React startup, deep navigation and
+reload, authenticated API access, negative host/origin/session checks, native printing, native
+file selection, real Keychain write/read/delete, safe startup failure, child cleanup, strict
+Apple Development signature verification, and signed execution. It keeps the existing product
+and financial engine while giving one native process lifecycle ownership.
 
-A second shell is not maintained: it would duplicate lifecycle and service responsibilities.
+The one permitted fallback—a Python-native WKWebView shell—was rejected without implementation.
+There was no failed required Tauri capability to justify maintaining or testing a second shell,
+and it would mix shell and service responsibilities while providing a weaker packaging path.
 
-## Security hardening
+## Slice 4 security hardening
 
 The complete capability table, CSP, navigation policy, Keychain decision, import budgets,
 database/recovery integrity gates, signed build evidence and attack campaigns are in
@@ -229,7 +254,7 @@ database/recovery integrity gates, signed build evidence and attack campaigns ar
 Apple Development team signature before sidecar spawn. Developer ID, a nested-code layout that can
 support hardened runtime, notarization and stapling remain external-distribution work.
 
-## Packaging boundary
+## Slice 5 packaging boundary
 
 `scripts/package_desktop_release.py` is the only release-packaging entrypoint. It builds from a
 fresh archive of an exact clean commit in a private disposable root, uses the frozen uv, pnpm and
@@ -243,18 +268,19 @@ do not change.
 ## Deferred risks
 
 - Owner validation: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
-- Each new candidate needs its own reproducibility, signature, privacy and installed-artifact checks; earlier build results do not qualify later source.
+- Slice 5: deterministic owner-candidate build, Apple Development signing, DMG, scans,
+  reproducibility evidence, and isolated installed-artifact proof.
 - External distribution: Developer ID, hardened runtime, notarization, stapling, downloaded-copy
   Gatekeeper assessment, and externally appropriate nested-code layout.
 - PyInstaller one-file extraction adds startup cost and transient files; later profiling may choose
   a signed one-folder layout while preserving PyInstaller as the frozen builder.
 
-## Cutover-readiness layer
+## Slice 7 cutover-readiness layer
 
-Cutover readiness provides a sanitized readiness projection without duplicating persistence. It classifies every
+Slice 7 adds a sanitized readiness projection without duplicating persistence. It classifies every
 source, schema, health, destination, rehearsal, confirmation, interruption, rollback, and completion
 state while keeping `DataHomeManager` authoritative. A one-use expiring confirmation binds the
 read-only source identity, destination, verified backup, rehearsal and logical-manifest commitments,
 candidate commit/artifact, and requested action. The rehearsal uses only a disposable fake home;
-live owner execution remains deferred until the authorized owner-local delivery procedure. See
+live owner execution remains deferred until the consolidated post-Slice-8 campaign. See
 `cutover-readiness.md` and `owner-cutover-worksheet.json`.

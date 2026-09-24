@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the deterministic Slice 7 cutover campaign with invented disposable data only."""
+"""Run the deterministic cutover campaign with invented disposable data only."""
 
 from __future__ import annotations
 

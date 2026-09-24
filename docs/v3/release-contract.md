@@ -5,11 +5,11 @@ Current owner-local mode and artifact-specific qualification are defined in
 historical records remain bound to their original artifact.
 
 This contract defines the mandatory gates for `Money Map 3.0.0-beta.1` and later distributable
-macOS builds. Slice 0 freezes the gates; it does not claim the beta release is complete.
+macOS builds. Defining these gates does not establish release acceptance.
 
 ## Release identity and artifacts
 
-Slice 8 uses the locked entrypoint documented in `desktop-packaging.md` to assemble the candidate
+Packaging uses the locked entrypoint documented in `desktop-packaging.md` to assemble the candidate
 `Money Map-3.0.0-beta.1-arm64.dmg`. Public surfaces use `3.0.0-beta.1`; Python package metadata uses
 the explicit PEP 440 equivalent `3.0.0b1`.
 
@@ -25,7 +25,7 @@ the explicit PEP 440 equivalent `3.0.0b1`.
 
 ## Candidate and acceptance states
 
-Slice 8 emits `money-map-v3-release-manifest-v1` with state `candidate_not_accepted`. It binds the
+The packaging command emits `money-map-v3-release-manifest-v1` with state `candidate_not_accepted`. It binds the
 exact clean source commit, public/PEP-440 version mapping, schema, bundle, architecture, signing and
 entitlements, normalized payload, app/DMG candidate identities, oracle digest, build mode, and blank
 qualification, owner, cutover, decision, hash, tag, and release-date fields. All acceptance,
@@ -37,7 +37,7 @@ two-cycle installed smoke, and the short owner synthetic walkthrough. Owner cuto
 owner decision, final artifact identities, accepted commit, local tag, and release date remain
 separate mandatory requirements. Candidate code never synthesizes results or owner responses.
 The retired 221-combination matrix and Campaigns C-J are optional soak evidence and can neither
-block nor promote an owner-beta candidate. Historical Slice 5/6 evidence and diagnostic artifacts
+block nor promote an owner-beta candidate. Historical packaging and synthetic qualification evidence and diagnostic artifacts
 cannot fill or promote final identities. The installed smoke has one monotonic command-wide
 deadline of at most 1,200 seconds; timeout fails closed without retry and enters bounded cleanup.
 
@@ -53,7 +53,7 @@ deadline of at most 1,200 seconds; timeout fails closed without retry and enters
 - Creating a tag, GitHub Release, upload, external DMG distribution, deployment, or publication is
   a separate authorized action after all evidence is accepted. Build work alone never authorizes
   it.
-- Slice 8 retains inside-out nested Mach-O, app, and DMG signing with timestamp-free Apple
+- Owner-local packaging uses inside-out nested Mach-O, app, and DMG signing with timestamp-free Apple
   Development signatures and no new entitlements. Developer ID, hardened runtime, notarization,
   stapling, and Gatekeeper qualification remain the separate external-distribution path.
 
@@ -100,9 +100,9 @@ deadline of at most 1,200 seconds; timeout fails closed without retry and enters
 - Prove backup creation, reveal-in-Finder, restore preview, destructive-replacement warning,
   restored logical equality, idempotent repeated restore, and recovery when the latest backup is
   corrupt. Keep an accepted prior database until the restored copy is verified.
-- Slice 2 acceptance and all automated migration work use a build-time fake macOS home and checked-in
+- Synthetic acceptance and all automated migration work use a build-time fake macOS home and checked-in
   synthetic factories only. The production Application Support home, active developer `.local`,
-  owner database, and financial Keychain namespace are forbidden until Slice 7.
+  owner database, and financial Keychain namespace require explicit owner authorization and the owner-local delivery procedure.
 - The `acceptance-synthetic-v1` runtime substitutes an in-memory secret store, so a signed
   synthetic campaign cannot read or modify the owner's macOS Keychain.
 - The journal may contain only operation IDs/kinds, safe classifications, approved-root basenames,
@@ -123,7 +123,7 @@ deadline of at most 1,200 seconds; timeout fails closed without retry and enters
   owner alone performs the bounded live acceptance, choosing every connection, import, support,
   and recovery action. Never simulate owner feedback or infer acceptance from automated traversal.
 
-Slice 3 formalizes the broader installed-app state matrix, native menus, close/reopen and
+The desktop product-experience contract defines the broader installed-app state matrix, native menus, close/reopen and
 sleep/wake lifecycle, offline-local behavior, report/print path approval, diagnostics allowlist,
 focus restoration, keyboard/VoiceOver inspection, reduced motion, contrast, minimum-size layout,
 and 200% zoom in `docs/v3/desktop-product-experience.md`. These are retained as hardening and

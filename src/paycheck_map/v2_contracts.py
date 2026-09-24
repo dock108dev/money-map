@@ -631,7 +631,7 @@ class GoalMilestoneState(ContractModel):
 
 
 def contract_milestone(position: GoalPosition, position_fingerprint: str) -> GoalMilestone:
-    """Build the expected milestone vector; Slice 2 will own runtime selection."""
+    """Build the expected milestone vector for the goal-service contract."""
 
     source_ref = f"position:{position_fingerprint}"
     if position.accessible_cash.amount is None:

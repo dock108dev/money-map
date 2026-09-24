@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independently validate and resolve the synthetic Slice 6 state-route oracle."""
+"""Independently validate and resolve the synthetic release-state route oracle."""
 
 from __future__ import annotations
 

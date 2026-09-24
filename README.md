@@ -38,4 +38,4 @@ not qualify or release a candidate.
 
 ## Shared UI design
 
-See [UI design and templates](docs/ui-design.md) before changing this interface. The shared Desktop `UI Templates` folder defines the glass design baseline for future contributors; this repository keeps its own runtime styles and a portable copy of the requirements.
+See [UI design and templates](docs/ui-design.md) before changing this interface. The repository keeps its own runtime styles and portable design requirements; the original shared Desktop gallery is not required.

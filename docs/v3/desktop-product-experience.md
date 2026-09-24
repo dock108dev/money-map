@@ -1,6 +1,6 @@
 # Money Map v3 desktop product experience
 
-Status: Slice 3 implementation contract for the signed Apple Silicon application.
+Status: implementation contract for the signed Apple Silicon application.
 
 ## Personal-beta scope update — September 21, 2026
 

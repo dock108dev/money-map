@@ -98,9 +98,9 @@ The arithmetic is `max(39003.52 - (-5602.98), 0) = 44606.50`. The repository vec
 invented institutions, transactions, identifiers, dates, and amounts and contain no owner
 accounts, connection facts, Review values, private paths, or hashes.
 
-## Slice 0 boundary
+## Contract boundary
 
-These definitions and validators are pure contract surfaces. Slice 0 does not select
+These definitions and validators are pure contract surfaces. The contract layer does not select
 production transactions, infer recurring facts, match transfers, create or alter APIs,
 change navigation or UI, write a database, create a migration, contact Plaid, generate a
 report, or promote version 2.0.0.

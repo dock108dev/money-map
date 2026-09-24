@@ -1,6 +1,6 @@
 """Deterministic Money Map v2 operational-goal service.
 
-This module owns the Slice 2 goal domain.  Reads calculate from accepted evidence;
+This module owns the goal domain.  Reads calculate from accepted evidence;
 check-in creation is explicit and never coupled to an API read or existing refresh flow.
 """
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the sealed Slice 6 state-route oracle through a copied signed app."""
+"""Execute the sealed release-state route oracle through a copied signed app."""
 
 from __future__ import annotations
 

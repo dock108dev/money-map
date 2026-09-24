@@ -1,6 +1,6 @@
 # Synthetic installed release state contract
 
-Status: Slice 6 Campaign B independent fixture authority.
+Independent fixture authority for synthetic release-state validation.
 
 ## Boundary and authority
 

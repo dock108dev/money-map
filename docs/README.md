@@ -34,6 +34,7 @@ packaging, qualification, and release contracts only for explicitly authorized r
 ## Decision and historical records
 
 - `adr/` contains durable architecture decisions.
+- `history/` retains superseded architecture narratives and implementation records.
 - `releases/` contains version-specific release notes and campaign records.
 - `v2/` contains historical v2 contracts, recovery plans, and accepted checklists that remain useful
   for compatibility and evidence review. They are not general setup instructions.

@@ -1,6 +1,6 @@
 # Housing Move: implementation and owner evaluation
 
-Planning update, September 21: the owner-local beta path (`savings_next_steps.md` on the owner’s Desktop; not included in this repository) requires an explicit comparison of saved versus refreshed plans after new financial inputs. The implementation contract below still describes today's dated/manual baseline; it does not claim automatic refresh exists. B1 must define how account category participation, source dates and preserved assumptions feed a reviewed new baseline without mutating imported evidence or silently reserving money.
+Saved housing baselines remain dated and manually entered; new imports do not automatically refresh them. Comparing a saved plan with an explicitly refreshed baseline remains planned work. The future design must account for category participation, source dates and preserved assumptions without mutating imported evidence or silently reserving money. The owner’s Desktop tracker holds the implementation plan.
 
 Housing Move is a separate planning workspace in the ordinary navigation. It creates a housing
 goal without requiring an existing operational goal or importing accounts. A saved document contains

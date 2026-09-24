@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a sanitized, signed Money Map Slice 5 owner-machine candidate."""
+"""Build a sanitized, signed Money Map owner-machine candidate."""
 
 from __future__ import annotations
 

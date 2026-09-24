@@ -4,11 +4,11 @@ Updated September 23, 2026. Shared Glass UI Starter 02 clarity adaptation; prese
 
 ## For future contributors
 
-Start with [local design requirements](ui-design-requirements.md), then review the shared UI Templates gallery (`index.html`) and template guide (`README.md`), if available locally. The source folder on the owner's Mac is `/Users/michaelfuscoletti/Desktop/ui-templates`. It contains dashboard, list/table, form/setup, settings, detail, state/dialog, and native Godot starters.
+Start with the [local design requirements](ui-design-requirements.md) and the repository’s own styles. These preserve the adopted Glass UI Starter 02 baseline. The original shared Desktop gallery is not present in this workspace and is not required to build or run the app.
 
 Use light cool glass, slate text, blue actions, restrained depth, rounded controls, and system typography as the default. Do not reintroduce the generic beige/green/yellow template. Preserve explicit semantic success, caution, error, unavailable, and unknown states. Readability and the task's layout outrank decoration.
 
-The shared folder is a design reference, not a runtime dependency. Project assets are checked in locally and can run without the Desktop folder. If you receive this repository alone, this local requirements copy and the implementation describe the baseline. Request the source template folder when you need the full gallery. Template revisions are adopted deliberately, never silently synchronized.
+Project assets are checked in locally. Use the local requirements and implementation as the available design reference; adopt future template revisions deliberately.
 
 ## This project's adaptation
 

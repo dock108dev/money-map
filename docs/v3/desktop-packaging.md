@@ -4,7 +4,7 @@ Current owner-local mode and artifact-specific qualification are defined in
 [Owner-local delivery](owner-local-delivery.md). This supersedes any synthetic-to-owner reuse sequence below;
 historical records remain bound to their original artifact.
 
-Slice 8 assembles an owner-machine candidate at public version `3.0.0-beta.1` (PEP 440 package
+The packaging command assembles an owner-machine candidate at public version `3.0.0-beta.1` (PEP 440 package
 version `3.0.0b1`) and schema `0009_goal_persistence`. Its state is `candidate / not accepted`;
 it is not notarized, stapled, tagged, accepted, or approved for external distribution.
 
@@ -57,10 +57,10 @@ identity with timestamping disabled. Strict deep verification and the exact team
 automatically. The manifest records relative paths, thin architecture, digest, authority, team,
 designated-requirement result, entitlement list, and verification result.
 
-Slice 8 adds no entitlements. Hardened runtime is intentionally off for this owner-machine
+Owner-local packaging adds no entitlements. Hardened runtime is intentionally off for this owner-machine
 candidate. Network server, debugger, JIT, unsigned memory, disabled library validation,
 automation, contacts, camera, microphone, location, and broad file access entitlements are absent.
-The Slice 8 qualification candidate is compiled with the bounded acceptance-home gate; it uses a runtime fake
+The synthetic qualification candidate is compiled with the bounded acceptance-home gate; it uses a runtime fake
 home only when `MONEY_MAP_ACCEPTANCE_FAKE_HOME` names a disposable `/tmp` or `/private/tmp` root.
 Production release builds must omit that compile gate.
 
@@ -98,7 +98,7 @@ verifies the mounted app, recursively scans it and the PyInstaller archives, the
 isolated engineering installation proof, copy the app into a fresh disposable Applications-like
 directory outside the checkout. Launch only with a disposable fake home and
 `acceptance-synthetic-v1`; remove credential-bearing environment entries and keep Python, Node,
-and repository paths unavailable. Never copy into `/Applications` during Slice 8.
+and repository paths unavailable. Never copy into `/Applications` during isolated qualification.
 
 Verification includes strict signing, thin-architecture inventory, exact plist identity, complete
 migrations through `0009`, no repository fallback, exact capabilities/CSP, dependency audits, app
@@ -109,7 +109,7 @@ within the app, unexpected archives, unapproved executables, prior evidence, and
 
 Safe cleanup means ejecting only the recorded mount and removing only the command-created build
 root or selected ignored build-ID directory. Uninstall/recovery and owner data remain later owner-
-authorized work; this slice neither installs over an app nor accesses Application Support.
+authorized work; this procedure neither installs over an app nor accesses Application Support.
 
 ## External distribution remains blocked
 
@@ -118,4 +118,4 @@ After one is installed, a separately authorized future procedure must establish 
 nested-code layout, enable and prove hardened runtime with minimal entitlements, sign app and DMG
 with Developer ID, submit to Apple notarization using credentials supplied outside source/logs,
 wait for success, staple app and DMG, and pass Gatekeeper assessment on a clean downloaded copy.
-No Slice 8 command notarizes, staples, uploads, publishes, deploys, tags, or releases anything.
+No packaging command notarizes, staples, uploads, publishes, deploys, tags, or releases anything.
