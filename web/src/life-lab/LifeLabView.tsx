@@ -346,22 +346,21 @@ export default function LifeLabView({ requiresProfile = false }: { requiresProfi
   if (!seed || !result || !mission) {
     return (
       <div className="view-stack life-lab isolated-lab" data-copy-budget="lab-seed-chooser">
-        <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1 data-prose>Life Lab</h1><p data-prose>Reverse-solve an extreme or alternative path.</p></div><button className="secondary-button print-hidden" onClick={() => window.print()}>Print summary</button></header>
+        <header className="page-heading life-hero"><div><h1 data-prose>Life Lab</h1><p data-prose>Explore what it would take to reach a different target.</p></div><button className="secondary-button print-hidden" onClick={() => window.print()}>Print summary</button></header>
         <p className="print-only print-evidence-header" aria-hidden="true">Life Lab seed evidence · {new Date().toLocaleDateString()}</p>
         {error && <div className="error-banner" role="alert">{displayMessage(error)}</div>}
         <section className="panel lab-seed-chooser" aria-labelledby="lab-seed-heading">
-          <span className="eyebrow">Choose a source</span>
           <h2 id="lab-seed-heading" data-prose>Start an experiment</h2>
           {requiresProfile && (
             <p className="life-message" role="status">
               Create your Life Lab profile before running an experiment.
             </p>
           )}
-          <p data-prose>Each seed is copied once into an isolated experiment.</p>
+          <p data-prose>Experiments use a separate copy. Your goal and retirement plan stay unchanged.</p>
           <div className="lab-seed-options">
-            <button disabled={busy || requiresProfile} onClick={() => void begin("blank")}><strong>Start blank</strong><span>Begin with explicit defaults.</span></button>
+            <button disabled={busy || requiresProfile} onClick={() => void begin("blank")}><strong>Start blank</strong><span>Start with default assumptions.</span></button>
             <button disabled={busy || requiresProfile || !currentGoal} onClick={() => void begin("current_goal")}><strong>Start from current goal</strong><span>{currentGoal ? `Copy ${currentGoal.name} once.` : "No primary Goal is available."}</span></button>
-            <div className="lab-retirement-seed"><label>Retirement result<select aria-label="Retirement result seed" disabled={requiresProfile} value={retirementSnapshotId} onChange={(event) => setRetirementSnapshotId(event.target.value)}><option value="">Choose a saved run</option>{retirementSnapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name} · age {snapshot.target_age}</option>)}</select></label><button disabled={busy || requiresProfile || !retirementSnapshotId} onClick={() => void begin("retirement_result")}><strong>Start from retirement result</strong><span>Copy one saved result.</span></button></div>
+            <div className="lab-retirement-seed"><label>Retirement result<select aria-label="Retirement starting point" disabled={requiresProfile} value={retirementSnapshotId} onChange={(event) => setRetirementSnapshotId(event.target.value)}><option value="">Choose a saved run</option>{retirementSnapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.name} · age {snapshot.target_age}</option>)}</select></label><button disabled={busy || requiresProfile || !retirementSnapshotId} onClick={() => void begin("retirement_result")}><strong>Start from retirement result</strong><span>Copy one saved result.</span></button></div>
           </div>
         </section>
         <LabSnapshotEvidence snapshots={snapshots} openedSnapshot={openedSnapshot} onOpen={setOpenedSnapshot} />
@@ -371,7 +370,7 @@ export default function LifeLabView({ requiresProfile = false }: { requiresProfi
 
   return (
     <div className="view-stack life-lab isolated-lab" data-copy-budget="lab-active-summary">
-      <header className="page-heading life-hero"><div><span className="eyebrow">Experimental workspace</span><h1 data-prose>Life Lab</h1><p data-prose>Reverse-solve one alternative path.</p></div><div className="surface-actions print-hidden"><button className="secondary-button" onClick={() => { setSeed(null); setResult(null); setPreview(null); }}>Choose another seed</button><button className="secondary-button" onClick={() => window.print()}>Print summary</button></div></header>
+      <header className="page-heading life-hero"><div><h1 data-prose>Life Lab</h1><p data-prose>Explore what it would take to reach this target.</p></div><div className="surface-actions print-hidden"><button className="secondary-button" onClick={() => { setSeed(null); setResult(null); setPreview(null); }}>Choose another starting point</button><button className="secondary-button" onClick={() => window.print()}>Print summary</button></div></header>
       <p className="print-only print-evidence-header" aria-hidden="true">Life Lab evidence · {projection?.as_of ?? "Date unavailable"}</p>
       {error && <div className="error-banner" role="alert">{displayMessage(error)}</div>}
       {message && <div className="life-message" role="status">{message}</div>}

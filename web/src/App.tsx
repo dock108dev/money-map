@@ -556,7 +556,6 @@ export default function App() {
           <span className="brand-mark">M</span>
           <div>
             <strong>Money Map</strong>
-            <small>Everything in one place</small>
           </div>
         </div>
         <nav aria-label="Primary navigation">
@@ -590,7 +589,7 @@ export default function App() {
           <span className="privacy-dot" />
           <div>
             <strong>{data.accounts.accounts.length} accounts</strong>
-            <small>Plaid read-only</small>
+            <small>Read-only account access</small>
           </div>
         </div>
       </aside>
@@ -621,7 +620,7 @@ export default function App() {
             </button>
             {desktopMode && (
               <details className="desktop-admin print-hidden">
-                <summary className="refresh-button">Admin</summary>
+                <summary className="refresh-button">App tools</summary>
                 <div className="desktop-admin-actions">
                   <button
                     className="refresh-button"

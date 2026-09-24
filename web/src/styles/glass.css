@@ -1,4 +1,4 @@
-/* Shared Glass UI Starter 01, adapted September 21, 2026. See docs/ui-design.md. */
+/* Shared Glass UI Starter 02 clarity adaptation, September 23, 2026. See docs/ui-design.md. */
 @media screen {
 :root{color-scheme:light;color:#182338;background:#edf3fc;--ink:#182338;--muted:#54647b;--paper:rgba(255,255,255,.82);--surface:#f4f8ff;--line:rgba(83,108,150,.2);--green:#0969df;--deep-green:#084f9f;--mint:#e5efff;--shadow:0 14px 40px #334d7910;--glass-font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-family:var(--glass-font)}
 body{background:radial-gradient(ellipse at 0 0,#d4e6ff,transparent 55%),radial-gradient(ellipse at 100% 35%,#e3dcfa,transparent 50%),#edf3fc;background-attachment:fixed}
@@ -15,4 +15,82 @@ h1,h2,h3,.page-heading h1,.section-heading h2{font-family:var(--glass-font);lett
 .cash-flow-title h1{font-size:clamp(30px,3vw,38px);font-weight:650}
 .cash-flow-net.net-positive{border-bottom-color:#08725e}
 .cash-flow-periods button,.cash-flow-print{min-height:44px}
+}
+
+/* Task-first spacing. Keep readable labels and full-sized controls. */
+@media screen {
+.content-wrap { padding: 24px 28px 70px; }
+.view-stack { gap: 16px; }
+.brand { padding-bottom: 16px; }
+.sidebar nav { margin-top: 16px; gap: 10px; }
+.nav-group-label, .eyebrow { text-transform: none; letter-spacing: 0; font-size: 14px; }
+.page-heading, .simple-page-heading { min-height: 0; padding-block: 4px; margin-bottom: 12px; }
+.page-heading h1, .simple-page-heading h1, .cash-flow-title h1 { font-size: 30px; line-height: 1.2; }
+.content-wrap :is(button, input:not([type=checkbox]), select, summary), .refresh-button { min-height: 44px; }
+.content-wrap :is(button, input, select, textarea) { font-size: 14px; }
+.content-wrap :is(.panel, .compact-panel):not(details) { padding: 18px; }
+.cash-flow-title { min-height: 0; }
+.cash-flow-coverage, .cash-flow-net-worth, .cash-flow-busy, .freshness,
+.cash-flow-metrics span, .cash-flow-metrics small, .cash-flow-legend span,
+.cash-flow-error, .cash-flow-empty, .cash-flow-destinations span,
+.cash-flow-evidence, .cash-flow-custom label, .goal-gap-unavailable,
+.goal-gap-card p, .goal-gap-card a { font-size: 14px; line-height: 1.4; }
+.cash-flow-metrics span { text-transform: none; letter-spacing: 0; }
+.cash-flow-chart { height: 150px; }
+.cash-flow-metrics article { padding: 12px 16px; }
+.cash-flow-chart-heading { flex-wrap: wrap; gap: 8px; }
+.cash-flow-current-answer { gap: 8px; }
+.life-hero { padding: 0; }
+.housing-workspace header h1 { font-size: 30px; margin: 0 0 8px; }
+.housing-workspace p { line-height: 1.5; }
+.housing-workspace :is(button, summary, input, select, textarea) { font-size: 16px; }
+.housing-workspace > header p { margin: 0 0 16px; }
+.housing-workspace .housing-actions { gap: 12px; }
+.housing-workspace .housing-fields { gap: 12px; }
+.housing-workspace label { min-width: 0; }
+.housing-workspace summary { align-content: center; }
+.housing-workspace details { margin: 12px 0; padding: 10px 16px; }
+.housing-workspace section[aria-label="Housing results"] { padding: 16px; border-radius: 20px; background: var(--paper); border: 1px solid var(--line); }
+.housing-workspace h2 { margin-top: 0; }
+.housing-run-actions { margin-top: 12px; }
+.housing-draft-note { color: var(--muted); }
+.housing-table-wrap { max-width: 100%; overflow-x: auto; }
+.housing-table-wrap table { min-width: 520px; }
+.housing-workspace th, .housing-workspace td { overflow-wrap: anywhere; }
+.housing-workspace select { width: 100%; }
+}
+@media screen and (max-width: 980px) {
+.content-wrap { padding: 20px 16px 110px; }
+.sidebar nav button { font-size: 12px; }
+.data-state { font-size: 12px; }
+}
+@media screen and (max-width: 480px) {
+.cash-flow-title { align-items: start; flex-wrap: wrap; gap: 8px; }
+.cash-flow-title-actions { flex-wrap: wrap; }
+.cash-flow-metrics article { padding: 10px; }
+.cash-flow-metrics strong { font-size: 24px; }
+.housing-workspace .housing-fields { grid-template-columns: minmax(0, 1fr); }
+.housing-workspace .housing-actions > label { width: 100%; }
+.housing-workspace details { padding: 10px 12px; }
+}
+
+@media screen {
+.housing-run-actions .primary-button { width: auto; margin: 0; }
+}
+@media screen and (max-width: 480px) {
+.cash-flow-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.cash-flow-title-actions { align-self: start; }
+.cash-flow-title h1 { font-size: 28px; }
+.cash-flow-print { padding-inline: 8px; }
+}
+@media screen and (min-height: 700px) {
+.housing-run-actions { position: sticky; top: 78px; z-index: 7; padding: 8px; background: #f4f8ff; border: 1px solid var(--line); border-radius: 14px; }
+.housing-workspace :is(input, select, textarea, summary, button) { scroll-margin-top: 210px; scroll-margin-bottom: 100px; }
+}
+
+@media screen {
+.goals-view .goal-metric span, .goals-view .goal-comparison-summary > span,
+.goals-view .goal-milestone span, .goals-view .goal-observation { font-size: 14px; letter-spacing: 0; text-transform: none; }
+.goals-view .goal-milestone span { color: #e5efff; }
+.goals-view .goal-detail > summary, .content-wrap .evidence-disclosure > summary { padding: 12px 16px; font-size: 14px; }
 }

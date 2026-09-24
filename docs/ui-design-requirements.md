@@ -1,35 +1,32 @@
 # Shared UI design requirements
 
-## Direction
+Glass Starter 02 · September 23, 2026
 
-Use a light iOS Liquid Glass-inspired appearance: cool white surfaces, restrained translucency, subtle blue/lavender ambient background, soft depth, rounded controls, and native system typography. This is the user's requested baseline for our Desktop products. Adapt layouts to each product. Do not recreate the former beige, forest-green, yellow-tinted dashboard theme.
+## Start with the task
 
-## Foundations
+Each screen should make its purpose, current result or state, and next useful action easy to find. Start from the working examples in the shared gallery (`/Users/michaelfuscoletti/Desktop/ui-templates/index.html`). The default is one compact heading, useful content, and a clear action. Add descriptions, panels, and statuses only when they help a decision.
 
-- Use the shared template `assets/glass.css` as the reference for tokens and components. Default action accent is blue (#0969df); primary text is deep slate (#182338), secondary text #54647b.
-- Use the platform system font stack. Favor natural sentence case; reserve small uppercase labels for occasional context. Avoid oversized headings and widely spaced labels throughout the interface.
-- Use an 8-ish pixel spacing rhythm (8, 12, 16, 20, 24, 32). Keep related controls close and groups visibly distinct.
-- Panels generally use 22–26px radii; controls 12–14px; status pills fully rounded. Avoid applying pills to every piece of information.
-- Glass is a surface treatment, not decoration to stack endlessly. Use subtle borders, a white top highlight, restrained shadows, and approximately 24px backdrop blur. Keep text and dense data on sufficiently opaque surfaces.
-- Blue communicates action/selection. Green is reserved for meaningful success/positive values; amber for caution; red for error/destructive states. Pair color with text or icons. Preserve negative, zero, unknown, stale, and unavailable states accurately.
+- Use familiar words and sentence case. “Choose a game” is clearer than “Choose an adapter.” “Finish the current action to save” explains more than “Save · idle boundary.”
+- Keep useful labels, units, dates, and status distinctions. A short sentence often beats a chain of badges. A longer field label such as “Scan length (seconds)” can be easier to understand than “Seconds.”
+- Remove repeated titles, filler, decorative category labels, and explanations of obvious controls. Keep teaching, narrative, and consequential explanations that serve the product.
+- Show the result or working area early. Prefer compact rows for comparisons and related facts together. Keep controls close to their result. Do not force every value into its own card.
+- Put advanced setup, full history, technical identifiers, and lengthy explanations behind named secondary controls. Keep current blockers, meaningful uncertainty, freshness, costs, and destructive consequences visible where they matter.
+- Preserve stop, cancel, recovery, and confirmation behavior. Do not replace scrolling with extra steps, nested scrolling, or a maze of tabs and dialogs.
 
-## Layout and common patterns
+## Appearance and accessibility
 
-Use dashboard summaries for overview, list/table layouts for comparison, grouped forms for editing, sidebar settings for preferences, and detail views for records. Put secondary diagnostics in disclosures; retain necessary provenance and limits. Give each view a clear title and primary next action. Import/setup/debug controls should not displace the main product heading.
+Retain the cool, light glass direction: system typography, slate text, blue actions, restrained translucency and depth. Use `assets/glass.css` and the native Godot theme as starting points. Adapt the layout to the app instead of copying the gallery's sample content.
 
-Use compact tables on desktop, deliberate horizontal scrolling or readable record cards on phones. Long names, timestamps, and values must wrap or remain accessible. Avoid clipped selects, overlapping controls, and page-level horizontal scrolling. Keep useful data near the first viewport; do not sacrifice usability for giant empty hero sections.
+Default body text is 16px on the web; primary controls are at least 44px high. Use compact spacing, not tiny type or cramped targets. Compact headers replace giant hero sections. Avoid widespread uppercase, widely spaced labels, and pills for ordinary information.
 
-## Interaction and accessibility
+Blue indicates action or selection. Success, caution, and errors have meaningful text as well as color. Preserve negative, zero, unknown, stale, and unavailable states. Essential information must not depend on an unexplained icon, clipped text, color, or hover alone.
 
-- Use native buttons, links, labels, inputs, and dialog semantics. Provide visible keyboard focus and accessible names. Aim for at least 44px primary touch targets.
-- Body text should meet 4.5:1 contrast; large text and meaningful component boundaries should meet applicable 3:1 contrast requirements. Check actual composited colors because transparency changes contrast.
-- Honor reduced motion and reduced transparency; provide opaque fallback surfaces when blur is unsupported. Do not animate large backgrounds or use glass effects that impair reading.
-- Distinguish loading, empty, error, disabled, selected, and successful states in words. Do not make a control look active when unavailable.
-- A light theme is included. Do not claim dark-mode support without implementing and checking it.
-- Demo interactions are local-only. Real apps must retain their existing behavior, confirmation rules, persistence, math, data boundaries, and source labels.
+Use native semantics, clear labels, visible focus, logical keyboard order, and dialogs that return focus. Maintain readable contrast: at least 4.5:1 for ordinary text and 3:1 for meaningful control boundaries and large text. Check composited colors on translucent surfaces. Respect reduced motion and transparency; supply an opaque fallback.
 
-## Handoff and future work
+## Before calling a screen improved
 
-Every adopting project must link its local design note from its README and mention this shared template folder for future contributors. Include the source version/date and local adaptations. Copy assets into the repository; do not rely on a machine-specific link at runtime. Keep project-specific instructions and verification boundaries intact.
+Compare representative before/after states at the same viewport and with the same data. Inspect desktop and narrow sizes the product supports; use real supported window sizes for games. Check increased text scale, long content, keyboard access, disclosures, and empty/error/disabled states relevant to the change.
 
-Before calling a rollout complete, inspect representative desktop and phone views and verify the affected interactions. Record what was checked and what remains unverified. Visual implementation does not imply owner acceptance, release approval, or real-data qualification.
+Confirm the important result and action are easier to find without losing meaning or adding routine task steps. Word counts and pixel measurements support the review; they do not establish usability by themselves.
+
+Copy assets into each adopting repository and update its existing design note with the version and adaptations. Keep data contracts, calculations, permissions, persistence, and game rules intact. Preserve existing work, owner state, evidence, and frozen candidates. Template verification, app verification, owner acceptance, and release approval are separate records.

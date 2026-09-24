@@ -58,7 +58,7 @@ function labFetch(options: { confirmStatus?: number; previewStatus?: number; sna
 
 async function start(kind: "blank" | "current goal" | "retirement result") {
   if (kind === "retirement result") {
-    fireEvent.change(await screen.findByLabelText("Retirement result seed"), { target: { value: "11" } });
+    fireEvent.change(await screen.findByLabelText("Retirement starting point"), { target: { value: "11" } });
   }
   fireEvent.click(await screen.findByRole("button", { name: new RegExp(`Start from ${kind}|Start ${kind}`, "i") }));
   await screen.findByRole("button", { name: "Edit experiment" });
@@ -80,7 +80,7 @@ describe("isolated Life Lab", () => {
     ).toHaveAttribute("role", "status");
     expect(screen.getByRole("button", { name: /Start blank/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Start from current goal/ })).toBeDisabled();
-    expect(screen.getByLabelText("Retirement result seed")).toBeDisabled();
+    expect(screen.getByLabelText("Retirement starting point")).toBeDisabled();
     expect(screen.getByRole("button", { name: /Start from retirement result/ })).toBeDisabled();
     expect(fetch.mock.calls.some(([input]) => String(input) === "/api/v2/lab/experiments")).toBe(false);
   });
@@ -102,7 +102,7 @@ describe("isolated Life Lab", () => {
     expect(budget).not.toBeNull();
     expect(proseWordCount(budget!)).toBeLessThanOrEqual(COPY_BUDGETS["lab-seed-chooser"]);
 
-    fireEvent.change(screen.getByLabelText("Retirement result seed"), { target: { value: "11" } });
+    fireEvent.change(screen.getByLabelText("Retirement starting point"), { target: { value: "11" } });
     expect(screen.getByRole("button", { name: /Start from retirement result/ })).toBeEnabled();
   });
 

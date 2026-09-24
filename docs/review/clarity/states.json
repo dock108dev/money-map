@@ -1,0 +1,96 @@
+[
+  {
+    "view": "cash-flow",
+    "width": 1440,
+    "scale": 2,
+    "overflow": false
+  },
+  {
+    "view": "housing",
+    "width": 1440,
+    "scale": 2,
+    "overflow": false
+  },
+  {
+    "view": "goals",
+    "width": 1440,
+    "scale": 2,
+    "overflow": false
+  },
+  {
+    "view": "retirement",
+    "width": 1440,
+    "scale": 2,
+    "overflow": false
+  },
+  {
+    "view": "lab",
+    "width": 1440,
+    "scale": 2,
+    "overflow": false
+  },
+  {
+    "view": "accounts",
+    "width": 1440,
+    "scale": 2,
+    "overflow": false
+  },
+  {
+    "width": 1440,
+    "keyboardDisclosure": true,
+    "focusOutline": true,
+    "printRestored": true,
+    "dirtyDiscard": true,
+    "busyDisabled": true,
+    "retryRecovered": true,
+    "customValidation": true,
+    "errors": []
+  },
+  {
+    "view": "cash-flow",
+    "width": 390,
+    "scale": 2,
+    "overflow": true
+  },
+  {
+    "view": "housing",
+    "width": 390,
+    "scale": 2,
+    "overflow": true
+  },
+  {
+    "view": "goals",
+    "width": 390,
+    "scale": 2,
+    "overflow": true
+  },
+  {
+    "view": "retirement",
+    "width": 390,
+    "scale": 2,
+    "overflow": true
+  },
+  {
+    "view": "lab",
+    "width": 390,
+    "scale": 2,
+    "overflow": true
+  },
+  {
+    "view": "accounts",
+    "width": 390,
+    "scale": 2,
+    "overflow": true
+  },
+  {
+    "width": 390,
+    "keyboardDisclosure": true,
+    "focusOutline": true,
+    "printRestored": true,
+    "dirtyDiscard": true,
+    "busyDisabled": true,
+    "retryRecovered": true,
+    "customValidation": true,
+    "errors": []
+  }
+]

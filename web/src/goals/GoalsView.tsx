@@ -697,7 +697,7 @@ export default function GoalsView({
   if (primaryState?.state === "no_primary") {
     return (
       <div className="goals-view view-stack" aria-busy={busy} data-reduced-motion={reducedMotion}>
-        <header className="goals-page-heading"><span className="eyebrow">Money Map</span><h1>Goals</h1></header>
+        <header className="goals-page-heading"><h1>Goals</h1></header>
         {message && <p className="goal-status-message" role="status">{message}</p>}
         {candidateError ? (
           <section className="goals-recoverable panel" aria-labelledby="candidate-error-title">
@@ -755,7 +755,7 @@ export default function GoalsView({
 
   return (
     <div className="goals-view view-stack" aria-busy={busy} data-reduced-motion={reducedMotion} data-copy-budget="goals-first-viewport">
-      <header className="goals-page-heading"><span className="eyebrow">Money Map</span><h1 data-prose>Goals</h1></header>
+      <header className="goals-page-heading"><h1 data-prose>Goals</h1></header>
       <p className="print-only print-evidence-header" aria-hidden="true">Goals evidence · {observation}</p>
       {message && <p className="goal-status-message" role="status">{message}</p>}
       {showObservation && (

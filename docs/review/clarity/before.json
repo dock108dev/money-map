@@ -1,0 +1,104 @@
+[
+  {
+    "view": "cash-flow",
+    "width": 1440,
+    "errors": [],
+    "height": 926,
+    "overflow": false,
+    "heading": 170,
+    "metrics": 295
+  },
+  {
+    "view": "housing",
+    "width": 1440,
+    "errors": [],
+    "height": 3061,
+    "overflow": false,
+    "heading": 198.4375,
+    "result": 1696.84375,
+    "calculate": 1584.15625
+  },
+  {
+    "view": "accounts",
+    "width": 1440,
+    "errors": [],
+    "height": 900,
+    "overflow": false,
+    "heading": 186
+  },
+  {
+    "view": "goals",
+    "width": 1440,
+    "errors": [],
+    "height": 1171,
+    "overflow": false,
+    "heading": 167
+  },
+  {
+    "view": "retirement",
+    "width": 1440,
+    "errors": [],
+    "height": 1548,
+    "overflow": false,
+    "heading": 187
+  },
+  {
+    "view": "lab",
+    "width": 1440,
+    "errors": [],
+    "height": 900,
+    "overflow": false,
+    "heading": 187
+  },
+  {
+    "view": "cash-flow",
+    "width": 390,
+    "errors": [],
+    "height": 1131,
+    "overflow": false,
+    "heading": 175,
+    "metrics": 309
+  },
+  {
+    "view": "housing",
+    "width": 390,
+    "errors": [],
+    "height": 4697,
+    "overflow": true,
+    "heading": 203.4375,
+    "result": 3012.390625,
+    "calculate": 2823.6875
+  },
+  {
+    "view": "accounts",
+    "width": 390,
+    "errors": [],
+    "height": 900,
+    "overflow": false,
+    "heading": 191
+  },
+  {
+    "view": "goals",
+    "width": 390,
+    "errors": [],
+    "height": 1336,
+    "overflow": false,
+    "heading": 170
+  },
+  {
+    "view": "retirement",
+    "width": 390,
+    "errors": [],
+    "height": 2094,
+    "overflow": false,
+    "heading": 192
+  },
+  {
+    "view": "lab",
+    "width": 390,
+    "errors": [],
+    "height": 1045,
+    "overflow": false,
+    "heading": 192
+  }
+]

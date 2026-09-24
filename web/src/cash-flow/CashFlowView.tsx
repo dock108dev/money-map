@@ -365,12 +365,11 @@ export default function CashFlowView({
       <section className="cash-flow-first-viewport" data-copy-budget="cash-flow-first-viewport">
         <header className="cash-flow-title">
           <div>
-            <span className="eyebrow">Selected cash activity</span>
             <h1 data-prose>Cash Flow</h1>
             {result && (
               <p className="cash-flow-coverage">
                 <strong>{activeSelection.choice === "all" ? "All imported history" : PERIODS.find((period) => period.choice === activeSelection.choice)?.label}</strong>
-                <span>{dateLabel(result.period.start_date)} through {dateLabel(result.period.end_date)} · inclusive</span>
+                <span>{dateLabel(result.period.start_date)} through {dateLabel(result.period.end_date)}</span>
               </p>
             )}
           </div>
@@ -419,7 +418,7 @@ export default function CashFlowView({
               <article><span>Money in</span><strong>{formatExactMoney(totalIn)}</strong></article>
               <article><span>Money out</span><strong>{formatExactMoney(totalOut)}</strong></article>
               <article className={`cash-flow-net net-${netContext(totalNet)}`}>
-                <span>Net</span>
+                <span>Net cash flow</span>
                 <strong>{formatExactMoney(totalNet, true)}</strong>
                 <small>{netContext(totalNet)} net cash flow</small>
               </article>
@@ -439,7 +438,7 @@ export default function CashFlowView({
             <GoalGapCard result={goalGap} error={goalGapError} onOpenGoals={onShowGoals} />
           </>
         ) : !loading ? (
-          <div className="cash-flow-empty" role="status">No Cash Flow result is available. Use Retry after transactions are imported.</div>
+          <div className="cash-flow-empty" role="status">No Cash Flow result is available. Add transaction records from Add account, then retry.</div>
         ) : null}
         <span className="sr-only" aria-live="polite" aria-atomic="true">{liveMessage}</span>
       </section>

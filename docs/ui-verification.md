@@ -6,8 +6,29 @@ Frontend production build passed; 18 frontend test files / 230 tests passed. Bro
 
 ## Retained review
 
-The shared review gallery (`review.html` in `/Users/michaelfuscoletti/Desktop/UI Templates` on the owner’s Mac; not included in this repository) contains screenshots and browser check results. Browser specimens are local fixtures or isolated startup states. Web review checked representative 1440px/390px layouts, page exceptions, and page-level horizontal overflow; it is not an exhaustive audit of every state, contrast pair, screen reader, browser, installed build, or physical phone.
+The shared review gallery (`review.html` in `/Users/michaelfuscoletti/Desktop/ui-templates` on the owner’s Mac; not included in this repository) contains screenshots and browser check results. Browser specimens are local fixtures or isolated startup states. Web review checked representative 1440px/390px layouts, page exceptions, and page-level horizontal overflow; it is not an exhaustive audit of every state, contrast pair, screen reader, browser, installed build, or physical phone.
 
 Template gallery search, form submit feedback, dialog opening, and Escape dismissal were exercised. Shared styles include keyboard focus, reduced-motion, and reduced-transparency handling. Native Godot is a basic translucent fallback, not a true blur material. Native games retain their desktop layout and illustrated artwork.
 
 See [design and future template use](ui-design.md). No owner acceptance or release qualification is inferred. Rebuild/relaunch the appropriate source application to see the change; installed or frozen copies remain their original versions.
+
+## Clarity pass — September 23, 2026
+
+The September 21 screenshots above are historical. This pass captured the active React app before and after editing, with identical synthetic fixtures and 1440×900 / 390×900 viewports. All API requests were intercepted; no backend, owner database, provider, Keychain or installed app was used. Fixtures came from current frontend tests and the housing engine's synthetic test case. Existing documentation edits and frozen builds were preserved.
+
+| Matched screen | Before → after observation | Screenshots |
+| --- | --- | --- |
+| Housing, desktop | Calculate starts at y=1584 → 329; results at y=1697 → 438. Key warnings and funding remain visible; full comparisons use one disclosure. | [Before](review/clarity/before-housing-1440.png), [after](review/clarity/after-housing-1440.png) |
+| Housing, narrow | Calculate y=2824 → 420; results y=3012 → 609. Page overflow removed; expanded tables have keyboard-accessible horizontal scrolling. | [Before](review/clarity/before-housing-390.png), [after](review/clarity/after-housing-390.png) |
+| Cash Flow, narrow | Metrics y=309 → 302. Labels increase from 9–11px to 14px; page becomes taller (1131 → 1270px) to preserve readability. | [Before](review/clarity/before-cash-flow-390.png), [after](review/clarity/after-cash-flow-390.png) |
+| Life Lab, narrow | Page height 1045 → 981px. “Seed” becomes “starting point”; the copy explains that experiments leave the original plan unchanged. | [Before](review/clarity/before-lab-390.png), [after](review/clarity/after-lab-390.png) |
+
+Cash Flow, Housing, Accounts, Goals, Retirement and Lab had no page overflow at either normal viewport and no browser exceptions. Housing empty/saved/error/busy/dirty states, discard, disabled setup explanations, Cash Flow error/retry/custom-date validation, keyboard disclosure activation and visible focus were exercised. Print events open the new disclosure and restore it afterward. [State checks](review/clarity/states.json), [before measurements](review/clarity/before.json), [after measurements](review/clarity/after.json).
+
+Desktop at 200% CSS scale had no page overflow; this is a layout stress check, not native browser zoom or VoiceOver qualification. At 390px with 200% CSS scale, all six screens overflow: the existing 320px minimum body width exceeds the effective viewport. No claim of full accessibility conformance, every screen/state, installed runtime, owner acceptance or release qualification.
+
+The complete source gate passed: 580 Python tests, one existing opt-in restored-copy drill skipped, 230 frontend tests, production build, TypeScript, Ruff, mypy (116 files), documentation links and private-data checks. Final presentation adjustments were followed by another frontend build/test run and matched browser checks. Native checks were not run because native code and packaging were unchanged.
+
+Separate follow-ups, not implemented:
+- Housing saved baselines stay dated after new imports (confirmed in source and tracker). A refresh comparison changes behavior/data rules; next action is the tracker's B1 implementation packet.
+- Minimum-width/large-scale behavior needs a focused accessibility pass across the shared shell and all forms, rather than removing the minimum blindly. Reproduce browser-native zoom before choosing a supported reflow target.

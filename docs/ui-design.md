@@ -1,10 +1,10 @@
 # Money Map UI design
 
-Updated September 21, 2026. Shared Glass UI Starter 01; presentation-only adoption.
+Updated September 23, 2026. Shared Glass UI Starter 02 clarity adaptation; presentation-only adoption.
 
 ## For future contributors
 
-Start with [local design requirements](ui-design-requirements.md), then review the shared UI Templates gallery (`index.html`) and template guide (`README.md`), if available locally. The source folder on the owner's Mac is `/Users/michaelfuscoletti/Desktop/UI Templates`. It contains dashboard, list/table, form/setup, settings, detail, state/dialog, and native Godot starters.
+Start with [local design requirements](ui-design-requirements.md), then review the shared UI Templates gallery (`index.html`) and template guide (`README.md`), if available locally. The source folder on the owner's Mac is `/Users/michaelfuscoletti/Desktop/ui-templates`. It contains dashboard, list/table, form/setup, settings, detail, state/dialog, and native Godot starters.
 
 Use light cool glass, slate text, blue actions, restrained depth, rounded controls, and system typography as the default. Do not reintroduce the generic beige/green/yellow template. Preserve explicit semantic success, caution, error, unavailable, and unknown states. Readability and the task's layout outrank decoration.
 
@@ -19,3 +19,7 @@ Implementation: web/src/styles/glass.css; styles.css; supporting screen styles.
 ## Review and status
 
 See [UI adoption verification](ui-verification.md). Source changes and technical/visual checks do not establish owner acceptance, a new release, live-data qualification, or acceptance of an older frozen candidate. Existing project-specific gates remain separate.
+
+## Starter 02 clarity pass — September 23, 2026
+
+Working source now adapts Starter 02's task-first guidance: compact headings, readable Cash Flow and goal labels, plain Life Lab wording, and Housing Move actions/results before its long form. Housing unknowns, assumptions, reserve consequences and funding needs remain visible; detailed comparisons expand on demand. Full-size controls and the glass palette remain. Existing calculation, persistence and release boundaries are unchanged. See the matched synthetic review in [UI verification](ui-verification.md#clarity-pass--september-23-2026).
