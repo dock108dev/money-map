@@ -1,6 +1,6 @@
-# Housing Move: implementation and owner evaluation
+# Housing Move
 
-Saved housing baselines remain dated and manually entered; new imports do not automatically refresh them. Comparing a saved plan with an explicitly refreshed baseline remains planned work. The future design must account for category participation, source dates and preserved assumptions without mutating imported evidence or silently reserving money. The owner’s Desktop tracker holds the implementation plan.
+Saved housing baselines remain dated and manually entered; new imports do not automatically refresh them. Comparing a saved plan with an explicitly refreshed baseline remains planned work. The future design must account for category participation, source dates and preserved assumptions without mutating imported evidence or silently reserving money.
 
 Housing Move is a separate planning workspace in the ordinary navigation. It creates a housing
 goal without requiring an existing operational goal or importing accounts. A saved document contains

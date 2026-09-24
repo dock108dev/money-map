@@ -4,7 +4,7 @@ Money Map is a local-first financial evidence application for reconstructing whe
 exploring future allocation choices. Provider access is read-only; the app writes local imports,
 corrections, goals and planning snapshots. It does not move money or store bank passwords.
 
-Current candidate: **3.0.0-beta.1 — not accepted for release**.
+Version **3.0.0-beta.1** is prerelease software.
 
 ## Start here
 
@@ -33,9 +33,8 @@ Never commit financial files or credentials. Tests use synthetic data and dispos
 
 Run `uv run --locked --python 3.12 paycheck-map verify` for the complete source checks.
 Run `uv run --locked --python 3.12 paycheck-map --help` for supported commands. There is no hosted
-deployment. Signed desktop builds and owner acceptance are separate workflows; passing tests does
-not qualify or release a candidate.
+deployment. See [desktop packaging](docs/v3/desktop-packaging.md) for the macOS build workflow.
 
-## Shared UI design
+## UI design
 
-See [UI design and templates](docs/ui-design.md) before changing this interface. The repository keeps its own runtime styles and portable design requirements; the original shared Desktop gallery is not required.
+See [UI design](docs/ui-design.md) for the project’s styles and accessibility requirements.

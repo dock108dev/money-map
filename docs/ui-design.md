@@ -1,25 +1,15 @@
 # Money Map UI design
 
-Updated September 23, 2026. Shared Glass UI Starter 02 clarity adaptation; presentation-only adoption.
+Use the [design requirements](ui-design-requirements.md) and `web/src/styles/glass.css` when changing the interface.
 
-## For future contributors
+## Layout and behavior
 
-Start with the [local design requirements](ui-design-requirements.md) and the repository’s own styles. These preserve the adopted Glass UI Starter 02 baseline. The original shared Desktop gallery is not present in this workspace and is not required to build or run the app.
+The app shell, sidebar, forms and planning screens use a cool palette and system typography. Preserve print styles.
 
-Use light cool glass, slate text, blue actions, restrained depth, rounded controls, and system typography as the default. Do not reintroduce the generic beige/green/yellow template. Preserve explicit semantic success, caution, error, unavailable, and unknown states. Readability and the task's layout outrank decoration.
+Cash Flow and goals use plain labels. Life Lab separates assumptions from calculated results. Housing Move puts actions and results before its long form, keeps unknowns, reserves and funding needs visible, and reveals detailed comparisons on demand.
 
-Project assets are checked in locally. Use the local requirements and implementation as the available design reference; adopt future template revisions deliberately.
+UI changes must preserve financial calculations, source meaning and saved data. Screen-specific styles complement `web/src/styles.css`.
 
-## This project's adaptation
+## Visual checks
 
-App shell, sidebar, panels, forms, and planning surfaces use the cool palette and system typography. Existing print styles are preserved. Financial calculations, source meaning, and persistence are unchanged. This source update does not replace or qualify an installed/signed desktop build.
-
-Implementation: web/src/styles/glass.css; styles.css; supporting screen styles.
-
-## Review and status
-
-See [UI adoption verification](ui-verification.md). Source changes and technical/visual checks do not establish owner acceptance, a new release, live-data qualification, or acceptance of an older frozen candidate. Existing project-specific gates remain separate.
-
-## Starter 02 clarity pass — September 23, 2026
-
-Working source now adapts Starter 02's task-first guidance: compact headings, readable Cash Flow and goal labels, plain Life Lab wording, and Housing Move actions/results before its long form. Housing unknowns, assumptions, reserve consequences and funding needs remain visible; detailed comparisons expand on demand. Full-size controls and the glass palette remain. Existing calculation, persistence and release boundaries are unchanged. See the matched synthetic review in [UI verification](ui-verification.md#clarity-pass--september-23-2026).
+Check the affected screens at supported sizes, including keyboard focus, long content, disabled actions and error recovery. Existing review records are in [UI verification](ui-verification.md).
