@@ -66,7 +66,6 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-plugins = ["sqlalchemy.ext.mypy.plugin"]
 packages = ["paycheck_map"]
 
 [[tool.mypy.overrides]]

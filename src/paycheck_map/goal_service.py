@@ -1093,7 +1093,7 @@ def select_primary_goal(
     return program_view(candidate)
 
 
-def _ordered_check_ins(program_id: int) -> Select[tuple[StoredGoalCheckIn]]:
+def _ordered_check_ins(program_id: int) -> Select[StoredGoalCheckIn]:
     return (
         select(StoredGoalCheckIn)
         .options(

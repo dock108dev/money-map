@@ -73,7 +73,7 @@ def recurring_outflow_candidates(
                 select(ImportArtifact.id, ImportArtifact.sha256).where(
                     ImportArtifact.id.in_(artifact_ids)
                 )
-            ).tuples()
+            )
         }
 
     safe_labels = _safe_account_labels(coverage.accounts)

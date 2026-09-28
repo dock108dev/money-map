@@ -87,7 +87,7 @@ def _alembic_revision(engine: Engine) -> str | None:
     if "alembic_version" not in inspect(engine).get_table_names():
         return None
     with engine.connect() as connection:
-        revisions = connection.exec_driver_sql(
+        revisions: Iterable[Any] = connection.exec_driver_sql(
             "SELECT version_num FROM alembic_version ORDER BY version_num"
         ).scalars()
         values = [str(value) for value in revisions]
