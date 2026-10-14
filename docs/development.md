@@ -69,19 +69,12 @@ retains only stable exports and the shared evidence/review surfaces.
 
 ## Validation
 
-Use [Testing](testing.md) for the complete source gate, focused commands, native prerequisites and
-CI check names. That guide owns validation commands; avoid adding a second checklist here.
+Use [Testing](testing.md) for focused commands and available broader tools. That guide owns validation commands; avoid adding a second checklist here.
 [Maintenance](maintenance.md) records the large-file boundaries and appropriate extraction points.
 
-## Deployment and release boundary
+## Personal and small-group use
 
-There is no hosted deployment. The production-relevant target is the signed, arm64 macOS desktop
-application described by the [desktop packaging](v3/desktop-packaging.md),
-[release qualification](v3/desktop-release-qualification.md), and
-[release contract](v3/release-contract.md) documents. Those workflows require an exact clean commit,
-Apple signing identity, disposable build/qualification roots, and separate release authorization.
-Ordinary development and pull-request checks do not package, install, sign, publish, or promote a
-candidate.
+The existing local server or installed Mac app is enough. Use [personal use](personal-use.md) for current scope. Build assets only when required to run a source change. Signed DMGs, clean-commit build manifests, release authorization campaigns and public delivery are not current prerequisites.
 
 ## Change workflow
 
@@ -89,6 +82,6 @@ candidate.
 2. Keep real financial state under `.local/`; tests and examples must remain synthetic.
 3. Follow the [SSOT map](v3/single-source-of-truth.md) instead of introducing parallel policy paths.
 4. Add focused regression coverage for changed behavior or module boundaries.
-5. Run the source gate and the native gate when applicable.
-6. Do not create migrations, access providers or owner Keychain data, package, sign, tag, publish, or
-   push unless that action is explicitly in scope.
+5. Run focused checks for the actual change and try the affected ordinary flow.
+6. Back up before necessary schema/data updates. Provider/Keychain access and real-data setup keep
+   their existing authorization; distribution/publishing work remains deferred.

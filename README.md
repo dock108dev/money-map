@@ -25,15 +25,16 @@ Never commit financial files or credentials. Tests use synthetic data and dispos
 
 ## Engineering guides
 
-- [Testing](docs/testing.md): complete source gate, native checks and CI
+- [Testing](docs/testing.md): focused checks for changed behavior
 - [Configuration](docs/configuration.md) and [operations](docs/operations.md): runtime settings and local workflows
 - [Architecture](docs/architecture.md) and [module ownership](docs/v3/single-source-of-truth.md)
 - [Maintenance](docs/maintenance.md): source ownership, cleanup decisions and remaining boundaries
-- [Documentation index](docs/README.md): security, accounting, product and release references
+- [Documentation index](docs/README.md): local use, accounting and implementation references
 
-Run `uv run --locked --python 3.12 paycheck-map verify` for the complete source checks.
-Run `uv run --locked --python 3.12 paycheck-map --help` for supported commands. There is no hosted
-deployment. See [desktop packaging](docs/v3/desktop-packaging.md) for the macOS build workflow.
+Use [the personal-use approach](docs/personal-use.md): try the existing local app,
+improve useful flows and check affected calculations/persistence.
+Run `uv run --locked --python 3.12 paycheck-map --help` for supported commands.
+A native installer is optional; the existing local server is a usable path.
 
 ## UI design
 

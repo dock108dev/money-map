@@ -208,13 +208,6 @@ complete interaction, focus, printing, and allowlist contracts are in
 
 The bundle contains the native executable, the external binary at `Contents/MacOS/money-map-sidecar`, Tauri-embedded React assets and `Info.plist`. Owner-local packaging uses Apple Development signing and strict signature verification; qualification remains specific to the built artifact.
 
-PyInstaller's extracted CPython library receives an ad-hoc runtime signature, so combining this
-one-file layout with hardened runtime produced a Team-ID validation failure during the spike. The
-owner-only proof therefore uses Apple Development signing without hardened runtime. Before any
-external distribution, a separately authorized path must use a Developer ID Application identity,
-hardened runtime, notarization, stapling, and Gatekeeper assessment, and must resolve the nested-
-runtime signing layout (for example by signing a one-folder sidecar's nested code explicitly).
-
 ## Why this architecture won
 
 The shell preserves the existing React product and Python financial engine while giving one native process ownership of startup, windows, authenticated transport and shutdown. The [architecture record](../history/desktop-architecture-record.md) retains the original tool evaluation and proof results.
@@ -243,9 +236,8 @@ do not change.
 ## Deferred risks
 
 - Owner validation: a real Plaid sandbox Link run after dedicated sandbox credentials are supplied.
-- Each new candidate needs its own reproducibility, signature, privacy and installed-artifact checks; earlier build results do not qualify later source.
-- External distribution: Developer ID, hardened runtime, notarization, stapling, downloaded-copy
-  Gatekeeper assessment, and externally appropriate nested-code layout.
+- Check the affected launch/runtime path for a needed local update; preserve existing app/Keychain identity and private data.
+- External-distribution work is deferred; current use follows the existing local app/server path.
 - PyInstaller one-file extraction adds startup cost and transient files; later profiling may choose
   a signed one-folder layout while preserving PyInstaller as the frozen builder.
 

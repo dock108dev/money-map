@@ -1,45 +1,13 @@
-# Documentation index
+# Money Map documentation
 
-Start with the guides that describe the current tree:
+Updated October 7, 2026. Scope: personal use and a handful of users. [Working approach](personal-use.md).
 
-- [Development](development.md): install, run, repository layout, and validation
-- [Configuration](configuration.md): environment variables, static inputs, runtime modes, and secrets
-- [Maintenance](maintenance.md): module-size decisions and focused cleanup follow-ups
-- [Testing](testing.md): local checks, CI jobs, test isolation, and release-only gates
-- [Operations](operations.md): private paths, imports, refresh, payroll, backup, restore, and reports
-- [Known limitations](known-limitations.md): unsupported use cases and validation requiring external access
-- [Data models](data-models.md): persistence families, transactions and migration ownership
-- [Integrations](integrations.md): provider/network boundaries and unverified external dependencies
-- [Architecture](architecture.md) and [single sources of truth](v3/single-source-of-truth.md)
-- [Security model](security-model.md), [desktop threat model](v3/desktop-threat-model.md), and
-  [error handling](v3/error-handling.md)
-- [Product charter](product-charter.md), [data sources](data-source-strategy.md), and
-  [accounting rules](accounting-rules.md)
+Start with [Development](development.md) for the existing local app, [Operations](operations.md) for imports/backup/restore, and [Testing](testing.md) for focused checks. [Personal use](personal-use.md) owns the current delivery approach.
 
-Money Map has no hosted deployment. The production-relevant delivery path is the signed arm64 macOS
-application; start with the development and testing guides for source work and use the versioned
-packaging, qualification, and release contracts only for explicitly authorized release work.
+- [Product charter](product-charter.md), [Housing Move](housing-move.md) and [desktop experience](v3/desktop-product-experience.md): intended useful flows.
+- [Configuration](configuration.md), [data sources](data-source-strategy.md), [integrations](integrations.md), [accounting](accounting-rules.md) and [data models](data-models.md): real input/calculation rules.
+- [Architecture](architecture.md), [module ownership](v3/single-source-of-truth.md) and [maintenance](maintenance.md): implementation.
+- [Security](security-model.md), [error handling](v3/error-handling.md) and [known limitations](known-limitations.md): privacy and actual recovery.
+- [Local app use](v3/owner-local-delivery.md), [data update](v3/cutover-readiness.md) and [optional native app update](v3/desktop-packaging.md): practical operations.
 
-## Current versioned contracts
-
-- [Cash Flow and goal-gap contract](v2.1/cash-flow-and-goal-gap-contract.md)
-- [Desktop architecture](v3/desktop-architecture.md)
-- [Desktop product experience](v3/desktop-product-experience.md)
-- [Cutover readiness](v3/cutover-readiness.md)
-- [Synthetic release-state contract](v3/synthetic-release-state-contract.md)
-- [Release contract](v3/release-contract.md)
-- [Packaging](v3/desktop-packaging.md) and [installed qualification](v3/desktop-release-qualification.md)
-- [Security acceptance](v3/security-acceptance.md) and [hardening status](v3/security-hardening.md)
-
-## Decision and historical records
-
-- `adr/` contains durable architecture decisions.
-- `history/` retains superseded architecture narratives and implementation records.
-- `releases/` contains version-specific release notes and campaign records.
-- `v2/` contains historical v2 contracts, recovery plans, and accepted checklists that remain useful
-  for compatibility and evidence review. They are not general setup instructions.
-- [Former API roadmap](api-roadmap.md) redirects to the current integration guide; old account and
-  pricing observations are not current operating instructions.
-
-Do not copy command counts or acceptance claims from historical documents into current handoffs.
-Re-run the commands in the development guide and report fresh results.
+Old versioned release records and campaigns remain technical history. They are not installation/feedback prerequisites. Public distribution, mandatory signing/DMG validation and full native acceptance campaigns have no current assignment.
