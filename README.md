@@ -8,7 +8,8 @@ Version **3.0.0-beta.1** is prerelease software.
 
 ## Start here
 
-Use Python 3.12, uv, Node.js 22 and pnpm 10.9.0. From the repository root:
+Use Python 3.12, uv, Node.js 24 (24.15.0 or newer) and pnpm 10.9.0. The repository `.nvmrc`
+selects the Node.js baseline for local development and CI. From the repository root:
 
 ```bash
 pnpm --dir web install --frozen-lockfile

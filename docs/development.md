@@ -2,7 +2,8 @@
 
 ## Supported toolchain
 
-The source gate is exercised with Python 3.12, `uv`, Node.js 22, and pnpm 10.9.0. The native macOS
+The source gate uses Python 3.12, `uv`, Node.js 24 (24.15.0 or newer), and pnpm 10.9.0. The
+repository `.nvmrc` selects Node.js for local development and CI. The native macOS
 runtime additionally requires the Rust toolchain and the system dependencies needed by Tauri.
 The declared Python range remains 3.12 through 3.14. For the current single-machine stage, CI
 runs the complete source gate only on 3.12; 3.13/3.14 compatibility runs are deferred. The native
