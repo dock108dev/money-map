@@ -166,12 +166,10 @@ class SelectedPeriod(ContractModel):
             expected = _month_start_offset(self.as_of_date, -11)
             if self.start_date != expected or self.end_date != self.as_of_date:
                 raise ValueError("Trailing-12 period must cover twelve calendar-month rows")
-        elif self.kind is PeriodKind.YEAR_TO_DATE:
-            if (
-                self.start_date != date(self.as_of_date.year, 1, 1)
-                or self.end_date != self.as_of_date
-            ):
-                raise ValueError("Year-to-date period must run from January 1 through as-of")
+        elif self.kind is PeriodKind.YEAR_TO_DATE and (
+            self.start_date != date(self.as_of_date.year, 1, 1) or self.end_date != self.as_of_date
+        ):
+            raise ValueError("Year-to-date period must run from January 1 through as-of")
         return self
 
 
