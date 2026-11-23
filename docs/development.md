@@ -7,7 +7,7 @@ repository `.nvmrc` selects Node.js for local development and CI. The native mac
 runtime additionally requires the Rust toolchain and the system dependencies needed by Tauri.
 The declared Python range remains 3.12 through 3.14. For the current single-machine stage, CI
 runs the complete source gate only on 3.12; 3.13/3.14 compatibility runs are deferred. The native
-gate uses the Rust version pinned in `rust-toolchain.toml`.
+gate uses Rust 1.92.0, pinned in `rust-toolchain.toml`, to satisfy `rfd`'s minimum compiler version.
 
 ## Install
 
